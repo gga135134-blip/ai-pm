@@ -89,6 +89,29 @@ async def task_update_status(task_id: str, status: str = Form(...)):
     return RedirectResponse(f"/projects/{project_id}", status_code=303)
 
 
+@router.post("/tasks/{task_id}/handoff")
+async def task_handoff(task_id: str, to: str = Form(...), assignee_name: str = Form("")):
+    """任务交接：to='human' 人工接管 / to='ai' 交给AI"""
+    now = datetime.now().isoformat()
+    db = await get_db()
+    try:
+        if to == "human":
+            new_assignee = assignee_name or "人工"
+            await db.execute(
+                "UPDATE tasks SET assignee=?, needs_human=1, status='pending', updated_at=? WHERE id=?",
+                (new_assignee, now, task_id),
+            )
+        else:
+            await db.execute(
+                "UPDATE tasks SET assignee='ai', needs_human=0, status='pending', updated_at=? WHERE id=?",
+                (now, task_id),
+            )
+        await db.commit()
+    finally:
+        await db.close()
+    return RedirectResponse(f"/tasks/{task_id}", status_code=303)
+
+
 @router.post("/tasks/{task_id}/delete")
 async def task_delete(task_id: str):
     db = await get_db()

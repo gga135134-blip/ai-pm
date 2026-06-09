@@ -167,9 +167,20 @@ async def project_clone(project_id: str):
         new_id = str(uuid.uuid4())
         now = datetime.now().isoformat()
         await db.execute(
-            "INSERT INTO projects (id, name, description, owner, status, created_at, updated_at) VALUES (?, ?, ?, ?, 'draft', ?, ?)",
-            (new_id, src["name"] + " (副本)", src["description"], src["owner"], now, now),
+            "INSERT INTO projects (id, name, description, owner, status, budget, revenue, created_at, updated_at) VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, ?)",
+            (new_id, src["name"] + " (副本)", src["description"], src["owner"], src.get("budget", 0), 0, now, now),
         )
+
+        # 复制项目笔记（资料），不复制决策记录（决策应该是新项目重新做的）
+        cursor = await db.execute("SELECT * FROM notes WHERE project_id = ?", (project_id,))
+        src_notes = [dict(row) for row in await cursor.fetchall()]
+        for n in src_notes:
+            await db.execute(
+                """INSERT INTO notes (id, title, content, author, project_id, tags, source_type, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (str(uuid.uuid4()), n["title"], n["content"], n.get("author", ""), new_id,
+                 n.get("tags", ""), n.get("source_type", "manual"), now, now),
+            )
 
         cursor = await db.execute(
             "SELECT * FROM tasks WHERE project_id = ? ORDER BY created_at ASC",
