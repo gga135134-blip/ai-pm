@@ -1,11 +1,11 @@
 {% extends "base.html" %}
-{% block title %}总 AI - AI 项目管理{% endblock %}
+{% block title %}AI Chat - AI 项目管理{% endblock %}
 {% block content %}
 <div class="flex flex-col" style="height:calc(100vh - 100px)">
     <!-- 标题 -->
     <div class="flex items-center justify-between mb-6">
         <div>
-            <h1 class="text-4xl font-bold text-gray-800">总 AI</h1>
+            <h1 class="text-4xl font-bold text-gray-800">AI Chat</h1>
             <p class="text-base text-gray-400 mt-2">把你的想法告诉我，剩下的我来安排</p>
         </div>
         <form method="POST" action="/chat/clear" onsubmit="return confirm('清空所有对话记录？')">
