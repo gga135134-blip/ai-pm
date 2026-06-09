@@ -34,7 +34,18 @@ def get_model_for_task(task_type: str = "", explicit_model: str = "auto") -> str
         if routed and routed != "auto":
             return routed
 
-    return config.get("default_ai_model", "claude")
+    # 自动选择：优先选已配置 Key 的模型，默认 deepseek（最便宜）
+    default = config.get("default_ai_model", "")
+    if default:
+        return default
+    # 按已配置 Key 的优先级自动选
+    if config.get("deepseek_api_key"):
+        return "deepseek"
+    if config.get("anthropic_api_key"):
+        return "claude"
+    if config.get("openai_api_key"):
+        return "openai"
+    return "deepseek"
 
 
 def get_fallback_chain(primary: str) -> list[str]:
@@ -44,7 +55,17 @@ def get_fallback_chain(primary: str) -> list[str]:
         chain = [m for m in custom_order if m != primary]
     else:
         chain = [m for m in DEFAULT_FALLBACK_ORDER if m != primary]
-    return [primary] + chain
+    full = [primary] + chain
+
+    # 只保留有配置 API Key 的模型，避免触发"未配置 Key"的错误
+    key_map = {
+        "claude": "anthropic_api_key",
+        "openai": "openai_api_key",
+        "deepseek": "deepseek_api_key",
+    }
+    available = [m for m in full if config.get(key_map.get(m, ""), "")]
+    # 如果一个都没配置，至少返回主模型让它走错误提示
+    return available or [primary]
 
 
 def estimate_cost(prompt: str, model: str = "auto", task_type: str = "") -> dict:
