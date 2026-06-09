@@ -7,12 +7,19 @@
 <h1 class="text-2xl font-bold text-gray-800 mb-6">导入文件到知识库</h1>
 
 <div class="max-w-3xl grid gap-6">
+    <!-- Tab 切换 -->
+    <div class="flex gap-2">
+        <button onclick="showTab('file')" id="tab-file" class="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium">上传文件</button>
+        <button onclick="showTab('folder')" id="tab-folder" class="px-4 py-2 rounded-lg bg-gray-200 text-gray-600 text-sm font-medium">上传整个文件夹</button>
+        <button onclick="showTab('path')" id="tab-path" class="px-4 py-2 rounded-lg bg-gray-200 text-gray-600 text-sm font-medium">从服务器路径导入</button>
+    </div>
+
     <!-- 上传文件 -->
-    <div class="bg-white rounded-lg shadow-sm p-6">
+    <div id="panel-file" class="bg-white rounded-lg shadow-sm p-6">
         <h2 class="text-lg font-semibold text-gray-700 mb-4">上传文件</h2>
         <form method="POST" action="/notes/import/upload" enctype="multipart/form-data" class="space-y-4">
             <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">选择文件（支持 .md .txt .py .json .csv 等）</label>
+                <label class="block text-sm font-medium text-gray-700 mb-1">选择文件（可多选，支持 .md .txt .py .json .csv 等）</label>
                 <input type="file" name="files" multiple accept=".md,.txt,.csv,.json,.py,.js,.html,.css,.yaml,.yml,.toml,.ini,.log,.xml"
                     class="w-full border rounded-lg px-3 py-2 text-sm">
             </div>
@@ -39,14 +46,54 @@
         </form>
     </div>
 
-    <!-- 从路径导入 -->
-    <div class="bg-white rounded-lg shadow-sm p-6">
-        <h2 class="text-lg font-semibold text-gray-700 mb-4">从本地路径导入</h2>
-        <p class="text-sm text-gray-500 mb-4">输入文件或文件夹的完整路径，文件夹会递归导入所有支持的文件</p>
+    <!-- 上传整个文件夹 -->
+    <div id="panel-folder" class="bg-white rounded-lg shadow-sm p-6" style="display:none">
+        <h2 class="text-lg font-semibold text-gray-700 mb-4">上传整个文件夹</h2>
+        <p class="text-sm text-gray-500 mb-4">浏览器会自动遍历文件夹里所有支持的文件，一次性上传到服务器</p>
+        <form method="POST" action="/notes/import/upload" enctype="multipart/form-data" class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">选择文件夹</label>
+                <input type="file" name="files" multiple webkitdirectory directory
+                    class="w-full border rounded-lg px-3 py-2 text-sm">
+                <p class="text-xs text-gray-400 mt-1">提示：仅支持文本文件（.md .txt .py 等），其他类型会自动跳过</p>
+            </div>
+            <div class="grid grid-cols-3 gap-3">
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">关联项目</label>
+                    <select name="project_id" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                        <option value="">不关联</option>
+                        {% for p in projects %}
+                        <option value="{{ p.id }}">{{ p.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">作者</label>
+                    <input type="text" name="author" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">额外标签</label>
+                    <input type="text" name="tags" placeholder="标签1,标签2" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                </div>
+            </div>
+            <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 transition">上传整个文件夹</button>
+        </form>
+    </div>
+
+    <!-- 从服务器路径导入 -->
+    <div id="panel-path" class="bg-white rounded-lg shadow-sm p-6" style="display:none">
+        <h2 class="text-lg font-semibold text-gray-700 mb-4">从服务器路径导入</h2>
+        <div class="bg-yellow-50 border border-yellow-200 rounded p-3 mb-4">
+            <p class="text-sm text-yellow-800">
+                ⚠️ 注意：服务器跑在 Linux 上，<strong>无法访问你电脑上的 D:\ C:\ 路径</strong>。<br>
+                这里只能导入<strong>服务器上的路径</strong>（例如 <code class="bg-yellow-100 px-1">/www/wwwroot/某文件夹</code>）。<br>
+                如果想导入电脑上的文件夹，请用<strong>"上传整个文件夹"</strong>。
+            </p>
+        </div>
         <form method="POST" action="/notes/import/path" class="space-y-4">
             <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">路径</label>
-                <input type="text" name="path" required placeholder="D:\文档\项目资料 或 D:\文档\笔记.md"
+                <label class="block text-sm font-medium text-gray-700 mb-1">服务器路径</label>
+                <input type="text" name="path" required placeholder="/www/wwwroot/某文件夹 或 /root/笔记.md"
                     class="w-full border rounded-lg px-3 py-2 text-sm font-mono outline-none focus:ring-2 focus:ring-blue-500">
             </div>
             <div class="grid grid-cols-3 gap-3">
@@ -72,12 +119,28 @@
         </form>
     </div>
 
+    <script>
+    function showTab(name) {
+        ['file', 'folder', 'path'].forEach(function(n) {
+            document.getElementById('panel-' + n).style.display = (n === name) ? 'block' : 'none';
+            var btn = document.getElementById('tab-' + n);
+            if (n === name) {
+                btn.classList.remove('bg-gray-200', 'text-gray-600');
+                btn.classList.add('bg-blue-600', 'text-white');
+            } else {
+                btn.classList.remove('bg-blue-600', 'text-white');
+                btn.classList.add('bg-gray-200', 'text-gray-600');
+            }
+        });
+    }
+    </script>
+
     <!-- 导入结果 -->
     {% if result %}
     <div class="bg-white rounded-lg shadow-sm p-6">
         <h2 class="text-lg font-semibold text-gray-700 mb-4">导入结果</h2>
         <div class="space-y-2">
-            {% for item in result.items %}
+            {% for item in result["items"] %}
                 {% if item.get('error') %}
                 <div class="text-sm text-red-600 bg-red-50 rounded p-3">{{ item.error }}</div>
                 {% elif item.get('skipped') %}

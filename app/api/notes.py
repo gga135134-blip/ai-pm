@@ -156,6 +156,8 @@ async def import_from_path(
     tags: str = Form(""),
 ):
     from pathlib import Path as P
+    # 清理用户输入：去掉首尾引号和空格
+    path = path.strip().strip('"').strip("'").strip()
     p = P(path)
     if p.is_file():
         r = await import_file(path, project_id, author, tags)
@@ -166,7 +168,7 @@ async def import_from_path(
         if r.get("skipped"):
             items.append({"skipped": r["skipped"]})
     else:
-        items = [{"error": f"路径不存在: {path}"}]
+        items = [{"error": f"路径不存在或无法访问: {path}（提示：服务器在 Linux 上，无法访问你电脑上的 Windows 路径如 C:\\... 或 D:\\...，请改用上传方式）"}]
     db = await get_db()
     try:
         cursor = await db.execute("SELECT id, name FROM projects ORDER BY name")
