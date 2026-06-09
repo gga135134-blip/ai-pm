@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}备份管理 - AI 项目管理{% endblock %}
+{% block content %}
+<div class="mb-4 text-sm text-gray-400">
+    <a href="/settings" class="hover:text-gray-600">设置</a> / <span class="text-gray-600">备份</span>
+</div>
+<h1 class="text-2xl font-bold text-gray-800 mb-6">数据备份</h1>
+
+<div class="max-w-3xl grid gap-6">
+    <div class="bg-white rounded-lg shadow-sm p-6">
+        <div class="flex items-center justify-between">
+            <div>
+                <h2 class="text-lg font-semibold text-gray-700">手动备份</h2>
+                <p class="text-sm text-gray-500 mt-1">备份整个数据库，自动保留最近 10 份，旧的自动清理</p>
+            </div>
+            <form method="POST" action="/backups/create">
+                <button class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700 transition">立即备份</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow-sm p-6">
+        <h2 class="text-lg font-semibold text-gray-700 mb-4">备份历史</h2>
+        {% if backups %}
+        <div class="space-y-2">
+            {% for b in backups %}
+            <div class="flex items-center justify-between p-3 border rounded-lg">
+                <div class="flex items-center gap-3">
+                    <span class="text-sm font-mono text-gray-700">{{ b.filename }}</span>
+                </div>
+                <div class="flex items-center gap-4 text-xs text-gray-400">
+                    <span>{{ '%.1f' % (b.size_bytes / 1024) }} KB</span>
+                    <span>{{ b.created_at[:19] if b.created_at else '' }}</span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center text-gray-400 py-6">还没有备份，点击上方按钮创建第一份</div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}周报 - AI 项目管理{% endblock %}
+{% block content %}
+<div class="mb-4 text-sm text-gray-400">
+    <a href="/notes" class="hover:text-gray-600">知识库</a> / <span class="text-gray-600">AI 周报</span>
+</div>
+<h1 class="text-2xl font-bold text-gray-800 mb-6">AI 自动周报</h1>
+<p class="text-sm text-gray-500 mb-6">AI 根据本周的任务、笔记、决策自动生成周报，省得你们开周会</p>
+
+<div class="max-w-3xl grid gap-6">
+    <div class="bg-white rounded-lg shadow-sm p-6">
+        <form method="POST" action="/notes/weekly" class="flex items-center gap-4">
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">使用模型</label>
+                <select name="model" class="border rounded-lg px-3 py-2 text-sm outline-none">
+                    <option value="auto">自动</option>
+                    <option value="claude">Claude</option>
+                    <option value="openai">OpenAI</option>
+                    <option value="deepseek">DeepSeek (便宜)</option>
+                </select>
+            </div>
+            <button type="submit" class="bg-purple-600 text-white px-6 py-2 rounded-lg text-sm hover:bg-purple-700 transition mt-4">生成本周周报</button>
+        </form>
+    </div>
+
+    {% if report %}
+    <div class="bg-white rounded-lg shadow-sm p-6">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-semibold text-gray-700">周报内容</h2>
+            <div class="text-xs text-gray-400">
+                模型: {{ report.model }} / 费用: ${{ '%.4f' % report.cost }}
+                {% if report.note_id %}
+                | <a href="/notes/{{ report.note_id }}" class="text-blue-500 hover:underline">已保存到知识库</a>
+                {% endif %}
+            </div>
+        </div>
+        <div class="text-sm text-gray-700 leading-relaxed" style="white-space:pre-wrap">{{ report.report }}</div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

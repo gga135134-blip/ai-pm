@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}知识库 - AI 项目管理{% endblock %}
+{% block content %}
+<div class="flex items-center justify-between mb-4">
+    <h1 class="text-2xl font-bold text-gray-800">知识库</h1>
+    <div class="flex gap-2">
+        <a href="/notes/new" class="bg-blue-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-blue-700 transition">+ 新建</a>
+        <a href="/notes/import" class="bg-green-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-green-700 transition">导入</a>
+        <a href="/notes/classify" class="bg-purple-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-purple-700 transition">AI 分类</a>
+        <form method="POST" action="/notes/summarize" class="inline">
+            <input type="hidden" name="tag" value="{{ current_tag }}">
+            <button class="bg-indigo-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-indigo-700 transition">AI 整理</button>
+        </form>
+        <a href="/notes/weekly" class="bg-orange-500 text-white px-3 py-2 rounded-lg text-sm hover:bg-orange-600 transition">周报</a>
+        <a href="/backups" class="text-sm px-3 py-2 border rounded-lg text-gray-600 hover:bg-gray-50 transition">备份</a>
+    </div>
+</div>
+
+<div class="flex gap-6">
+    <!-- 侧边栏：标签 + 筛选 -->
+    <div class="w-48 flex-shrink-0">
+        <!-- 搜索 -->
+        <form method="GET" action="/notes" class="mb-4">
+            <input type="text" name="q" value="{{ current_q }}" placeholder="搜索笔记..."
+                class="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500">
+        </form>
+
+        <!-- 项目筛选 -->
+        <div class="mb-4">
+            <h3 class="text-xs font-semibold text-gray-500 uppercase mb-2">项目</h3>
+            <a href="/notes" class="block text-sm py-1 px-2 rounded {% if not current_project %}bg-blue-50 text-blue-700{% else %}text-gray-600 hover:bg-gray-100{% endif %}">全部</a>
+            {% for p in projects %}
+            <a href="/notes?project_id={{ p.id }}" class="block text-sm py-1 px-2 rounded truncate {% if current_project == p.id %}bg-blue-50 text-blue-700{% else %}text-gray-600 hover:bg-gray-100{% endif %}">{{ p.name }}</a>
+            {% endfor %}
+        </div>
+
+        <!-- 标签 -->
+        <div>
+            <h3 class="text-xs font-semibold text-gray-500 uppercase mb-2">标签</h3>
+            <a href="/notes" class="block text-sm py-1 px-2 rounded {% if not current_tag %}bg-blue-50 text-blue-700{% else %}text-gray-600 hover:bg-gray-100{% endif %}">全部</a>
+            {% for tag, count in tag_counts.items()|sort %}
+            <a href="/notes?tag={{ tag }}" class="flex items-center justify-between text-sm py-1 px-2 rounded {% if current_tag == tag %}bg-blue-50 text-blue-700{% else %}text-gray-600 hover:bg-gray-100{% endif %}">
+                <span>#{{ tag }}</span>
+                <span class="text-xs text-gray-400">{{ count }}</span>
+            </a>
+            {% endfor %}
+            {% if not tag_counts %}
+            <p class="text-xs text-gray-400 px-2">暂无标签</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- 笔记列表 -->
+    <div class="flex-1">
+        {% if current_q or current_tag or current_project %}
+        <div class="mb-4 flex items-center gap-2">
+            <span class="text-sm text-gray-500">筛选：</span>
+            {% if current_q %}<span class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">搜索: {{ current_q }}</span>{% endif %}
+            {% if current_tag %}<span class="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">#{{ current_tag }}</span>{% endif %}
+            {% if current_project %}<span class="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">项目筛选</span>{% endif %}
+            <a href="/notes" class="text-xs text-gray-400 hover:text-gray-600">清除</a>
+        </div>
+        {% endif %}
+
+        {% if notes %}
+        <div class="space-y-3">
+            {% for n in notes %}
+            <a href="/notes/{{ n.id }}" class="block bg-white rounded-lg shadow-sm p-4 hover:shadow-md transition">
+                <div class="flex items-start justify-between">
+                    <div class="flex-1">
+                        <div class="flex items-center gap-2">
+                            {% if n.is_pinned %}
+                            <span class="text-yellow-500 text-xs" title="已置顶">&#9733;</span>
+                            {% endif %}
+                            <h3 class="font-medium text-gray-800">{{ n.title }}</h3>
+                        </div>
+                        {% if n.content %}
+                        <p class="text-sm text-gray-500 mt-1 overflow-hidden" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">{{ n.content[:200] }}</p>
+                        {% endif %}
+                        <div class="flex items-center gap-3 mt-2 text-xs text-gray-400">
+                            {% if n.author %}<span>{{ n.author }}</span>{% endif %}
+                            {% if n.project_name %}<span class="bg-gray-100 px-2 py-0.5 rounded">{{ n.project_name }}</span>{% endif %}
+                            <span>{{ n.updated_at[:16] if n.updated_at else '' }}</span>
+                        </div>
+                    </div>
+                    {% if n.tags %}
+                    <div class="flex flex-wrap gap-1 ml-3">
+                        {% for tag in n.tags.split(',') %}
+                        <span class="text-xs bg-purple-50 text-purple-600 px-2 py-0.5 rounded">#{{ tag.strip() }}</span>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="bg-white rounded-lg shadow-sm p-12 text-center">
+            <div class="text-gray-400 text-lg mb-2">{{ '没有匹配的笔记' if (current_q or current_tag) else '还没有笔记' }}</div>
+            <a href="/notes/new" class="text-blue-600 hover:underline">创建第一条笔记</a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

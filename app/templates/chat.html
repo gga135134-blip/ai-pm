@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}总 AI - AI 项目管理{% endblock %}
+{% block content %}
+<div class="flex flex-col" style="height:calc(100vh - 100px)">
+    <!-- 标题 -->
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h1 class="text-4xl font-bold text-gray-800">总 AI</h1>
+            <p class="text-base text-gray-400 mt-2">把你的想法告诉我，剩下的我来安排</p>
+        </div>
+        <form method="POST" action="/chat/clear" onsubmit="return confirm('清空所有对话记录？')">
+            <button class="text-base px-4 py-2 border rounded-lg text-gray-500 hover:bg-gray-50 transition">清空对话</button>
+        </form>
+    </div>
+
+    <!-- 对话区域 -->
+    <div id="chat-messages" class="flex-1 overflow-y-auto bg-white rounded-lg shadow-sm p-6 mb-4 space-y-4" style="min-height:300px">
+        {% if not messages %}
+        <div class="text-center text-gray-400 py-20">
+            <div class="text-2xl mb-4 font-medium">我是你的 AI 项目总监</div>
+            <div class="text-lg mb-4">你可以说：</div>
+            <div class="text-lg mt-4 space-y-2">
+                <div class="text-gray-500">"帮我建一个短视频项目"</div>
+                <div class="text-gray-500">"现在所有项目什么状态？"</div>
+                <div class="text-gray-500">"把待办的 AI 任务都执行了"</div>
+                <div class="text-gray-500">"我们决定用 DeepSeek 做日常文案，帮我记下来"</div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% for msg in messages %}
+        {% if msg.direction == 'in' %}
+        <!-- 用户消息 -->
+        <div class="flex justify-end">
+            <div class="max-w-2xl">
+                <div class="bg-blue-600 text-white rounded-lg rounded-br-none px-5 py-4">
+                    <div class="text-base leading-relaxed" style="white-space:pre-wrap">{{ msg.content }}</div>
+                </div>
+                <div class="text-sm text-gray-400 mt-2 text-right">{{ msg.created_at[11:16] if msg.created_at else '' }}</div>
+            </div>
+        </div>
+        {% else %}
+        <!-- AI 回复 -->
+        <div class="flex justify-start">
+            <div class="max-w-2xl">
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="text-sm font-semibold text-purple-600">总 AI</span>
+                </div>
+                <div class="bg-gray-100 text-gray-800 rounded-lg rounded-bl-none px-5 py-4">
+                    <div class="text-base leading-relaxed" style="white-space:pre-wrap">{{ msg.content }}</div>
+                </div>
+                <div class="text-sm text-gray-400 mt-2">{{ msg.created_at[11:16] if msg.created_at else '' }}</div>
+            </div>
+        </div>
+        {% endif %}
+        {% endfor %}
+    </div>
+
+    <!-- 输入区域 -->
+    <div class="bg-white rounded-lg shadow-sm p-6">
+        <form method="POST" action="/chat/send" class="flex gap-3">
+            <div class="w-24">
+                <select name="sender" class="w-full border rounded-lg px-3 py-3 text-base outline-none font-medium">
+                    <option value="我">我</option>
+                    <option value="同事">同事</option>
+                </select>
+            </div>
+            <textarea name="message" required placeholder="跟总 AI 说点什么..." autofocus rows="3"
+                class="flex-1 border rounded-lg px-4 py-3 text-base outline-none focus:ring-2 focus:ring-purple-500 resize-none"></textarea>
+            <div class="w-28">
+                <select name="model" class="w-full border rounded-lg px-3 py-3 text-base outline-none font-medium">
+                    <option value="auto">自动</option>
+                    <option value="claude">Claude</option>
+                    <option value="deepseek">DeepSeek</option>
+                </select>
+            </div>
+            <button type="submit" class="bg-purple-600 text-white px-8 py-3 rounded-lg text-base font-medium hover:bg-purple-700 transition">发送</button>
+        </form>
+    </div>
+</div>
+
+<script>
+    var el = document.getElementById('chat-messages');
+    if (el) el.scrollTop = el.scrollHeight;
+</script>
+{% endblock %}

@@ -1,0 +1,30 @@
+# 数据库（包含你的数据，不上传）
+data/aipm.db
+data/aipm.db-wal
+data/aipm.db-shm
+data/backups/
+
+# 配置文件（包含 API Key，绝对不能上传）
+data/settings.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+
+# 环境变量（含 API Key）
+.env
+.env.*
+
+# 系统文件
+.DS_Store
+Thumbs.db
+*.log
+
+# IDE
+.vscode/
+.idea/

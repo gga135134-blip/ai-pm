@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}AI 智能分类 - 知识库{% endblock %}
+{% block content %}
+<div class="mb-4 text-sm text-gray-400">
+    <a href="/notes" class="hover:text-gray-600">知识库</a> / <span class="text-gray-600">AI 智能分类</span>
+</div>
+<h1 class="text-2xl font-bold text-gray-800 mb-6">AI 智能分类</h1>
+<p class="text-sm text-gray-500 mb-6">把聊天记录、会议内容、录音转文字粘贴进来，AI 自动识别不同信息层：知识框架、进度跟进、关键决策、阶段状态、灵感想法</p>
+
+<div class="max-w-3xl grid gap-6">
+    <div class="bg-white rounded-lg shadow-sm p-6">
+        <form method="POST" action="/notes/classify" class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">粘贴内容</label>
+                <textarea name="text" rows="12" required placeholder="把聊天记录、会议纪要、录音转文字粘贴到这里..."
+                    class="w-full border rounded-lg px-3 py-2 text-sm font-mono outline-none focus:ring-2 focus:ring-purple-500" style="tab-size:4"></textarea>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">关联项目</label>
+                    <select name="project_id" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                        <option value="">不关联</option>
+                        {% for p in projects %}
+                        <option value="{{ p.id }}">{{ p.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">使用模型</label>
+                    <select name="model" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                        <option value="auto">自动</option>
+                        <option value="claude">Claude</option>
+                        <option value="openai">OpenAI</option>
+                        <option value="deepseek">DeepSeek</option>
+                    </select>
+                </div>
+            </div>
+            <button type="submit" class="bg-purple-600 text-white px-6 py-2 rounded-lg text-sm hover:bg-purple-700 transition">AI 分类提取</button>
+        </form>
+    </div>
+
+    {% if result %}
+    <div class="bg-white rounded-lg shadow-sm p-6">
+        <h2 class="text-lg font-semibold text-gray-700 mb-4">提取结果（{{ result|length }} 条）</h2>
+        <div class="space-y-3">
+            {% set type_colors = {'knowledge': 'blue', 'progress': 'green', 'decision': 'orange', 'status': 'purple', 'idea': 'pink'} %}
+            {% set type_labels = {'knowledge': '知识', 'progress': '进度', 'decision': '决策', 'status': '状态', 'idea': '想法'} %}
+            {% for item in result %}
+            <div class="border rounded-lg p-4">
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="text-xs px-2 py-0.5 rounded bg-{{ type_colors.get(item.type, 'gray') }}-100 text-{{ type_colors.get(item.type, 'gray') }}-700">
+                        {{ type_labels.get(item.type, item.type) }}
+                    </span>
+                    <a href="/notes/{{ item.id }}" class="text-sm font-medium text-gray-800 hover:text-blue-600">{{ item.title }}</a>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        <a href="/notes" class="inline-block mt-4 text-sm text-blue-600 hover:underline">返回知识库查看</a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

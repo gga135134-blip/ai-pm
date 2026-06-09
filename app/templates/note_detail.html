@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}{{ note.title }} - 知识库{% endblock %}
+{% block content %}
+<div class="mb-4 text-sm text-gray-400">
+    <a href="/notes" class="hover:text-gray-600">知识库</a> /
+    <span class="text-gray-600">{{ note.title }}</span>
+</div>
+
+<div class="flex gap-6">
+    <!-- 主内容 -->
+    <div class="flex-1">
+        <div class="bg-white rounded-lg shadow-sm p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h1 class="text-xl font-bold text-gray-800">
+                    {% if note.is_pinned %}<span class="text-yellow-500 mr-1">&#9733;</span>{% endif %}
+                    {{ note.title }}
+                </h1>
+                <div class="flex gap-2">
+                    <form method="POST" action="/notes/{{ note.id }}/pin">
+                        <button class="text-sm px-3 py-1 border rounded-lg hover:bg-gray-50 transition">{{ '取消置顶' if note.is_pinned else '置顶' }}</button>
+                    </form>
+                    <a href="/notes/{{ note.id }}/edit" class="text-sm px-3 py-1 border rounded-lg hover:bg-gray-50 transition">编辑</a>
+                    <form method="POST" action="/notes/{{ note.id }}/delete" onsubmit="return confirm('确定删除？')">
+                        <button class="text-sm px-3 py-1 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition">删除</button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- 标签 -->
+            {% if tag_list %}
+            <div class="flex flex-wrap gap-2 mb-4">
+                {% for tag in tag_list %}
+                <a href="/notes?tag={{ tag }}" class="text-xs bg-purple-50 text-purple-600 px-2 py-1 rounded hover:bg-purple-100 transition">#{{ tag }}</a>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <!-- 元信息 -->
+            <div class="flex items-center gap-4 text-xs text-gray-400 mb-6 pb-4 border-b">
+                {% if note.author %}<span>作者: {{ note.author }}</span>{% endif %}
+                {% if note.project_name %}<span>项目: <a href="/projects/{{ note.project_id }}" class="text-blue-500 hover:underline">{{ note.project_name }}</a></span>{% endif %}
+                <span>创建: {{ note.created_at[:16] if note.created_at else '' }}</span>
+                <span>更新: {{ note.updated_at[:16] if note.updated_at else '' }}</span>
+            </div>
+
+            <!-- 正文 -->
+            <div id="note-content" class="prose text-sm text-gray-700 leading-relaxed" style="white-space:pre-wrap;max-width:none">{{ note.content }}</div>
+        </div>
+    </div>
+
+    <!-- 侧边栏：相关笔记 -->
+    <div class="w-56 flex-shrink-0">
+        <div class="bg-white rounded-lg shadow-sm p-4">
+            <h3 class="text-sm font-semibold text-gray-700 mb-3">相关笔记</h3>
+            {% if related %}
+            <div class="space-y-2">
+                {% for r in related %}
+                <a href="/notes/{{ r.id }}" class="block p-2 rounded hover:bg-gray-50 transition">
+                    <div class="text-sm text-gray-800 font-medium">{{ r.title }}</div>
+                    {% if r.tags %}
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        {% for tag in r.tags.split(',')[:3] %}
+                        <span class="text-xs text-purple-400">#{{ tag.strip() }}</span>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </a>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-xs text-gray-400">暂无相关笔记</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,310 @@
+{% extends "base.html" %}
+{% block title %}{{ project.name }} - AI 项目管理{% endblock %}
+{% block content %}
+<div class="flex items-center justify-between mb-6">
+    <div>
+        <div class="flex items-center gap-3">
+            <h1 class="text-2xl font-bold text-gray-800">{{ project.name }}</h1>
+            <span class="text-xs px-2 py-1 rounded status-{{ project.status }}">{{ project.status }}</span>
+            <span class="text-xs text-purple-600 font-medium">AI 费用: ${{ project_cost }}</span>
+            {% if project.budget %}<span class="text-xs text-gray-500">预算: ¥{{ project.budget }}</span>{% endif %}
+            {% if project.revenue %}<span class="text-xs text-green-600 font-medium">收款: ¥{{ project.revenue }}</span>{% endif %}
+        </div>
+        {% if project.description %}
+        <p class="text-sm text-gray-500 mt-1">{{ project.description }}</p>
+        {% endif %}
+    </div>
+    <div class="flex gap-2">
+        <form method="POST" action="/projects/{{ project.id }}/clone">
+            <button class="text-sm px-3 py-2 border border-blue-200 text-blue-600 rounded-lg hover:bg-blue-50 transition">复制项目</button>
+        </form>
+        <a href="/projects/{{ project.id }}/edit" class="text-sm px-3 py-2 border rounded-lg hover:bg-gray-50 transition">编辑</a>
+        <form method="POST" action="/projects/{{ project.id }}/delete" onsubmit="return confirm('确定删除此项目及所有任务？')">
+            <button class="text-sm px-3 py-2 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition">删除</button>
+        </form>
+    </div>
+</div>
+
+<!-- AI 拆解任务 -->
+<div class="bg-white rounded-lg shadow-sm p-4 mb-4">
+    <form method="POST" action="/projects/{{ project.id }}/decompose" class="flex gap-3 items-end">
+        <div class="flex-1">
+            <label class="block text-xs text-gray-500 mb-1">AI 自动拆解任务</label>
+            <input type="text" name="goal" required placeholder="输入项目目标，AI 自动拆解为子任务..." value="{{ project.description }}"
+                class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none">
+        </div>
+        <div class="w-32">
+            <label class="block text-xs text-gray-500 mb-1">模型</label>
+            <select name="model" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                <option value="auto">自动</option>
+                <option value="claude">Claude</option>
+                <option value="openai">OpenAI</option>
+                <option value="deepseek">DeepSeek</option>
+            </select>
+        </div>
+        <button type="submit" class="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-purple-700 transition" style="white-space:nowrap">AI 拆解</button>
+    </form>
+</div>
+
+<!-- 手动添加任务 -->
+<div class="bg-white rounded-lg shadow-sm p-4 mb-6">
+    <form method="POST" action="/projects/{{ project.id }}/tasks/new" class="flex flex-wrap gap-3 items-end">
+        <div class="flex-1" style="min-width:200px">
+            <label class="block text-xs text-gray-500 mb-1">任务标题</label>
+            <input type="text" name="title" required placeholder="输入任务..."
+                class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+        </div>
+        <div class="w-32">
+            <label class="block text-xs text-gray-500 mb-1">执行者</label>
+            <select name="assignee" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                <option value="ai">AI</option>
+                <option value="">人工</option>
+            </select>
+        </div>
+        <div class="w-32">
+            <label class="block text-xs text-gray-500 mb-1">AI 模型</label>
+            <select name="ai_model" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                <option value="auto">自动</option>
+                <option value="claude">Claude</option>
+                <option value="openai">OpenAI</option>
+                <option value="deepseek">DeepSeek</option>
+            </select>
+        </div>
+        <div class="w-20">
+            <label class="block text-xs text-gray-500 mb-1">优先级</label>
+            <select name="priority" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                <option value="1">P1</option>
+                <option value="2">P2</option>
+                <option value="3" selected>P3</option>
+                <option value="4">P4</option>
+                <option value="5">P5</option>
+            </select>
+        </div>
+        <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 transition">添加</button>
+    </form>
+</div>
+
+<!-- 视图切换 -->
+<div class="flex gap-2 mb-4" id="view-tabs">
+    <button onclick="switchView('board')" class="text-sm px-3 py-1 rounded-lg bg-blue-100 text-blue-700" data-tab="board">看板</button>
+    <button onclick="switchView('tree')" class="text-sm px-3 py-1 rounded-lg" data-tab="tree">任务树</button>
+    <button onclick="switchView('docs')" class="text-sm px-3 py-1 rounded-lg" data-tab="docs">资料库 ({{ project_notes|length }})</button>
+    <button onclick="switchView('decisions')" class="text-sm px-3 py-1 rounded-lg" data-tab="decisions">决策 ({{ project_decisions|length }})</button>
+</div>
+<script>
+function switchView(name) {
+    ['board','tree','docs','decisions'].forEach(function(v){
+        var el = document.getElementById(v+'-view');
+        if(el) el.style.display = v===name ? (v==='board'?'grid':'block') : 'none';
+    });
+    document.querySelectorAll('#view-tabs button').forEach(function(b){
+        if(b.dataset.tab===name) { b.classList.add('bg-blue-100','text-blue-700'); }
+        else { b.classList.remove('bg-blue-100','text-blue-700'); }
+    });
+}
+</script>
+
+<!-- 任务看板 -->
+<div id="board-view" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+    {% for status, label in [('pending', '待处理'), ('running', '执行中'), ('reviewing', '审核中'), ('blocked', '阻塞'), ('done', '已完成'), ('failed', '失败')] %}
+    <div class="bg-gray-100 rounded-lg p-3" style="min-height:200px">
+        <div class="flex items-center justify-between mb-3">
+            <h3 class="text-sm font-semibold text-gray-600">{{ label }}</h3>
+            <span class="text-xs bg-gray-200 text-gray-500 px-2 rounded-full">{{ task_board[status]|length }}</span>
+        </div>
+        <div class="space-y-2">
+            {% for t in task_board[status] %}
+            <div class="bg-white rounded-lg p-3 shadow-sm hover:shadow-md transition">
+                <a href="/tasks/{{ t.id }}" class="block">
+                    <div class="text-sm font-medium text-gray-800">{{ t.title }}</div>
+                    {% if t.parent_task_id %}
+                    <div class="text-xs text-purple-400 mt-1">子任务</div>
+                    {% endif %}
+                    <div class="flex items-center justify-between mt-2 text-xs text-gray-400">
+                        <span>{{ t.assignee or '未分配' }}</span>
+                        <span class="{% if t.priority <= 2 %}text-red-500 font-medium{% endif %}">P{{ t.priority }}</span>
+                    </div>
+                    {% if t.progress and t.progress > 0 and t.status != 'done' %}
+                    <div class="mt-2 bg-gray-200 rounded-full h-1">
+                        <div class="bg-blue-500 h-1 rounded-full" style="width: {{ t.progress }}%"></div>
+                    </div>
+                    {% endif %}
+                </a>
+                {% if status == 'pending' %}
+                <div class="mt-2 flex gap-1">
+                    {% if t.assignee == 'ai' %}
+                    <form method="POST" action="/tasks/{{ t.id }}/execute" class="inline">
+                        <button class="text-xs px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded hover:bg-indigo-100">AI 执行</button>
+                    </form>
+                    {% endif %}
+                    <form method="POST" action="/tasks/{{ t.id }}/status" class="inline">
+                        <input type="hidden" name="status" value="running">
+                        <button class="text-xs px-2 py-0.5 bg-blue-50 text-blue-600 rounded hover:bg-blue-100">开始</button>
+                    </form>
+                </div>
+                {% elif status == 'running' %}
+                <div class="mt-2 flex gap-1">
+                    <form method="POST" action="/tasks/{{ t.id }}/status" class="inline">
+                        <input type="hidden" name="status" value="done">
+                        <button class="text-xs px-2 py-0.5 bg-green-50 text-green-600 rounded hover:bg-green-100">完成</button>
+                    </form>
+                </div>
+                {% elif status == 'blocked' %}
+                <div class="mt-2 flex gap-1">
+                    {% if t.assignee == 'ai' %}
+                    <form method="POST" action="/tasks/{{ t.id }}/execute" class="inline">
+                        <button class="text-xs px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded hover:bg-indigo-100">重新执行</button>
+                    </form>
+                    {% endif %}
+                    <form method="POST" action="/tasks/{{ t.id }}/status" class="inline">
+                        <input type="hidden" name="status" value="done">
+                        <button class="text-xs px-2 py-0.5 bg-green-50 text-green-600 rounded hover:bg-green-100">人工通过</button>
+                    </form>
+                </div>
+                {% elif status == 'failed' %}
+                <div class="mt-2">
+                    <form method="POST" action="/tasks/{{ t.id }}/status" class="inline">
+                        <input type="hidden" name="status" value="pending">
+                        <button class="text-xs px-2 py-0.5 bg-gray-50 text-gray-600 rounded hover:bg-gray-100">重置</button>
+                    </form>
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- 任务树视图 -->
+<div id="tree-view" class="bg-white rounded-lg shadow-sm p-6" style="display:none">
+    <h3 class="text-lg font-semibold text-gray-700 mb-4">任务层级结构</h3>
+    {% macro render_tree(nodes, depth=0) %}
+    <div class="{% if depth > 0 %}ml-6 border-l-2 border-gray-200 pl-4{% endif %}">
+        {% for node in nodes %}
+        <div class="py-2 {% if not loop.last %}border-b border-gray-100{% endif %}">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    {% if node.children %}
+                    <span class="text-gray-400 text-xs">&#9660;</span>
+                    {% else %}
+                    <span class="text-gray-300 text-xs">&#9679;</span>
+                    {% endif %}
+                    <a href="/tasks/{{ node.id }}" class="text-sm font-medium text-gray-800 hover:text-blue-600">{{ node.title }}</a>
+                    <span class="text-xs px-2 py-0.5 rounded status-{{ node.status }}">{{ node.status }}</span>
+                </div>
+                <div class="flex items-center gap-3 text-xs text-gray-400">
+                    <span>{{ node.assignee or '未分配' }}</span>
+                    <span class="{% if node.priority <= 2 %}text-red-500{% endif %}">P{{ node.priority }}</span>
+                    {% if node.progress > 0 %}
+                    <span>{{ node.progress }}%</span>
+                    {% endif %}
+                </div>
+            </div>
+            {% if node.children %}
+            {{ render_tree(node.children, depth + 1) }}
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% endmacro %}
+    {% if task_tree %}
+    {{ render_tree(task_tree) }}
+    {% else %}
+    <div class="text-center text-gray-400 py-6">暂无任务</div>
+    {% endif %}
+</div>
+
+<!-- 资料库视图 -->
+<div id="docs-view" class="space-y-4" style="display:none">
+    <!-- 上传/粘贴入口 -->
+    <div class="grid md:grid-cols-2 gap-4">
+        <div class="bg-white rounded-lg shadow-sm p-4">
+            <h3 class="text-sm font-semibold text-gray-700 mb-3">上传文件</h3>
+            <form method="POST" action="/projects/{{ project.id }}/upload" enctype="multipart/form-data" class="space-y-3">
+                <input type="file" name="files" multiple accept=".md,.txt,.csv,.json,.py,.js,.html,.css,.yaml,.yml,.toml,.log,.xml"
+                    class="w-full border rounded-lg px-3 py-2 text-sm">
+                <div class="flex gap-2">
+                    <input type="text" name="author" placeholder="作者" class="flex-1 border rounded-lg px-3 py-2 text-sm outline-none">
+                    <input type="text" name="tags" placeholder="标签" class="flex-1 border rounded-lg px-3 py-2 text-sm outline-none">
+                </div>
+                <button type="submit" class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700 transition w-full">上传到项目</button>
+            </form>
+        </div>
+        <div class="bg-white rounded-lg shadow-sm p-4">
+            <h3 class="text-sm font-semibold text-gray-700 mb-3">粘贴内容 → AI 自动归类</h3>
+            <form method="POST" action="/projects/{{ project.id }}/classify" class="space-y-3">
+                <textarea name="text" rows="4" required placeholder="粘贴聊天记录、会议纪要、录音转文字..."
+                    class="w-full border rounded-lg px-3 py-2 text-sm outline-none"></textarea>
+                <div class="flex gap-2">
+                    <select name="model" class="border rounded-lg px-3 py-2 text-sm outline-none">
+                        <option value="auto">自动</option>
+                        <option value="deepseek">DeepSeek (省钱)</option>
+                        <option value="claude">Claude</option>
+                    </select>
+                    <button type="submit" class="flex-1 bg-purple-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-purple-700 transition">AI 分类入库</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 资料列表 -->
+    <div class="bg-white rounded-lg shadow-sm p-6">
+        <h3 class="text-lg font-semibold text-gray-700 mb-4">项目资料 ({{ project_notes|length }})</h3>
+        {% if project_notes %}
+        <div class="space-y-2">
+            {% for n in project_notes %}
+            <a href="/notes/{{ n.id }}" class="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 transition">
+                <div class="flex items-center gap-2">
+                    {% if n.source_type == 'ai_classified' %}
+                    <span class="text-xs bg-purple-100 text-purple-600 px-2 py-0.5 rounded">AI分类</span>
+                    {% elif n.source_type == 'file_import' or n.source_type == 'upload' %}
+                    <span class="text-xs bg-green-100 text-green-600 px-2 py-0.5 rounded">文件</span>
+                    {% elif n.source_type == 'master_ai' %}
+                    <span class="text-xs bg-indigo-100 text-indigo-600 px-2 py-0.5 rounded">总AI</span>
+                    {% else %}
+                    <span class="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded">手动</span>
+                    {% endif %}
+                    <span class="text-sm text-gray-800">{{ n.title }}</span>
+                </div>
+                <div class="flex items-center gap-2 text-xs text-gray-400">
+                    {% if n.tags %}
+                    {% for tag in n.tags.split(',')[:3] %}
+                    <span class="text-purple-400">#{{ tag.strip() }}</span>
+                    {% endfor %}
+                    {% endif %}
+                    <span>{{ n.updated_at[:10] if n.updated_at else '' }}</span>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center text-gray-400 py-6">还没有项目资料，上传文件或粘贴内容即可</div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- 决策视图 -->
+<div id="decisions-view" class="bg-white rounded-lg shadow-sm p-6" style="display:none">
+    <h3 class="text-lg font-semibold text-gray-700 mb-4">项目决策记录</h3>
+    {% if project_decisions %}
+    <div class="space-y-4">
+        {% for d in project_decisions %}
+        <div class="border-l-4 {% if d.made_by == 'AI' %}border-purple-400{% else %}border-blue-400{% endif %} pl-4 py-2">
+            <div class="flex items-center gap-2 mb-1">
+                <span class="text-xs px-2 py-0.5 rounded {% if d.made_by == 'AI' %}bg-purple-100 text-purple-600{% else %}bg-blue-100 text-blue-600{% endif %}">
+                    {{ d.made_by or '未知' }}
+                </span>
+                <h4 class="font-medium text-gray-800 text-sm">{{ d.title }}</h4>
+                <span class="text-xs text-gray-400">{{ d.created_at[:16] if d.created_at else '' }}</span>
+            </div>
+            {% if d.decision %}<p class="text-sm text-gray-700">{{ d.decision }}</p>{% endif %}
+            {% if d.reason %}<p class="text-xs text-gray-500 mt-1">原因: {{ d.reason }}</p>{% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="text-center text-gray-400 py-6">还没有决策记录</div>
+    {% endif %}
+</div>
+{% endblock %}

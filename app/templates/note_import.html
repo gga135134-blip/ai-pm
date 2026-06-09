@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}导入文件 - 知识库{% endblock %}
+{% block content %}
+<div class="mb-4 text-sm text-gray-400">
+    <a href="/notes" class="hover:text-gray-600">知识库</a> / <span class="text-gray-600">导入</span>
+</div>
+<h1 class="text-2xl font-bold text-gray-800 mb-6">导入文件到知识库</h1>
+
+<div class="max-w-3xl grid gap-6">
+    <!-- 上传文件 -->
+    <div class="bg-white rounded-lg shadow-sm p-6">
+        <h2 class="text-lg font-semibold text-gray-700 mb-4">上传文件</h2>
+        <form method="POST" action="/notes/import/upload" enctype="multipart/form-data" class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">选择文件（支持 .md .txt .py .json .csv 等）</label>
+                <input type="file" name="files" multiple accept=".md,.txt,.csv,.json,.py,.js,.html,.css,.yaml,.yml,.toml,.ini,.log,.xml"
+                    class="w-full border rounded-lg px-3 py-2 text-sm">
+            </div>
+            <div class="grid grid-cols-3 gap-3">
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">关联项目</label>
+                    <select name="project_id" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                        <option value="">不关联</option>
+                        {% for p in projects %}
+                        <option value="{{ p.id }}">{{ p.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">作者</label>
+                    <input type="text" name="author" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">额外标签</label>
+                    <input type="text" name="tags" placeholder="标签1,标签2" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                </div>
+            </div>
+            <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 transition">上传导入</button>
+        </form>
+    </div>
+
+    <!-- 从路径导入 -->
+    <div class="bg-white rounded-lg shadow-sm p-6">
+        <h2 class="text-lg font-semibold text-gray-700 mb-4">从本地路径导入</h2>
+        <p class="text-sm text-gray-500 mb-4">输入文件或文件夹的完整路径，文件夹会递归导入所有支持的文件</p>
+        <form method="POST" action="/notes/import/path" class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">路径</label>
+                <input type="text" name="path" required placeholder="D:\文档\项目资料 或 D:\文档\笔记.md"
+                    class="w-full border rounded-lg px-3 py-2 text-sm font-mono outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div class="grid grid-cols-3 gap-3">
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">关联项目</label>
+                    <select name="project_id" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                        <option value="">不关联</option>
+                        {% for p in projects %}
+                        <option value="{{ p.id }}">{{ p.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">作者</label>
+                    <input type="text" name="author" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">额外标签</label>
+                    <input type="text" name="tags" placeholder="标签1,标签2" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                </div>
+            </div>
+            <button type="submit" class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700 transition">导入</button>
+        </form>
+    </div>
+
+    <!-- 导入结果 -->
+    {% if result %}
+    <div class="bg-white rounded-lg shadow-sm p-6">
+        <h2 class="text-lg font-semibold text-gray-700 mb-4">导入结果</h2>
+        <div class="space-y-2">
+            {% for item in result.items %}
+                {% if item.get('error') %}
+                <div class="text-sm text-red-600 bg-red-50 rounded p-3">{{ item.error }}</div>
+                {% elif item.get('skipped') %}
+                <div class="text-sm text-yellow-600 bg-yellow-50 rounded p-3">
+                    <strong>跳过 {{ item.skipped|length }} 个文件</strong>（不支持的类型）
+                </div>
+                {% else %}
+                <div class="flex items-center justify-between text-sm bg-green-50 rounded p-3">
+                    <span class="text-green-700">{{ item.title }}</span>
+                    <a href="/notes/{{ item.id }}" class="text-blue-600 hover:underline">查看</a>
+                </div>
+                {% endif %}
+            {% endfor %}
+        </div>
+        <a href="/notes" class="inline-block mt-4 text-sm text-blue-600 hover:underline">返回知识库</a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

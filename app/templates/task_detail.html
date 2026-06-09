@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+{% block title %}{{ task.title }} - AI 项目管理{% endblock %}
+{% block content %}
+<div class="mb-4 text-sm text-gray-400">
+    <a href="/projects" class="hover:text-gray-600">项目</a> /
+    <a href="/projects/{{ project.id }}" class="hover:text-gray-600">{{ project.name }}</a> /
+    <span class="text-gray-600">{{ task.title }}</span>
+</div>
+
+<div class="grid md:grid-cols-3 gap-6">
+    <!-- 主要信息 -->
+    <div class="md:col-span-2 space-y-4">
+        <div class="bg-white rounded-lg shadow-sm p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h1 class="text-xl font-bold text-gray-800">{{ task.title }}</h1>
+                <span class="text-xs px-2 py-1 rounded status-{{ task.status }}">{{ task.status }}</span>
+            </div>
+            {% if task.description %}
+            <div class="text-sm text-gray-600 mb-4" style="white-space:pre-wrap">{{ task.description }}</div>
+            {% endif %}
+            {% if task.result %}
+            <div class="mt-4 border-t pt-4">
+                <h3 class="text-sm font-semibold text-gray-700 mb-2">执行结果</h3>
+                <div class="text-sm text-gray-600 bg-gray-50 rounded-lg p-4" style="white-space:pre-wrap;max-height:400px;overflow-y:auto">{{ task.result }}</div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- AI 执行记录 -->
+        <div class="bg-white rounded-lg shadow-sm p-6">
+            <h2 class="text-lg font-semibold text-gray-700 mb-4">AI 执行记录</h2>
+            {% if runs %}
+            <div class="space-y-3">
+                {% for run in runs %}
+                <div class="border rounded-lg p-4">
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs font-medium px-2 py-0.5 bg-purple-100 text-purple-700 rounded">{{ run.model }}</span>
+                            <span class="text-xs px-2 py-0.5 rounded status-{{ run.status }}">{{ run.status }}</span>
+                        </div>
+                        <div class="text-xs text-gray-400">
+                            {{ run.tokens_used }} tokens / ${{ '%.4f' % run.cost }}
+                        </div>
+                    </div>
+                    {% if run.prompt %}
+                    <details class="mb-2">
+                        <summary class="text-xs text-gray-500 cursor-pointer hover:text-gray-700">Prompt</summary>
+                        <div class="text-xs text-gray-600 bg-gray-50 rounded p-3 mt-1" style="white-space:pre-wrap;max-height:160px;overflow-y:auto">{{ run.prompt }}</div>
+                    </details>
+                    {% endif %}
+                    {% if run.response %}
+                    <div class="text-sm text-gray-700 bg-blue-50 rounded p-3" style="white-space:pre-wrap;max-height:240px;overflow-y:auto">{{ run.response }}</div>
+                    {% endif %}
+                    <div class="text-xs text-gray-400 mt-2">{{ run.created_at }}</div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center text-gray-400 py-6">暂无执行记录</div>
+            {% endif %}
+        </div>
+
+        <!-- 子任务 -->
+        {% if subtasks %}
+        <div class="bg-white rounded-lg shadow-sm p-6">
+            <h2 class="text-lg font-semibold text-gray-700 mb-4">子任务</h2>
+            <div class="space-y-2">
+                {% for st in subtasks %}
+                <a href="/tasks/{{ st.id }}" class="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 transition">
+                    <span class="text-sm text-gray-800">{{ st.title }}</span>
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs text-gray-400">{{ st.assignee or '未分配' }}</span>
+                        <span class="text-xs px-2 py-0.5 rounded status-{{ st.status }}">{{ st.status }}</span>
+                    </div>
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- 侧边栏 -->
+    <div class="space-y-4">
+        <div class="bg-white rounded-lg shadow-sm p-4">
+            <h3 class="text-sm font-semibold text-gray-700 mb-3">属性</h3>
+            <div class="space-y-3 text-sm">
+                <div class="flex justify-between">
+                    <span class="text-gray-500">执行者</span>
+                    <span class="text-gray-800">{{ task.assignee or '未分配' }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-500">AI 模型</span>
+                    <span class="text-gray-800">{{ task.ai_model }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-500">优先级</span>
+                    <span class="{% if task.priority <= 2 %}text-red-500 font-medium{% else %}text-gray-800{% endif %}">P{{ task.priority }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-500">进度</span>
+                    <span class="text-gray-800">{{ task.progress }}%</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-500">需要人工</span>
+                    <span class="text-gray-800">{{ '是' if task.needs_human else '否' }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-500">创建时间</span>
+                    <span class="text-gray-800 text-xs">{{ task.created_at }}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 费用预估 -->
+        {% if task.assignee == 'ai' and task.status in ['pending', 'blocked'] %}
+        <div class="bg-white rounded-lg shadow-sm p-4" id="cost-box">
+            <h3 class="text-sm font-semibold text-gray-700 mb-2">费用预估</h3>
+            <a href="/tasks/{{ task.id }}/estimate" class="text-xs text-blue-600 hover:underline" id="est-link"
+               onclick="fetch(this.href).then(r=>r.text()).then(h=>{document.getElementById('cost-box').innerHTML='<h3 class=\'text-sm font-semibold text-gray-700 mb-2\'>费用预估</h3>'+h});return false;">
+                点击计算预估费用
+            </a>
+        </div>
+        {% endif %}
+
+        <!-- AI 操作 -->
+        <div class="bg-white rounded-lg shadow-sm p-4 space-y-2">
+            <h3 class="text-sm font-semibold text-gray-700 mb-3">AI 操作</h3>
+            {% if task.status in ['pending', 'blocked'] and task.assignee == 'ai' %}
+            <form method="POST" action="/tasks/{{ task.id }}/execute">
+                <button class="w-full text-sm px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">
+                    {{ 'AI 重新执行' if task.status == 'blocked' else 'AI 执行任务' }}
+                </button>
+            </form>
+            <p class="text-xs text-gray-400">执行后自动触发 AI 质量审核</p>
+            {% endif %}
+            {% if task.status == 'reviewing' %}
+            <form method="POST" action="/tasks/{{ task.id }}/review">
+                <button class="w-full text-sm px-3 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition">手动触发 AI 审核</button>
+            </form>
+            {% endif %}
+            {% if not (task.status in ['pending', 'blocked'] and task.assignee == 'ai') and task.status != 'reviewing' %}
+            <p class="text-xs text-gray-400 text-center py-2">当前状态无可用 AI 操作</p>
+            {% endif %}
+        </div>
+
+        <!-- 手动操作 -->
+        <div class="bg-white rounded-lg shadow-sm p-4 space-y-2">
+            <h3 class="text-sm font-semibold text-gray-700 mb-3">手动操作</h3>
+            {% if task.status == 'pending' %}
+            <form method="POST" action="/tasks/{{ task.id }}/status">
+                <input type="hidden" name="status" value="running">
+                <button class="w-full text-sm px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">开始执行</button>
+            </form>
+            {% endif %}
+            {% if task.status == 'running' %}
+            <form method="POST" action="/tasks/{{ task.id }}/status">
+                <input type="hidden" name="status" value="done">
+                <button class="w-full text-sm px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">标记完成</button>
+            </form>
+            {% endif %}
+            {% if task.status == 'reviewing' %}
+            <form method="POST" action="/tasks/{{ task.id }}/status">
+                <input type="hidden" name="status" value="done">
+                <button class="w-full text-sm px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">人工通过</button>
+            </form>
+            <form method="POST" action="/tasks/{{ task.id }}/status">
+                <input type="hidden" name="status" value="running">
+                <button class="w-full text-sm px-3 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition">打回重做</button>
+            </form>
+            {% endif %}
+            {% if task.status in ['blocked', 'failed'] %}
+            <form method="POST" action="/tasks/{{ task.id }}/status">
+                <input type="hidden" name="status" value="pending">
+                <button class="w-full text-sm px-3 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition">重置任务</button>
+            </form>
+            {% endif %}
+            {% if task.status == 'blocked' %}
+            <form method="POST" action="/tasks/{{ task.id }}/status">
+                <input type="hidden" name="status" value="done">
+                <button class="w-full text-sm px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">人工通过</button>
+            </form>
+            {% endif %}
+            <form method="POST" action="/tasks/{{ task.id }}/delete" onsubmit="return confirm('确定删除此任务？')">
+                <button class="w-full text-sm px-3 py-2 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition">删除任务</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}决策日志 - AI 项目管理{% endblock %}
+{% block content %}
+<h1 class="text-2xl font-bold text-gray-800 mb-6">决策日志</h1>
+<p class="text-sm text-gray-500 mb-6">所有关键决策的记录和追溯，分为 AI 决策和人工决策</p>
+
+<div class="max-w-4xl grid gap-6">
+    <!-- 新增决策 -->
+    <div class="bg-white rounded-lg shadow-sm p-6">
+        <h2 class="text-lg font-semibold text-gray-700 mb-4">记录新决策</h2>
+        <form method="POST" action="/decisions/new" class="space-y-4">
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">决策标题</label>
+                    <input type="text" name="title" required placeholder="例：选用 DeepSeek 做日常文案"
+                        class="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">决策人</label>
+                    <input type="text" name="made_by" placeholder="你的名字 或 AI"
+                        class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                </div>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">背景</label>
+                <textarea name="context" rows="2" placeholder="做这个决策的背景是什么？"
+                    class="w-full border rounded-lg px-3 py-2 text-sm outline-none"></textarea>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">决策内容</label>
+                <textarea name="decision" rows="2" placeholder="最终决定是什么？"
+                    class="w-full border rounded-lg px-3 py-2 text-sm outline-none"></textarea>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">原因</label>
+                <textarea name="reason" rows="2" placeholder="为什么这样决定？"
+                    class="w-full border rounded-lg px-3 py-2 text-sm outline-none"></textarea>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">关联项目</label>
+                <select name="project_id" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                    <option value="">不关联</option>
+                    {% for p in projects %}
+                    <option value="{{ p.id }}">{{ p.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 transition">记录决策</button>
+        </form>
+    </div>
+
+    <!-- 决策列表 -->
+    {% if decisions %}
+    <!-- AI 决策 -->
+    {% set ai_decisions = decisions | selectattr('made_by', 'equalto', 'AI') | list %}
+    {% set human_decisions = decisions | rejectattr('made_by', 'equalto', 'AI') | list %}
+
+    {% if ai_decisions %}
+    <div class="bg-white rounded-lg shadow-sm p-6">
+        <h2 class="text-lg font-semibold text-purple-700 mb-4">AI 决策 ({{ ai_decisions|length }})</h2>
+        <div class="space-y-4">
+            {% for d in ai_decisions %}
+            <div class="border-l-4 border-purple-400 pl-4 py-2">
+                <div class="flex items-center justify-between">
+                    <h3 class="font-medium text-gray-800">{{ d.title }}</h3>
+                    <div class="flex items-center gap-2 text-xs text-gray-400">
+                        {% if d.project_name %}<span class="bg-gray-100 px-2 py-0.5 rounded">{{ d.project_name }}</span>{% endif %}
+                        <span>{{ d.created_at[:16] if d.created_at else '' }}</span>
+                    </div>
+                </div>
+                {% if d.decision %}<p class="text-sm text-gray-700 mt-1"><strong>决定：</strong>{{ d.decision }}</p>{% endif %}
+                {% if d.reason %}<p class="text-sm text-gray-500 mt-1"><strong>原因：</strong>{{ d.reason }}</p>{% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if human_decisions %}
+    <div class="bg-white rounded-lg shadow-sm p-6">
+        <h2 class="text-lg font-semibold text-blue-700 mb-4">人工决策 ({{ human_decisions|length }})</h2>
+        <div class="space-y-4">
+            {% for d in human_decisions %}
+            <div class="border-l-4 border-blue-400 pl-4 py-2">
+                <div class="flex items-center justify-between">
+                    <h3 class="font-medium text-gray-800">{{ d.title }}</h3>
+                    <div class="flex items-center gap-2 text-xs text-gray-400">
+                        {% if d.made_by %}<span class="text-blue-500">{{ d.made_by }}</span>{% endif %}
+                        {% if d.project_name %}<span class="bg-gray-100 px-2 py-0.5 rounded">{{ d.project_name }}</span>{% endif %}
+                        <span>{{ d.created_at[:16] if d.created_at else '' }}</span>
+                    </div>
+                </div>
+                {% if d.context %}<p class="text-sm text-gray-500 mt-1"><strong>背景：</strong>{{ d.context }}</p>{% endif %}
+                {% if d.decision %}<p class="text-sm text-gray-700 mt-1"><strong>决定：</strong>{{ d.decision }}</p>{% endif %}
+                {% if d.reason %}<p class="text-sm text-gray-500 mt-1"><strong>原因：</strong>{{ d.reason }}</p>{% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div class="bg-white rounded-lg shadow-sm p-8 text-center text-gray-400">
+        还没有决策记录
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

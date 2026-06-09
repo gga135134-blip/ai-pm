@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+jinja2
+python-multipart
+aiosqlite
+httpx
+anthropic
+openai
+pydantic
+pydantic-settings
