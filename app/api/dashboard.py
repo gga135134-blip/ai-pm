@@ -64,7 +64,7 @@ async def dashboard(request: Request):
     }
 
     return request.app.state.templates.TemplateResponse(
-        "dashboard.html",
+        request, "dashboard.html",
         {
             "request": request,
             "stats": stats,

@@ -17,7 +17,7 @@ async def chat_page(request: Request):
     finally:
         await db.close()
     return request.app.state.templates.TemplateResponse(
-        "chat.html", {"request": request, "messages": messages}
+        request, "chat.html", {"request": request, "messages": messages}
     )
 
 
@@ -35,7 +35,7 @@ async def chat_send(request: Request, message: str = Form(...), sender: str = Fo
         await db.close()
 
     return request.app.state.templates.TemplateResponse(
-        "chat.html", {"request": request, "messages": messages, "last_result": result}
+        request, "chat.html", {"request": request, "messages": messages, "last_result": result}
     )
 
 

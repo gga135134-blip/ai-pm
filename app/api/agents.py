@@ -17,7 +17,7 @@ async def api_decompose(project_id: str, goal: str = Form(...), model: str = For
 async def api_estimate(request: Request, task_id: str):
     est = await estimate_task_cost(task_id)
     return request.app.state.templates.TemplateResponse(
-        "cost_estimate.html", {"request": request, "estimate": est, "task_id": task_id}
+        request, "cost_estimate.html", {"request": request, "estimate": est, "task_id": task_id}
     )
 
 

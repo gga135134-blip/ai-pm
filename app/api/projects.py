@@ -39,14 +39,14 @@ async def project_list(request: Request):
     finally:
         await db.close()
     return request.app.state.templates.TemplateResponse(
-        "project_list.html", {"request": request, "projects": projects}
+        request, "project_list.html", {"request": request, "projects": projects}
     )
 
 
 @router.get("/projects/new", response_class=HTMLResponse)
 async def project_new_form(request: Request):
     return request.app.state.templates.TemplateResponse(
-        "project_form.html", {"request": request, "project": None}
+        request, "project_form.html", {"request": request, "project": None}
     )
 
 
@@ -107,7 +107,7 @@ async def project_detail(request: Request, project_id: str):
     task_tree = _build_task_tree(tasks)
 
     return request.app.state.templates.TemplateResponse(
-        "project_detail.html",
+        request, "project_detail.html",
         {
             "request": request, "project": project, "task_board": task_board,
             "tasks": tasks, "task_tree": task_tree, "project_cost": project_cost,
@@ -125,7 +125,7 @@ async def project_edit_form(request: Request, project_id: str):
     finally:
         await db.close()
     return request.app.state.templates.TemplateResponse(
-        "project_form.html", {"request": request, "project": project}
+        request, "project_form.html", {"request": request, "project": project}
     )
 
 

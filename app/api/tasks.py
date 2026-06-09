@@ -58,7 +58,7 @@ async def task_detail(request: Request, task_id: str):
         await db.close()
 
     return request.app.state.templates.TemplateResponse(
-        "task_detail.html",
+        request, "task_detail.html",
         {"request": request, "task": task, "project": project, "subtasks": subtasks, "runs": runs},
     )
 

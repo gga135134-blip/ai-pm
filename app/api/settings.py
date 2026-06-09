@@ -35,7 +35,7 @@ def save_settings(data: dict):
 async def settings_page(request: Request):
     config = load_settings()
     return request.app.state.templates.TemplateResponse(
-        "settings.html", {"request": request, "config": config}
+        request, "settings.html", {"request": request, "config": config}
     )
 
 

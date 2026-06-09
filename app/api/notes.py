@@ -55,7 +55,7 @@ async def note_list(request: Request, tag: str = "", q: str = "", project_id: st
         await db.close()
 
     return request.app.state.templates.TemplateResponse(
-        "notes.html",
+        request, "notes.html",
         {
             "request": request,
             "notes": notes,
@@ -77,7 +77,7 @@ async def note_new_form(request: Request, project_id: str = "", task_id: str = "
     finally:
         await db.close()
     return request.app.state.templates.TemplateResponse(
-        "note_form.html",
+        request, "note_form.html",
         {"request": request, "note": None, "projects": projects, "pre_project": project_id, "pre_task": task_id},
     )
 
@@ -119,7 +119,7 @@ async def import_page(request: Request):
     finally:
         await db.close()
     return request.app.state.templates.TemplateResponse(
-        "note_import.html", {"request": request, "projects": projects, "result": None}
+        request, "note_import.html", {"request": request, "projects": projects, "result": None}
     )
 
 
@@ -143,7 +143,7 @@ async def import_upload_files(
     finally:
         await db.close()
     return request.app.state.templates.TemplateResponse(
-        "note_import.html", {"request": request, "projects": projects, "result": {"type": "upload", "items": results}}
+        request, "note_import.html", {"request": request, "projects": projects, "result": {"type": "upload", "items": results}}
     )
 
 
@@ -174,7 +174,7 @@ async def import_from_path(
     finally:
         await db.close()
     return request.app.state.templates.TemplateResponse(
-        "note_import.html", {"request": request, "projects": projects, "result": {"type": "path", "items": items}}
+        request, "note_import.html", {"request": request, "projects": projects, "result": {"type": "path", "items": items}}
     )
 
 
@@ -189,7 +189,7 @@ async def classify_page(request: Request):
     finally:
         await db.close()
     return request.app.state.templates.TemplateResponse(
-        "note_classify.html", {"request": request, "projects": projects, "result": None}
+        request, "note_classify.html", {"request": request, "projects": projects, "result": None}
     )
 
 
@@ -208,7 +208,7 @@ async def classify_submit(
     finally:
         await db.close()
     return request.app.state.templates.TemplateResponse(
-        "note_classify.html", {"request": request, "projects": projects, "result": created}
+        request, "note_classify.html", {"request": request, "projects": projects, "result": created}
     )
 
 
@@ -233,7 +233,7 @@ async def summarize_submit(tag: str = Form("")):
 @router.get("/notes/weekly", response_class=HTMLResponse)
 async def weekly_report_page(request: Request):
     return request.app.state.templates.TemplateResponse(
-        "weekly_report.html", {"request": request, "report": None}
+        request, "weekly_report.html", {"request": request, "report": None}
     )
 
 
@@ -241,7 +241,7 @@ async def weekly_report_page(request: Request):
 async def weekly_report_generate(request: Request, model: str = Form("auto")):
     result = await generate_weekly_report(model)
     return request.app.state.templates.TemplateResponse(
-        "weekly_report.html", {"request": request, "report": result}
+        request, "weekly_report.html", {"request": request, "report": result}
     )
 
 
@@ -278,7 +278,7 @@ async def note_detail(request: Request, note_id: str):
     tag_list = [t.strip() for t in note["tags"].split(",") if t.strip()] if note["tags"] else []
 
     return request.app.state.templates.TemplateResponse(
-        "note_detail.html",
+        request, "note_detail.html",
         {"request": request, "note": note, "tag_list": tag_list, "related": related},
     )
 
@@ -294,7 +294,7 @@ async def note_edit_form(request: Request, note_id: str):
     finally:
         await db.close()
     return request.app.state.templates.TemplateResponse(
-        "note_form.html",
+        request, "note_form.html",
         {"request": request, "note": note, "projects": projects, "pre_project": "", "pre_task": ""},
     )
 
@@ -366,7 +366,7 @@ async def decisions_page(request: Request):
     finally:
         await db.close()
     return request.app.state.templates.TemplateResponse(
-        "decisions.html", {"request": request, "decisions": decisions, "projects": projects}
+        request, "decisions.html", {"request": request, "decisions": decisions, "projects": projects}
     )
 
 
@@ -399,7 +399,7 @@ async def decision_create(
 async def backups_page(request: Request):
     backups = await list_backups()
     return request.app.state.templates.TemplateResponse(
-        "backups.html", {"request": request, "backups": backups}
+        request, "backups.html", {"request": request, "backups": backups}
     )
 
 
