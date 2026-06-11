@@ -1,14 +1,14 @@
 {% extends "base.html" %}
-{% block title %}AI 问答 - 知识库{% endblock %}
+{% block title %}AI 助手 - 知识库{% endblock %}
 {% block content %}
 <div class="mb-4 text-sm text-gray-400">
-    <a href="/notes" class="hover:text-gray-600">知识库</a> / <span class="text-gray-600">AI 问答</span>
+    <a href="/notes" class="hover:text-gray-600">知识库</a> / <span class="text-gray-600">AI 助手</span>
 </div>
 
 <div class="max-w-4xl mx-auto">
     <div class="text-center mb-6">
-        <h1 class="text-2xl font-bold text-gray-800">知识库 AI 问答</h1>
-        <p class="text-sm text-gray-400 mt-1">提问后 AI 会先检索你的笔记，基于知识库内容回答。答案可一键存为笔记</p>
+        <h1 class="text-2xl font-bold text-gray-800">知识库 AI 助手</h1>
+        <p class="text-sm text-gray-400 mt-1">提问、整理、分类、总结都可以直接说。先选范围，再下指令，结果可一键存为笔记</p>
     </div>
 
     <!-- 对话区 -->
@@ -21,14 +21,38 @@
 
     <!-- 输入区 -->
     <div class="bg-white rounded-lg shadow-sm p-4 sticky bottom-4">
-        <form id="ask-form" class="flex gap-2">
-            <input type="text" id="question" placeholder="问点什么，比如：竞品分析的结论是什么？"
-                class="flex-1 border rounded-lg px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-teal-500" autocomplete="off">
-            <button type="submit" id="ask-btn" class="bg-teal-600 text-white px-6 py-3 rounded-lg text-sm hover:bg-teal-700 transition">提问</button>
+        <form id="ask-form" class="space-y-2">
+            <div class="flex gap-2">
+                <select id="scope" class="border rounded-lg px-3 py-3 text-sm outline-none text-gray-600 max-w-[180px]">
+                    <option value="auto">智能检索（按指令找）</option>
+                    <option value="all">全部笔记（最近80条）</option>
+                    {% if folders %}
+                    <optgroup label="按文件夹">
+                        {% for f in folders %}
+                        <option value="folder:{{ f }}">&#128193; {{ f }}</option>
+                        {% endfor %}
+                    </optgroup>
+                    {% endif %}
+                    {% if tags %}
+                    <optgroup label="按标签">
+                        {% for t in tags %}
+                        <option value="tag:{{ t }}"># {{ t }}</option>
+                        {% endfor %}
+                    </optgroup>
+                    {% endif %}
+                </select>
+                <input type="text" id="question" placeholder="如：把这些笔记按主题分类，列出每类的核心要点和待办"
+                    class="flex-1 border rounded-lg px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-teal-500" autocomplete="off">
+                <button type="submit" id="ask-btn" class="bg-teal-600 text-white px-6 py-3 rounded-lg text-sm hover:bg-teal-700 transition">发送</button>
+            </div>
         </form>
         <div class="flex items-center justify-between mt-2">
             <span class="text-xs text-gray-400">本页累计费用: $<span id="total-cost">0.0000</span></span>
-            <button onclick="clearChat()" class="text-xs text-gray-400 hover:text-gray-600">清空对话</button>
+            <div class="flex gap-3">
+                <button onclick="fillExample('把这些笔记按主题分类整理，每类列出核心要点')" class="text-xs text-teal-600 hover:underline">示例:分类整理</button>
+                <button onclick="fillExample('总结这些笔记，提炼出所有待办事项和风险点')" class="text-xs text-teal-600 hover:underline">示例:提炼待办</button>
+                <button onclick="clearChat()" class="text-xs text-gray-400 hover:text-gray-600">清空对话</button>
+            </div>
         </div>
     </div>
 </div>
@@ -73,7 +97,7 @@ function addAiMsg(question, data) {
         + '<div class="text-gray-800" style="white-space:pre-wrap">' + esc(data.answer) + '</div>'
         + sourcesHtml
         + '<div class="flex items-center justify-between mt-3 pt-2 border-t border-gray-100">'
-        + '<span class="text-xs text-gray-400">' + esc(data.model || '') + ' / $' + (data.cost || 0).toFixed(4) + '</span>'
+        + '<span class="text-xs text-gray-400">' + esc(data.model || '') + ' / 参考' + (data.note_count || 0) + '条笔记 / $' + (data.cost || 0).toFixed(4) + '</span>'
         + '<button onclick="saveNote(' + idx + ')" class="text-xs bg-amber-50 text-amber-700 border border-amber-200 px-3 py-1 rounded hover:bg-amber-100 transition">&#128190; 存为笔记</button>'
         + '</div></div></div>');
     box.lastElementChild.scrollIntoView({behavior: 'smooth'});
@@ -97,6 +121,7 @@ document.getElementById('ask-form').addEventListener('submit', function(e) {
     var fd = new FormData();
     fd.append('question', q);
     fd.append('history', hist);
+    fd.append('scope', document.getElementById('scope').value);
 
     fetch('/notes/chat/ask', {method: 'POST', body: fd})
         .then(function(r) { return r.json(); })
@@ -129,6 +154,11 @@ function saveNote(idx) {
 function clearChat() {
     history = [];
     document.getElementById('chat-box').innerHTML = '';
+}
+
+function fillExample(text) {
+    document.getElementById('question').value = text;
+    document.getElementById('question').focus();
 }
 </script>
 {% endblock %}

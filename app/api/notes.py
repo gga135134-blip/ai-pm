@@ -268,15 +268,22 @@ async def classify_submit(
 @router.get("/notes/chat", response_class=HTMLResponse)
 async def notes_chat_page(request: Request):
     folders = await _get_all_folders()
+    db = await get_db()
+    try:
+        cursor = await db.execute("SELECT tags FROM notes WHERE tags != ''")
+        all_tags_raw = [row["tags"] for row in await cursor.fetchall()]
+    finally:
+        await db.close()
+    tags = sorted({t.strip() for raw in all_tags_raw for t in raw.split(",") if t.strip()})
     return request.app.state.templates.TemplateResponse(
-        request, "note_chat.html", {"request": request, "folders": folders}
+        request, "note_chat.html", {"request": request, "folders": folders, "tags": tags}
     )
 
 
 @router.post("/notes/chat/ask")
-async def notes_chat_ask(question: str = Form(...), history: str = Form("")):
+async def notes_chat_ask(question: str = Form(...), history: str = Form(""), scope: str = Form("auto")):
     from fastapi.responses import JSONResponse
-    result = await chat_with_notes(question, history)
+    result = await chat_with_notes(question, history, scope=scope)
     return JSONResponse(result)
 
 

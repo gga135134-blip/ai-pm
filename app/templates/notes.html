@@ -6,7 +6,7 @@
     <div class="flex gap-2">
         <a href="/notes/new{% if current_folder %}?folder={{ current_folder }}{% endif %}" class="bg-blue-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-blue-700 transition">+ 新建</a>
         <a href="/notes/import" class="bg-green-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-green-700 transition">导入</a>
-        <a href="/notes/chat" class="bg-teal-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-teal-700 transition">AI 问答</a>
+        <a href="/notes/chat" class="bg-teal-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-teal-700 transition">AI 助手</a>
         <a href="/notes/classify" class="bg-purple-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-purple-700 transition">AI 分类</a>
         <form method="POST" action="/notes/summarize" class="inline">
             <input type="hidden" name="tag" value="{{ current_tag }}">

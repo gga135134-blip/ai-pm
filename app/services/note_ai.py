@@ -5,13 +5,14 @@ from datetime import datetime
 from app.database import get_db
 from app.services.ai_router import ask_ai
 
-CHAT_SYSTEM = """你是一个知识库助手。用户会问你问题，并附上从知识库检索到的相关笔记。
+CHAT_SYSTEM = """你是一个知识库 AI 助手。用户会给你一批笔记和一条指令（可能是提问、整理、分类、总结、提炼待办等任何要求）。
 
 规则：
-- 优先根据笔记内容回答，引用时注明笔记标题（格式：【笔记标题】）
-- 笔记里没有的信息，可以用你自己的知识补充，但要注明"（笔记中未涉及，以下是补充信息）"
-- 回答要简洁、结构化
-- 如果笔记完全不相关，直接说知识库里没有相关内容，然后正常回答问题"""
+- 严格按用户的指令执行，用户要什么格式就给什么格式
+- 引用笔记时注明笔记标题（格式：【笔记标题】）
+- 如果是提问：优先根据笔记内容回答，笔记里没有的可以用自己的知识补充，但要注明"（笔记中未涉及，以下是补充信息）"
+- 如果是整理/分类/总结：按用户要求的维度组织内容，结构清晰
+- 回答简洁、结构化，不要客套话"""
 
 CLASSIFY_SYSTEM = """你是一个信息分类专家。用户会给你一段文字（可能是聊天记录、会议纪要、录音转文字等），请将内容分层提取。
 
@@ -203,58 +204,93 @@ async def summarize_notes(note_ids: list[str] = None, tag: str = "", model: str 
     return {"summary": final["response"] + skipped_note, "model": used_model, "cost": round(total_cost, 6)}
 
 
-async def chat_with_notes(question: str, history: str = "", model: str = "auto") -> dict:
-    """知识库问答：先检索相关笔记，再让 AI 基于笔记回答"""
-    # 1. 从问题里提取关键词
-    words = [w for w in re.split(r"[\s,，。、？?！!：:；;\"'（）()]+", question) if len(w) >= 2][:8]
+async def chat_with_notes(question: str, history: str = "", model: str = "auto", scope: str = "auto") -> dict:
+    """知识库 AI 助手：按范围取笔记，再让 AI 按指令执行（提问/整理/分类/总结）
+
+    scope: auto（按关键词智能检索）/ all（最近笔记）/ folder:xxx / tag:xxx
+    """
+    TOTAL_MAX_CHARS = 80_000  # 喂给 AI 的笔记总量上限
 
     notes = []
-    if words:
-        db = await get_db()
-        try:
-            like_parts = " OR ".join(["(title LIKE ? OR content LIKE ? OR tags LIKE ?)"] * len(words))
-            params = []
-            for w in words:
-                params.extend([f"%{w}%"] * 3)
+    db = await get_db()
+    try:
+        if scope == "all":
             cursor = await db.execute(
-                f"SELECT id, title, content, tags, folder FROM notes WHERE {like_parts} ORDER BY updated_at DESC LIMIT 30",
-                params,
+                "SELECT id, title, content, tags, folder FROM notes ORDER BY updated_at DESC LIMIT 80"
             )
-            candidates = [dict(row) for row in await cursor.fetchall()]
-        finally:
-            await db.close()
+            notes = [dict(row) for row in await cursor.fetchall()]
+        elif scope.startswith("folder:"):
+            f = scope[len("folder:"):]
+            cursor = await db.execute(
+                "SELECT id, title, content, tags, folder FROM notes WHERE folder = ? OR folder LIKE ? ORDER BY updated_at DESC LIMIT 80",
+                (f, f"{f}/%"),
+            )
+            notes = [dict(row) for row in await cursor.fetchall()]
+        elif scope.startswith("tag:"):
+            t = scope[len("tag:"):]
+            cursor = await db.execute(
+                "SELECT id, title, content, tags, folder FROM notes WHERE ',' || tags || ',' LIKE ? ORDER BY updated_at DESC LIMIT 80",
+                (f"%,{t},%",),
+            )
+            notes = [dict(row) for row in await cursor.fetchall()]
+        else:
+            # auto：按指令里的关键词检索打分
+            words = [w for w in re.split(r"[\s,，。、？?！!：:；;\"'（）()]+", question) if len(w) >= 2][:8]
+            if words:
+                like_parts = " OR ".join(["(title LIKE ? OR content LIKE ? OR tags LIKE ?)"] * len(words))
+                params = []
+                for w in words:
+                    params.extend([f"%{w}%"] * 3)
+                cursor = await db.execute(
+                    f"SELECT id, title, content, tags, folder FROM notes WHERE {like_parts} ORDER BY updated_at DESC LIMIT 30",
+                    params,
+                )
+                candidates = [dict(row) for row in await cursor.fetchall()]
 
-        # 2. 按关键词命中数打分，取前 6 条
-        def score(n):
-            s = 0
-            for w in words:
-                if w in (n["title"] or ""):
-                    s += 3
-                if w in (n["tags"] or ""):
-                    s += 2
-                s += min((n["content"] or "").count(w), 5)
-            return s
+                def score(n):
+                    s = 0
+                    for w in words:
+                        if w in (n["title"] or ""):
+                            s += 3
+                        if w in (n["tags"] or ""):
+                            s += 2
+                        s += min((n["content"] or "").count(w), 5)
+                    return s
 
-        candidates.sort(key=score, reverse=True)
-        notes = candidates[:6]
+                candidates.sort(key=score, reverse=True)
+                notes = candidates[:6]
+    finally:
+        await db.close()
 
-    # 3. 拼上下文（每条截断，总量受 ai_router 全局保护）
-    context_parts = []
+    # 拼上下文：单条截断 + 总量控制，超出的笔记只列标题
+    per_note_max = 2500 if len(notes) <= 10 else 1200
+    context_parts, used_notes, total = [], [], 0
+    title_only = []
     for n in notes:
-        content = (n["content"] or "")[:2500]
-        context_parts.append(f"【{n['title']}】\n{content}")
-    context = "\n\n---\n\n".join(context_parts) if context_parts else "（知识库中没有找到相关笔记）"
+        content = (n["content"] or "")[:per_note_max]
+        piece = f"【{n['title']}】\n{content}"
+        if total + len(piece) > TOTAL_MAX_CHARS:
+            title_only.append(n["title"])
+            continue
+        context_parts.append(piece)
+        used_notes.append(n)
+        total += len(piece)
+
+    context = "\n\n---\n\n".join(context_parts) if context_parts else "（没有找到相关笔记）"
+    if title_only:
+        context += f"\n\n（另有 {len(title_only)} 条笔记因篇幅只列标题：" + "、".join(title_only[:30]) + "）"
 
     prompt = ""
     if history:
         prompt += f"之前的对话：\n{history}\n\n"
-    prompt += f"从知识库检索到的相关笔记：\n\n{context}\n\n---\n\n用户问题：{question}"
+    prompt += f"知识库笔记（共 {len(used_notes)} 条）：\n\n{context}\n\n---\n\n用户指令：{question}"
 
     result = await ask_ai(prompt=prompt, model=model, task_type="analysis", system_prompt=CHAT_SYSTEM)
 
     return {
         "answer": result["response"],
-        "sources": [{"id": n["id"], "title": n["title"]} for n in notes],
+        "sources": [{"id": n["id"], "title": n["title"]} for n in used_notes],
+        "note_count": len(used_notes),
         "model": result["model"],
         "cost": result["cost"],
     }
