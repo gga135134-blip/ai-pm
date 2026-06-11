@@ -14,11 +14,20 @@
             <textarea name="content" rows="16" placeholder="写点什么..."
                 class="w-full border rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none" style="tab-size:4">{{ note.content if note else '' }}</textarea>
         </div>
-        <div class="grid grid-cols-2 gap-4">
+        <div class="grid grid-cols-3 gap-4">
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">作者</label>
-                <input type="text" name="author" value="{{ note.author if note else '' }}" placeholder="你的名字"
+                <input type="text" name="author" value="{{ note.author if note else '' }}" placeholder="Gaga / An"
                     class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">文件夹</label>
+                <input type="text" name="folder" list="folder-list" value="{{ note.folder if note and note.folder else pre_folder }}" placeholder="如: 资料/竞品分析"
+                    class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                <datalist id="folder-list">
+                    {% for f in folders %}<option value="{{ f }}">{% endfor %}
+                </datalist>
+                <p class="text-xs text-gray-400 mt-1">用 / 分层，如 资料/竞品</p>
             </div>
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">标签 (逗号分隔)</label>

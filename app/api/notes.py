@@ -3,15 +3,15 @@ from datetime import datetime
 from fastapi import APIRouter, Request, Form, Query, UploadFile, File
 from fastapi.responses import HTMLResponse, RedirectResponse
 from app.database import get_db
-from app.services.importer import import_file, import_folder, import_upload
-from app.services.note_ai import classify_content, summarize_notes, generate_weekly_report
+from app.services.importer import import_file, import_folder, import_upload, import_url
+from app.services.note_ai import classify_content, summarize_notes, generate_weekly_report, chat_with_notes
 from app.services.backup import create_backup, list_backups, cleanup_old_backups
 
 router = APIRouter()
 
 
 @router.get("/notes", response_class=HTMLResponse)
-async def note_list(request: Request, tag: str = "", q: str = "", project_id: str = ""):
+async def note_list(request: Request, tag: str = "", q: str = "", project_id: str = "", folder: str = ""):
     db = await get_db()
     try:
         # 构建查询
@@ -26,6 +26,10 @@ async def note_list(request: Request, tag: str = "", q: str = "", project_id: st
         if project_id:
             where_parts.append("n.project_id = ?")
             params.append(project_id)
+        if folder:
+            # 匹配自身和子文件夹（如 folder=资料 时也命中 资料/竞品）
+            where_parts.append("(n.folder = ? OR n.folder LIKE ?)")
+            params.extend([folder, f"{folder}/%"])
 
         where_clause = "WHERE " + " AND ".join(where_parts) if where_parts else ""
 
@@ -48,6 +52,13 @@ async def note_list(request: Request, tag: str = "", q: str = "", project_id: st
                 if t:
                     tag_counts[t] = tag_counts.get(t, 0) + 1
 
+        # 文件夹树（含每个文件夹的笔记数）
+        cursor = await db.execute("SELECT folder, COUNT(*) as cnt FROM notes WHERE folder != '' GROUP BY folder ORDER BY folder")
+        folder_counts = [(row["folder"], row["cnt"]) for row in await cursor.fetchall()]
+        cursor = await db.execute("SELECT COUNT(*) as cnt FROM notes WHERE folder = '' OR folder IS NULL")
+        row = await cursor.fetchone()
+        unfiled_count = row["cnt"]
+
         # 获取项目列表用于筛选
         cursor = await db.execute("SELECT id, name FROM projects ORDER BY name")
         projects = [dict(row) for row in await cursor.fetchall()]
@@ -60,25 +71,39 @@ async def note_list(request: Request, tag: str = "", q: str = "", project_id: st
             "request": request,
             "notes": notes,
             "tag_counts": tag_counts,
+            "folder_counts": folder_counts,
+            "unfiled_count": unfiled_count,
             "projects": projects,
             "current_tag": tag,
             "current_q": q,
             "current_project": project_id,
+            "current_folder": folder,
         },
     )
 
 
+async def _get_all_folders() -> list[str]:
+    db = await get_db()
+    try:
+        cursor = await db.execute("SELECT DISTINCT folder FROM notes WHERE folder != '' ORDER BY folder")
+        return [row["folder"] for row in await cursor.fetchall()]
+    finally:
+        await db.close()
+
+
 @router.get("/notes/new", response_class=HTMLResponse)
-async def note_new_form(request: Request, project_id: str = "", task_id: str = ""):
+async def note_new_form(request: Request, project_id: str = "", task_id: str = "", folder: str = ""):
     db = await get_db()
     try:
         cursor = await db.execute("SELECT id, name FROM projects ORDER BY name")
         projects = [dict(row) for row in await cursor.fetchall()]
     finally:
         await db.close()
+    folders = await _get_all_folders()
     return request.app.state.templates.TemplateResponse(
         request, "note_form.html",
-        {"request": request, "note": None, "projects": projects, "pre_project": project_id, "pre_task": task_id},
+        {"request": request, "note": None, "projects": projects, "folders": folders,
+         "pre_project": project_id, "pre_task": task_id, "pre_folder": folder},
     )
 
 
@@ -90,17 +115,19 @@ async def note_create(
     project_id: str = Form(""),
     task_id: str = Form(""),
     tags: str = Form(""),
+    folder: str = Form(""),
 ):
     note_id = str(uuid.uuid4())
     now = datetime.now().isoformat()
     # 清理标签格式
     clean_tags = ",".join(t.strip() for t in tags.split(",") if t.strip())
+    folder = folder.strip().strip("/")
     db = await get_db()
     try:
         await db.execute(
-            """INSERT INTO notes (id, title, content, author, project_id, task_id, tags, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (note_id, title, content, author, project_id or None, task_id or None, clean_tags, now, now),
+            """INSERT INTO notes (id, title, content, author, project_id, task_id, tags, folder, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (note_id, title, content, author, project_id or None, task_id or None, clean_tags, folder, now, now),
         )
         await db.commit()
     finally:
@@ -118,8 +145,23 @@ async def import_page(request: Request):
         projects = [dict(row) for row in await cursor.fetchall()]
     finally:
         await db.close()
+    folders = await _get_all_folders()
     return request.app.state.templates.TemplateResponse(
-        request, "note_import.html", {"request": request, "projects": projects, "result": None}
+        request, "note_import.html", {"request": request, "projects": projects, "folders": folders, "result": None}
+    )
+
+
+async def _import_result_page(request: Request, result_type: str, items: list):
+    db = await get_db()
+    try:
+        cursor = await db.execute("SELECT id, name FROM projects ORDER BY name")
+        projects = [dict(row) for row in await cursor.fetchall()]
+    finally:
+        await db.close()
+    folders = await _get_all_folders()
+    return request.app.state.templates.TemplateResponse(
+        request, "note_import.html",
+        {"request": request, "projects": projects, "folders": folders, "result": {"type": result_type, "items": items}},
     )
 
 
@@ -130,21 +172,34 @@ async def import_upload_files(
     project_id: str = Form(""),
     author: str = Form(""),
     tags: str = Form(""),
+    folder: str = Form(""),
 ):
+    folder = folder.strip().strip("/")
     results = []
     for f in files:
         content = await f.read()
-        r = await import_upload(f.filename, content, project_id, author, tags)
+        r = await import_upload(f.filename, content, project_id, author, tags, folder)
         results.append(r)
-    db = await get_db()
-    try:
-        cursor = await db.execute("SELECT id, name FROM projects ORDER BY name")
-        projects = [dict(row) for row in await cursor.fetchall()]
-    finally:
-        await db.close()
-    return request.app.state.templates.TemplateResponse(
-        request, "note_import.html", {"request": request, "projects": projects, "result": {"type": "upload", "items": results}}
-    )
+    return await _import_result_page(request, "upload", results)
+
+
+@router.post("/notes/import/url")
+async def import_from_url(
+    request: Request,
+    url: str = Form(...),
+    project_id: str = Form(""),
+    author: str = Form(""),
+    tags: str = Form(""),
+    folder: str = Form(""),
+):
+    folder = folder.strip().strip("/")
+    # 支持一次粘贴多个链接（每行一个）
+    urls = [u.strip() for u in url.replace(",", "\n").splitlines() if u.strip()]
+    results = []
+    for u in urls[:10]:  # 一次最多 10 个，防滥用
+        r = await import_url(u, project_id, author, tags, folder)
+        results.append(r)
+    return await _import_result_page(request, "url", results)
 
 
 @router.post("/notes/import/path")
@@ -154,30 +209,24 @@ async def import_from_path(
     project_id: str = Form(""),
     author: str = Form(""),
     tags: str = Form(""),
+    folder: str = Form(""),
 ):
     from pathlib import Path as P
     # 清理用户输入：去掉首尾引号和空格
     path = path.strip().strip('"').strip("'").strip()
+    folder = folder.strip().strip("/")
     p = P(path)
     if p.is_file():
-        r = await import_file(path, project_id, author, tags)
+        r = await import_file(path, project_id, author, tags, folder)
         items = [r]
     elif p.is_dir():
-        r = await import_folder(path, project_id, author, tags)
+        r = await import_folder(path, project_id, author, tags, folder)
         items = r.get("imported", [])
         if r.get("skipped"):
             items.append({"skipped": r["skipped"]})
     else:
         items = [{"error": f"路径不存在或无法访问: {path}（提示：服务器在 Linux 上，无法访问你电脑上的 Windows 路径如 C:\\... 或 D:\\...，请改用上传方式）"}]
-    db = await get_db()
-    try:
-        cursor = await db.execute("SELECT id, name FROM projects ORDER BY name")
-        projects = [dict(row) for row in await cursor.fetchall()]
-    finally:
-        await db.close()
-    return request.app.state.templates.TemplateResponse(
-        request, "note_import.html", {"request": request, "projects": projects, "result": {"type": "path", "items": items}}
-    )
+    return await _import_result_page(request, "path", items)
 
 
 # ── AI 智能功能（必须在 {note_id} 之前注册）──────────
@@ -212,6 +261,46 @@ async def classify_submit(
     return request.app.state.templates.TemplateResponse(
         request, "note_classify.html", {"request": request, "projects": projects, "result": created}
     )
+
+
+# ── 知识库 AI 问答（必须在 {note_id} 之前注册）────────
+
+@router.get("/notes/chat", response_class=HTMLResponse)
+async def notes_chat_page(request: Request):
+    folders = await _get_all_folders()
+    return request.app.state.templates.TemplateResponse(
+        request, "note_chat.html", {"request": request, "folders": folders}
+    )
+
+
+@router.post("/notes/chat/ask")
+async def notes_chat_ask(question: str = Form(...), history: str = Form("")):
+    from fastapi.responses import JSONResponse
+    result = await chat_with_notes(question, history)
+    return JSONResponse(result)
+
+
+@router.post("/notes/chat/save")
+async def notes_chat_save(
+    question: str = Form(...),
+    answer: str = Form(...),
+    folder: str = Form(""),
+):
+    note_id = str(uuid.uuid4())
+    now = datetime.now().isoformat()
+    folder = folder.strip().strip("/")
+    content = f"## 问题\n{question}\n\n## 回答\n{answer}"
+    db = await get_db()
+    try:
+        await db.execute(
+            """INSERT INTO notes (id, title, content, tags, source_type, folder, created_at, updated_at)
+            VALUES (?, ?, ?, 'AI问答', 'ai_chat', ?, ?, ?)""",
+            (note_id, question[:100], content, folder, now, now),
+        )
+        await db.commit()
+    finally:
+        await db.close()
+    return RedirectResponse(f"/notes/{note_id}", status_code=303)
 
 
 @router.post("/notes/summarize")
@@ -295,9 +384,11 @@ async def note_edit_form(request: Request, note_id: str):
         projects = [dict(row) for row in await cursor.fetchall()]
     finally:
         await db.close()
+    folders = await _get_all_folders()
     return request.app.state.templates.TemplateResponse(
         request, "note_form.html",
-        {"request": request, "note": note, "projects": projects, "pre_project": "", "pre_task": ""},
+        {"request": request, "note": note, "projects": projects, "folders": folders,
+         "pre_project": "", "pre_task": "", "pre_folder": ""},
     )
 
 
@@ -310,14 +401,16 @@ async def note_update(
     project_id: str = Form(""),
     task_id: str = Form(""),
     tags: str = Form(""),
+    folder: str = Form(""),
 ):
     now = datetime.now().isoformat()
     clean_tags = ",".join(t.strip() for t in tags.split(",") if t.strip())
+    folder = folder.strip().strip("/")
     db = await get_db()
     try:
         await db.execute(
-            "UPDATE notes SET title=?, content=?, author=?, project_id=?, task_id=?, tags=?, updated_at=? WHERE id=?",
-            (title, content, author, project_id or None, task_id or None, clean_tags, now, note_id),
+            "UPDATE notes SET title=?, content=?, author=?, project_id=?, task_id=?, tags=?, folder=?, updated_at=? WHERE id=?",
+            (title, content, author, project_id or None, task_id or None, clean_tags, folder, now, note_id),
         )
         await db.commit()
     finally:

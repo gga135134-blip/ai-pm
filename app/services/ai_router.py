@@ -83,7 +83,17 @@ def estimate_cost(prompt: str, model: str = "auto", task_type: str = "") -> dict
     }
 
 
+# 单次请求最大字符数（约 10-15 万 tokens）。超过直接拦截，防止天价账单
+MAX_PROMPT_CHARS = 300_000
+
+
 async def ask_ai(prompt: str, model: str = "auto", task_type: str = "", system_prompt: str = "") -> dict:
+    if len(prompt) > MAX_PROMPT_CHARS:
+        est_tokens = len(prompt) // 3
+        return {
+            "response": f"[费用保护] 本次请求过大（{len(prompt):,} 字符，约 {est_tokens:,} tokens），已拦截未发送。请缩小范围或分批处理。",
+            "model": "guard", "tokens": 0, "cost": 0,
+        }
     resolved_model = get_model_for_task(task_type, model)
     config = _load_config()
     chain = get_fallback_chain(resolved_model)

@@ -11,8 +11,14 @@
     <div class="flex gap-2">
         <button onclick="showTab('file')" id="tab-file" class="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium">上传文件</button>
         <button onclick="showTab('folder')" id="tab-folder" class="px-4 py-2 rounded-lg bg-gray-200 text-gray-600 text-sm font-medium">上传整个文件夹</button>
+        <button onclick="showTab('url')" id="tab-url" class="px-4 py-2 rounded-lg bg-gray-200 text-gray-600 text-sm font-medium">网页链接</button>
         <button onclick="showTab('path')" id="tab-path" class="px-4 py-2 rounded-lg bg-gray-200 text-gray-600 text-sm font-medium">从服务器路径导入</button>
     </div>
+
+    <!-- 已有文件夹自动补全（所有表单共用） -->
+    <datalist id="folder-list">
+        {% for f in folders %}<option value="{{ f }}">{% endfor %}
+    </datalist>
 
     <!-- 上传文件 -->
     <div id="panel-file" class="bg-white rounded-lg shadow-sm p-6">
@@ -23,7 +29,11 @@
                 <input type="file" name="files" multiple accept=".md,.txt,.csv,.json,.py,.js,.html,.css,.yaml,.yml,.toml,.ini,.log,.xml"
                     class="w-full border rounded-lg px-3 py-2 text-sm">
             </div>
-            <div class="grid grid-cols-3 gap-3">
+            <div class="grid grid-cols-4 gap-3">
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">存入文件夹</label>
+                    <input type="text" name="folder" list="folder-list" placeholder="如: 资料/竞品" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                </div>
                 <div>
                     <label class="block text-xs text-gray-500 mb-1">关联项目</label>
                     <select name="project_id" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
@@ -57,7 +67,11 @@
                     class="w-full border rounded-lg px-3 py-2 text-sm">
                 <p class="text-xs text-gray-400 mt-1">提示：仅支持文本文件（.md .txt .py 等），其他类型会自动跳过</p>
             </div>
-            <div class="grid grid-cols-3 gap-3">
+            <div class="grid grid-cols-4 gap-3">
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">存入文件夹</label>
+                    <input type="text" name="folder" list="folder-list" placeholder="如: 资料/竞品" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                </div>
                 <div>
                     <label class="block text-xs text-gray-500 mb-1">关联项目</label>
                     <select name="project_id" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
@@ -80,6 +94,43 @@
         </form>
     </div>
 
+    <!-- 网页链接导入 -->
+    <div id="panel-url" class="bg-white rounded-lg shadow-sm p-6" style="display:none">
+        <h2 class="text-lg font-semibold text-gray-700 mb-4">从网页链接导入</h2>
+        <p class="text-sm text-gray-500 mb-4">粘贴网页链接，自动抓取网页正文存入知识库。一次可粘贴多个链接（每行一个，最多 10 个）</p>
+        <form method="POST" action="/notes/import/url" class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">网页链接</label>
+                <textarea name="url" required rows="3" placeholder="https://example.com/article&#10;https://another.com/page"
+                    class="w-full border rounded-lg px-3 py-2 text-sm font-mono outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+            </div>
+            <div class="grid grid-cols-4 gap-3">
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">存入文件夹</label>
+                    <input type="text" name="folder" list="folder-list" placeholder="如: 资料/竞品" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">关联项目</label>
+                    <select name="project_id" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                        <option value="">不关联</option>
+                        {% for p in projects %}
+                        <option value="{{ p.id }}">{{ p.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">作者</label>
+                    <input type="text" name="author" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">额外标签</label>
+                    <input type="text" name="tags" placeholder="标签1,标签2" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                </div>
+            </div>
+            <button type="submit" class="bg-teal-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-teal-700 transition">抓取并导入</button>
+        </form>
+    </div>
+
     <!-- 从服务器路径导入 -->
     <div id="panel-path" class="bg-white rounded-lg shadow-sm p-6" style="display:none">
         <h2 class="text-lg font-semibold text-gray-700 mb-4">从服务器路径导入</h2>
@@ -96,7 +147,11 @@
                 <input type="text" name="path" required placeholder="/www/wwwroot/某文件夹 或 /root/笔记.md"
                     class="w-full border rounded-lg px-3 py-2 text-sm font-mono outline-none focus:ring-2 focus:ring-blue-500">
             </div>
-            <div class="grid grid-cols-3 gap-3">
+            <div class="grid grid-cols-4 gap-3">
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">存入文件夹</label>
+                    <input type="text" name="folder" list="folder-list" placeholder="如: 资料/竞品" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                </div>
                 <div>
                     <label class="block text-xs text-gray-500 mb-1">关联项目</label>
                     <select name="project_id" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
@@ -121,7 +176,7 @@
 
     <script>
     function showTab(name) {
-        ['file', 'folder', 'path'].forEach(function(n) {
+        ['file', 'folder', 'url', 'path'].forEach(function(n) {
             document.getElementById('panel-' + n).style.display = (n === name) ? 'block' : 'none';
             var btn = document.getElementById('tab-' + n);
             if (n === name) {

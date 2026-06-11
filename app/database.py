@@ -107,6 +107,7 @@ MIGRATIONS = [
     "ALTER TABLE projects ADD COLUMN budget REAL DEFAULT 0",
     "ALTER TABLE projects ADD COLUMN revenue REAL DEFAULT 0",
     "ALTER TABLE notes ADD COLUMN source_type TEXT DEFAULT 'manual'",
+    "ALTER TABLE notes ADD COLUMN folder TEXT DEFAULT ''",
 ]
 
 
