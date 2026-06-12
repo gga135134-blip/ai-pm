@@ -204,6 +204,149 @@ async def summarize_notes(note_ids: list[str] = None, tag: str = "", model: str 
     return {"summary": final["response"] + skipped_note, "model": used_model, "cost": round(total_cost, 6)}
 
 
+ORGANIZE_SYSTEM = """你是知识库整理执行器。用户会给你一批笔记（每条有 id）和一条整理指令，你要决定每条笔记怎么处理。
+
+只返回 JSON，格式：
+{
+  "summary": "一句话说明整理思路",
+  "actions": [
+    {"id": "笔记id", "folder": "目标文件夹", "add_tags": ["新增标签"]}
+  ]
+}
+
+规则：
+- folder 用 / 分层（如 资料/竞品），不想移动就填 null
+- add_tags 是要新增的标签数组，不加就填 []
+- 不需要任何改动的笔记不要出现在 actions 里
+- 你只能移动文件夹和加标签，不能删除或修改内容
+- 只返回 JSON，不要其他文字"""
+
+
+async def _fetch_notes_by_scope(scope: str, question: str = "", limit: int = 80) -> list[dict]:
+    """按范围取笔记：all / folder:xxx / tag:xxx / auto（关键词检索）"""
+    db = await get_db()
+    try:
+        if scope == "all":
+            cursor = await db.execute(
+                "SELECT id, title, content, tags, folder FROM notes ORDER BY updated_at DESC LIMIT ?", (limit,)
+            )
+            return [dict(row) for row in await cursor.fetchall()]
+        if scope.startswith("folder:"):
+            f = scope[len("folder:"):]
+            cursor = await db.execute(
+                "SELECT id, title, content, tags, folder FROM notes WHERE folder = ? OR folder LIKE ? ORDER BY updated_at DESC LIMIT ?",
+                (f, f"{f}/%", limit),
+            )
+            return [dict(row) for row in await cursor.fetchall()]
+        if scope.startswith("tag:"):
+            t = scope[len("tag:"):]
+            cursor = await db.execute(
+                "SELECT id, title, content, tags, folder FROM notes WHERE ',' || tags || ',' LIKE ? ORDER BY updated_at DESC LIMIT ?",
+                (f"%,{t},%", limit),
+            )
+            return [dict(row) for row in await cursor.fetchall()]
+        # auto：关键词检索
+        words = [w for w in re.split(r"[\s,，。、？?！!：:；;\"'（）()]+", question) if len(w) >= 2][:8]
+        if not words:
+            return []
+        like_parts = " OR ".join(["(title LIKE ? OR content LIKE ? OR tags LIKE ?)"] * len(words))
+        params = []
+        for w in words:
+            params.extend([f"%{w}%"] * 3)
+        cursor = await db.execute(
+            f"SELECT id, title, content, tags, folder FROM notes WHERE {like_parts} ORDER BY updated_at DESC LIMIT 30",
+            params,
+        )
+        candidates = [dict(row) for row in await cursor.fetchall()]
+
+        def score(n):
+            s = 0
+            for w in words:
+                if w in (n["title"] or ""):
+                    s += 3
+                if w in (n["tags"] or ""):
+                    s += 2
+                s += min((n["content"] or "").count(w), 5)
+            return s
+
+        candidates.sort(key=score, reverse=True)
+        return candidates[:6]
+    finally:
+        await db.close()
+
+
+async def organize_notes(instruction: str, scope: str = "all", model: str = "auto") -> dict:
+    """整理模式：AI 给出移动/打标签方案（不直接写库，由前端确认后 apply）"""
+    notes = await _fetch_notes_by_scope(scope, instruction)
+    if not notes:
+        return {"summary": "该范围内没有找到笔记", "actions": [], "model": "none", "cost": 0}
+
+    lines = []
+    for n in notes:
+        content_preview = (n["content"] or "")[:400].replace("\n", " ")
+        lines.append(f"- id: {n['id']}\n  标题: {n['title']}\n  当前文件夹: {n['folder'] or '(未分类)'}\n  当前标签: {n['tags'] or '(无)'}\n  内容预览: {content_preview}")
+
+    prompt = f"笔记列表（共 {len(notes)} 条）：\n\n" + "\n\n".join(lines) + f"\n\n---\n\n整理指令：{instruction}"
+    result = await ask_ai(prompt=prompt, model=model, task_type="analysis", system_prompt=ORGANIZE_SYSTEM)
+
+    try:
+        text = result["response"]
+        if "```json" in text:
+            text = text.split("```json")[1].split("```")[0]
+        elif "```" in text:
+            text = text.split("```")[1].split("```")[0]
+        parsed = json.loads(text.strip())
+    except (json.JSONDecodeError, IndexError):
+        return {"summary": "AI 返回的方案解析失败，请换个说法再试。原始回复：" + result["response"][:300],
+                "actions": [], "model": result["model"], "cost": result["cost"]}
+
+    # 校验 action 里的 id 真实存在，并带上标题方便前端展示
+    title_map = {n["id"]: n["title"] for n in notes}
+    actions = []
+    for a in parsed.get("actions", []):
+        if a.get("id") in title_map:
+            actions.append({
+                "id": a["id"],
+                "title": title_map[a["id"]],
+                "folder": a.get("folder") or None,
+                "add_tags": [t for t in (a.get("add_tags") or []) if t],
+            })
+
+    return {"summary": parsed.get("summary", ""), "actions": actions, "model": result["model"], "cost": result["cost"]}
+
+
+async def apply_organize_actions(actions: list[dict]) -> int:
+    """执行整理方案：移动文件夹 + 合并新标签"""
+    now = datetime.now().isoformat()
+    updated = 0
+    db = await get_db()
+    try:
+        for a in actions:
+            cursor = await db.execute("SELECT tags FROM notes WHERE id = ?", (a.get("id"),))
+            row = await cursor.fetchone()
+            if not row:
+                continue
+            sets, params = [], []
+            if a.get("folder"):
+                sets.append("folder = ?")
+                params.append(str(a["folder"]).strip().strip("/"))
+            if a.get("add_tags"):
+                existing = [t.strip() for t in (row["tags"] or "").split(",") if t.strip()]
+                merged = existing + [t for t in a["add_tags"] if t not in existing]
+                sets.append("tags = ?")
+                params.append(",".join(merged))
+            if not sets:
+                continue
+            sets.append("updated_at = ?")
+            params.extend([now, a["id"]])
+            await db.execute(f"UPDATE notes SET {', '.join(sets)} WHERE id = ?", params)
+            updated += 1
+        await db.commit()
+    finally:
+        await db.close()
+    return updated
+
+
 async def chat_with_notes(question: str, history: str = "", model: str = "auto", scope: str = "auto") -> dict:
     """知识库 AI 助手：按范围取笔记，再让 AI 按指令执行（提问/整理/分类/总结）
 

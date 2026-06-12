@@ -4,7 +4,7 @@ from fastapi import APIRouter, Request, Form, Query, UploadFile, File
 from fastapi.responses import HTMLResponse, RedirectResponse
 from app.database import get_db
 from app.services.importer import import_file, import_folder, import_upload, import_url
-from app.services.note_ai import classify_content, summarize_notes, generate_weekly_report, chat_with_notes
+from app.services.note_ai import classify_content, summarize_notes, generate_weekly_report, chat_with_notes, organize_notes, apply_organize_actions
 from app.services.backup import create_backup, list_backups, cleanup_old_backups
 
 router = APIRouter()
@@ -285,6 +285,26 @@ async def notes_chat_ask(question: str = Form(...), history: str = Form(""), sco
     from fastapi.responses import JSONResponse
     result = await chat_with_notes(question, history, scope=scope)
     return JSONResponse(result)
+
+
+@router.post("/notes/chat/organize")
+async def notes_chat_organize(question: str = Form(...), scope: str = Form("all")):
+    from fastapi.responses import JSONResponse
+    result = await organize_notes(question, scope)
+    return JSONResponse(result)
+
+
+@router.post("/notes/chat/apply")
+async def notes_chat_apply(actions: str = Form(...)):
+    import json as _json
+    from fastapi.responses import JSONResponse
+    try:
+        action_list = _json.loads(actions)
+        assert isinstance(action_list, list)
+    except Exception:
+        return JSONResponse({"error": "方案数据格式错误"}, status_code=400)
+    updated = await apply_organize_actions(action_list)
+    return JSONResponse({"updated": updated})
 
 
 @router.post("/notes/chat/save")

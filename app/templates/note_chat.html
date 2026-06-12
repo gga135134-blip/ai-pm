@@ -47,10 +47,16 @@
             </div>
         </form>
         <div class="flex items-center justify-between mt-2">
-            <span class="text-xs text-gray-400">本页累计费用: $<span id="total-cost">0.0000</span></span>
+            <div class="flex items-center gap-3">
+                <label class="flex items-center gap-1 text-xs text-gray-600 cursor-pointer">
+                    <input type="checkbox" id="organize-mode">
+                    <span>整理模式（AI 实际移动笔记/打标签，需你确认后生效）</span>
+                </label>
+                <span class="text-xs text-gray-400">累计费用: $<span id="total-cost">0.0000</span></span>
+            </div>
             <div class="flex gap-3">
                 <button onclick="fillExample('把这些笔记按主题分类整理，每类列出核心要点')" class="text-xs text-teal-600 hover:underline">示例:分类整理</button>
-                <button onclick="fillExample('总结这些笔记，提炼出所有待办事项和风险点')" class="text-xs text-teal-600 hover:underline">示例:提炼待办</button>
+                <button onclick="fillExample('把这些笔记按内容主题移动到合适的文件夹并打上标签')" class="text-xs text-teal-600 hover:underline">示例:自动归档</button>
                 <button onclick="clearChat()" class="text-xs text-gray-400 hover:text-gray-600">清空对话</button>
             </div>
         </div>
@@ -65,8 +71,21 @@
 </form>
 
 <script>
-var chatHistory = [];  // [{q, a}]
+// 聊天记录存浏览器本地，切页面/刷新不丢失
+var chatHistory = [];
 var totalCost = 0;
+var pendingPlans = {};  // idx -> 整理方案 actions
+try {
+    chatHistory = JSON.parse(localStorage.getItem('kb_chat_history') || '[]');
+    totalCost = parseFloat(localStorage.getItem('kb_chat_cost') || '0') || 0;
+} catch (e) { chatHistory = []; totalCost = 0; }
+
+function persist() {
+    try {
+        localStorage.setItem('kb_chat_history', JSON.stringify(chatHistory.slice(-30)));
+        localStorage.setItem('kb_chat_cost', String(totalCost));
+    } catch (e) {}
+}
 
 function esc(s) {
     var div = document.createElement('div');
@@ -81,7 +100,7 @@ function addUserMsg(text) {
     box.lastElementChild.scrollIntoView({behavior: 'smooth'});
 }
 
-function addAiMsg(question, data) {
+function addAiMsg(question, data, idx) {
     var box = document.getElementById('chat-box');
     var sourcesHtml = '';
     if (data.sources && data.sources.length) {
@@ -91,7 +110,7 @@ function addAiMsg(question, data) {
             }).join('')
             + '</div>';
     }
-    var idx = chatHistory.length;
+    if (idx === undefined) idx = chatHistory.length - 1;
     box.insertAdjacentHTML('beforeend',
         '<div class="flex justify-start"><div class="bg-white shadow-sm rounded-lg px-4 py-3 text-sm max-w-[85%] w-full">'
         + '<div class="text-gray-800" style="white-space:pre-wrap">' + esc(data.answer) + '</div>'
@@ -103,17 +122,99 @@ function addAiMsg(question, data) {
     box.lastElementChild.scrollIntoView({behavior: 'smooth'});
 }
 
+// 整理方案消息：展示 AI 的移动/打标签计划，确认后才执行
+function addPlanMsg(idx, data) {
+    var box = document.getElementById('chat-box');
+    var listHtml = '';
+    if (data.actions && data.actions.length) {
+        listHtml = '<div class="mt-2 space-y-1">' + data.actions.map(function(a) {
+            var parts = [];
+            if (a.folder) parts.push('移到 &#128193; ' + esc(a.folder));
+            if (a.add_tags && a.add_tags.length) parts.push('加标签 ' + a.add_tags.map(function(t){return '#' + esc(t);}).join(' '));
+            return '<div class="text-xs text-gray-600 bg-gray-50 rounded px-2 py-1">【' + esc(a.title) + '】 &rarr; ' + parts.join('，') + '</div>';
+        }).join('') + '</div>';
+    }
+    var btnHtml = '';
+    if (data.actions && data.actions.length) {
+        btnHtml = '<div id="plan-btns-' + idx + '" class="flex gap-2 mt-3">'
+            + '<button onclick="applyPlan(' + idx + ')" class="text-xs bg-teal-600 text-white px-4 py-1.5 rounded hover:bg-teal-700 transition">&#9989; 确认应用 ' + data.actions.length + ' 条更改</button>'
+            + '<button onclick="dismissPlan(' + idx + ')" class="text-xs border text-gray-500 px-4 py-1.5 rounded hover:bg-gray-50 transition">忽略</button>'
+            + '</div>';
+    }
+    box.insertAdjacentHTML('beforeend',
+        '<div class="flex justify-start"><div class="bg-white shadow-sm rounded-lg px-4 py-3 text-sm max-w-[85%] w-full border-l-4 border-teal-500">'
+        + '<div class="text-xs text-teal-600 font-medium mb-1">&#128736; 整理方案</div>'
+        + '<div class="text-gray-800" style="white-space:pre-wrap">' + esc(data.summary || '') + '</div>'
+        + listHtml + btnHtml
+        + '<div class="text-xs text-gray-400 mt-2">' + esc(data.model || '') + ' / $' + (data.cost || 0).toFixed(4) + '</div>'
+        + '</div></div>');
+    box.lastElementChild.scrollIntoView({behavior: 'smooth'});
+}
+
+function applyPlan(idx) {
+    var actions = pendingPlans[idx];
+    if (!actions) return;
+    var fd = new FormData();
+    fd.append('actions', JSON.stringify(actions));
+    fetch('/notes/chat/apply', {method: 'POST', body: fd})
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var btns = document.getElementById('plan-btns-' + idx);
+            if (btns) btns.innerHTML = '<span class="text-xs text-green-600">&#9989; 已应用 ' + (data.updated || 0) + ' 条更改 &middot; <a href="/notes" class="underline">去知识库查看</a></span>';
+            delete pendingPlans[idx];
+            var h = chatHistory[idx];
+            if (h) { h.applied = true; persist(); }
+        })
+        .catch(function(err) { alert('应用失败: ' + err); });
+}
+
+function dismissPlan(idx) {
+    var btns = document.getElementById('plan-btns-' + idx);
+    if (btns) btns.innerHTML = '<span class="text-xs text-gray-400">已忽略</span>';
+    delete pendingPlans[idx];
+}
+
 document.getElementById('ask-form').addEventListener('submit', function(e) {
     e.preventDefault();
     var input = document.getElementById('question');
     var q = input.value.trim();
     if (!q) return;
+    var organize = document.getElementById('organize-mode').checked;
+    var scope = document.getElementById('scope').value;
     input.value = '';
     addUserMsg(q);
     document.getElementById('loading').classList.remove('hidden');
     document.getElementById('ask-btn').disabled = true;
 
-    // 带上最近 3 轮对话作为上下文
+    if (organize) {
+        // 整理模式下"智能检索"意义不大，自动升级为全部笔记
+        if (scope === 'auto') scope = 'all';
+        var fd = new FormData();
+        fd.append('question', q);
+        fd.append('scope', scope);
+        fetch('/notes/chat/organize', {method: 'POST', body: fd})
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var idx = chatHistory.length;
+                var planText = (data.summary || '') + (data.actions && data.actions.length ? '（' + data.actions.length + ' 条更改）' : '（无更改）');
+                chatHistory.push({q: q, a: '[整理方案] ' + planText, applied: false});
+                pendingPlans[idx] = data.actions;
+                totalCost += (data.cost || 0);
+                document.getElementById('total-cost').textContent = totalCost.toFixed(4);
+                persist();
+                addPlanMsg(idx, data);
+            })
+            .catch(function(err) {
+                addAiMsg(q, {answer: '[出错了] ' + err, sources: [], model: '', cost: 0});
+            })
+            .finally(function() {
+                document.getElementById('loading').classList.add('hidden');
+                document.getElementById('ask-btn').disabled = false;
+            });
+        return;
+    }
+
+    // 普通问答模式，带上最近 3 轮对话作为上下文
     var hist = chatHistory.slice(-3).map(function(h) {
         return 'Q: ' + h.q + '\nA: ' + h.a.substring(0, 500);
     }).join('\n\n');
@@ -121,7 +222,7 @@ document.getElementById('ask-form').addEventListener('submit', function(e) {
     var fd = new FormData();
     fd.append('question', q);
     fd.append('history', hist);
-    fd.append('scope', document.getElementById('scope').value);
+    fd.append('scope', scope);
 
     fetch('/notes/chat/ask', {method: 'POST', body: fd})
         .then(function(r) { return r.json(); })
@@ -129,6 +230,7 @@ document.getElementById('ask-form').addEventListener('submit', function(e) {
             chatHistory.push({q: q, a: data.answer});
             totalCost += (data.cost || 0);
             document.getElementById('total-cost').textContent = totalCost.toFixed(4);
+            persist();
             addAiMsg(q, data);
         })
         .catch(function(err) {
@@ -139,6 +241,16 @@ document.getElementById('ask-form').addEventListener('submit', function(e) {
             document.getElementById('ask-btn').disabled = false;
         });
 });
+
+// 页面打开时恢复历史对话
+(function restoreChat() {
+    if (!chatHistory.length) return;
+    document.getElementById('total-cost').textContent = totalCost.toFixed(4);
+    chatHistory.forEach(function(h, i) {
+        addUserMsg(h.q);
+        addAiMsg(h.q, {answer: h.a, sources: [], model: '历史记录', cost: 0, note_count: 0}, i);
+    });
+})();
 
 function saveNote(idx) {
     var h = chatHistory[idx];
@@ -152,8 +264,13 @@ function saveNote(idx) {
 }
 
 function clearChat() {
+    if (chatHistory.length && !confirm('确定清空所有对话记录？')) return;
     chatHistory = [];
+    totalCost = 0;
+    pendingPlans = {};
+    persist();
     document.getElementById('chat-box').innerHTML = '';
+    document.getElementById('total-cost').textContent = '0.0000';
 }
 
 function fillExample(text) {
