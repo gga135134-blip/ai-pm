@@ -363,6 +363,43 @@ async def weekly_report_generate(request: Request, model: str = Form("auto")):
     )
 
 
+# ── 批量管理 ──────────────────────────────────────────
+
+@router.post("/notes/batch")
+async def notes_batch(action: str = Form(...), ids: str = Form(...), folder: str = Form("")):
+    id_list = [i.strip() for i in ids.split(",") if i.strip()]
+    if not id_list:
+        return RedirectResponse("/notes", status_code=303)
+    now = datetime.now().isoformat()
+    placeholders = ",".join(["?"] * len(id_list))
+    db = await get_db()
+    try:
+        if action == "move":
+            clean_folder = folder.strip().strip("/")
+            await db.execute(
+                f"UPDATE notes SET folder = ?, updated_at = ? WHERE id IN ({placeholders})",
+                [clean_folder, now] + id_list,
+            )
+        elif action == "delete":
+            await db.execute(f"DELETE FROM notes WHERE id IN ({placeholders})", id_list)
+        await db.commit()
+    finally:
+        await db.close()
+    return RedirectResponse("/notes", status_code=303)
+
+
+@router.post("/notes/{note_id}/rename")
+async def note_rename(note_id: str, title: str = Form(...)):
+    now = datetime.now().isoformat()
+    db = await get_db()
+    try:
+        await db.execute("UPDATE notes SET title = ?, updated_at = ? WHERE id = ?", (title.strip(), now, note_id))
+        await db.commit()
+    finally:
+        await db.close()
+    return RedirectResponse("/notes", status_code=303)
+
+
 # ── 笔记详情（{note_id} 路由放最后）──────────────────
 
 @router.get("/notes/{note_id}", response_class=HTMLResponse)

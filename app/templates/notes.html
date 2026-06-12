@@ -82,38 +82,140 @@
         {% endif %}
 
         {% if notes %}
+        <!-- 批量操作工具条 -->
+        <div id="batch-bar" class="hidden sticky top-2 z-10 mb-3 bg-gray-800 text-white rounded-lg px-4 py-2 flex items-center justify-between shadow-lg">
+            <span class="text-sm">已选 <span id="batch-count">0</span> 条</span>
+            <div class="flex gap-2">
+                <button onclick="selectAll()" class="text-xs px-3 py-1.5 bg-gray-600 rounded hover:bg-gray-500 transition">全选</button>
+                <button onclick="batchMove()" class="text-xs px-3 py-1.5 bg-blue-600 rounded hover:bg-blue-700 transition">移动到文件夹</button>
+                <button onclick="batchDelete()" class="text-xs px-3 py-1.5 bg-red-600 rounded hover:bg-red-700 transition">删除</button>
+                <button onclick="clearSelect()" class="text-xs px-3 py-1.5 bg-gray-600 rounded hover:bg-gray-500 transition">取消</button>
+            </div>
+        </div>
+
         <div class="space-y-3">
             {% for n in notes %}
-            <a href="/notes/{{ n.id }}" class="block bg-white rounded-lg shadow-sm p-4 hover:shadow-md transition">
-                <div class="flex items-start justify-between">
-                    <div class="flex-1">
-                        <div class="flex items-center gap-2">
-                            {% if n.is_pinned %}
-                            <span class="text-yellow-500 text-xs" title="已置顶">&#9733;</span>
-                            {% endif %}
-                            <h3 class="font-medium text-gray-800">{{ n.title }}</h3>
-                        </div>
-                        {% if n.content %}
-                        <p class="text-sm text-gray-500 mt-1 overflow-hidden" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">{{ n.content[:200] }}</p>
+            <div class="bg-white rounded-lg shadow-sm p-4 hover:shadow-md transition flex gap-3 items-start">
+                <input type="checkbox" class="note-check mt-1.5 flex-shrink-0" value="{{ n.id }}" onchange="updateBatchBar()">
+                <a href="/notes/{{ n.id }}" class="flex-1 min-w-0 block">
+                    <div class="flex items-center gap-2">
+                        {% if n.is_pinned %}
+                        <span class="text-yellow-500 text-xs" title="已置顶">&#9733;</span>
                         {% endif %}
-                        <div class="flex items-center gap-3 mt-2 text-xs text-gray-400">
-                            {% if n.author %}<span>{{ n.author }}</span>{% endif %}
-                            {% if n.folder %}<span class="bg-yellow-50 text-yellow-700 px-2 py-0.5 rounded">&#128193; {{ n.folder }}</span>{% endif %}
-                            {% if n.project_name %}<span class="bg-gray-100 px-2 py-0.5 rounded">{{ n.project_name }}</span>{% endif %}
-                            <span>{{ n.updated_at[:16] if n.updated_at else '' }}</span>
-                        </div>
+                        <h3 class="font-medium text-gray-800 truncate">{{ n.title }}</h3>
                     </div>
+                    {% if n.content %}
+                    <p class="text-sm text-gray-500 mt-1 overflow-hidden" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">{{ n.content[:200] }}</p>
+                    {% endif %}
+                    <div class="flex items-center gap-3 mt-2 text-xs text-gray-400">
+                        {% if n.author %}<span>{{ n.author }}</span>{% endif %}
+                        {% if n.folder %}<span class="bg-yellow-50 text-yellow-700 px-2 py-0.5 rounded">&#128193; {{ n.folder }}</span>{% endif %}
+                        {% if n.project_name %}<span class="bg-gray-100 px-2 py-0.5 rounded">{{ n.project_name }}</span>{% endif %}
+                        <span>{{ n.updated_at[:16] if n.updated_at else '' }}</span>
+                    </div>
+                </a>
+                <div class="flex flex-col items-end gap-2 flex-shrink-0">
                     {% if n.tags %}
-                    <div class="flex flex-wrap gap-1 ml-3">
-                        {% for tag in n.tags.split(',') %}
+                    <div class="flex flex-wrap gap-1 justify-end max-w-[200px]">
+                        {% for tag in n.tags.split(',')[:4] %}
                         <span class="text-xs bg-purple-50 text-purple-600 px-2 py-0.5 rounded">#{{ tag.strip() }}</span>
                         {% endfor %}
                     </div>
                     {% endif %}
+                    <div class="flex gap-1">
+                        <button onclick="renameNote('{{ n.id }}', this)" data-title="{{ n.title }}" title="重命名"
+                            class="text-xs text-gray-400 hover:text-blue-600 px-1.5 py-0.5 rounded hover:bg-blue-50 transition">改名</button>
+                        <button onclick="moveNote('{{ n.id }}')" title="移动到文件夹"
+                            class="text-xs text-gray-400 hover:text-blue-600 px-1.5 py-0.5 rounded hover:bg-blue-50 transition">移动</button>
+                        <button onclick="copyLink('{{ n.id }}', this)" title="复制链接分享给同事"
+                            class="text-xs text-gray-400 hover:text-teal-600 px-1.5 py-0.5 rounded hover:bg-teal-50 transition">链接</button>
+                        <button onclick="deleteNote('{{ n.id }}', this)" data-title="{{ n.title }}" title="删除"
+                            class="text-xs text-gray-400 hover:text-red-600 px-1.5 py-0.5 rounded hover:bg-red-50 transition">删除</button>
+                    </div>
                 </div>
-            </a>
+            </div>
             {% endfor %}
         </div>
+
+        <script>
+        function postForm(url, data) {
+            var form = document.createElement('form');
+            form.method = 'POST';
+            form.action = url;
+            Object.keys(data).forEach(function(k) {
+                var inp = document.createElement('input');
+                inp.type = 'hidden'; inp.name = k; inp.value = data[k];
+                form.appendChild(inp);
+            });
+            document.body.appendChild(form);
+            form.submit();
+        }
+
+        function getChecked() {
+            return Array.prototype.slice.call(document.querySelectorAll('.note-check:checked')).map(function(c) { return c.value; });
+        }
+
+        function updateBatchBar() {
+            var n = getChecked().length;
+            document.getElementById('batch-count').textContent = n;
+            document.getElementById('batch-bar').classList.toggle('hidden', n === 0);
+        }
+
+        function selectAll() {
+            document.querySelectorAll('.note-check').forEach(function(c) { c.checked = true; });
+            updateBatchBar();
+        }
+
+        function clearSelect() {
+            document.querySelectorAll('.note-check').forEach(function(c) { c.checked = false; });
+            updateBatchBar();
+        }
+
+        function batchMove() {
+            var ids = getChecked();
+            if (!ids.length) return;
+            var folder = prompt('移动 ' + ids.length + ' 条笔记到哪个文件夹？\n（用 / 分层如 资料/竞品，留空 = 移出到未分类）');
+            if (folder === null) return;
+            postForm('/notes/batch', {action: 'move', ids: ids.join(','), folder: folder});
+        }
+
+        function batchDelete() {
+            var ids = getChecked();
+            if (!ids.length) return;
+            if (!confirm('确定删除选中的 ' + ids.length + ' 条笔记？此操作不可恢复！')) return;
+            postForm('/notes/batch', {action: 'delete', ids: ids.join(','), folder: ''});
+        }
+
+        function renameNote(id, btn) {
+            var t = prompt('新标题：', btn.dataset.title);
+            if (!t || t === btn.dataset.title) return;
+            postForm('/notes/' + id + '/rename', {title: t});
+        }
+
+        function moveNote(id) {
+            var folder = prompt('移动到哪个文件夹？\n（用 / 分层如 资料/竞品，留空 = 移出到未分类）');
+            if (folder === null) return;
+            postForm('/notes/batch', {action: 'move', ids: id, folder: folder});
+        }
+
+        function deleteNote(id, btn) {
+            if (!confirm('确定删除「' + btn.dataset.title + '」？此操作不可恢复！')) return;
+            postForm('/notes/' + id + '/delete', {});
+        }
+
+        function copyLink(id, btn) {
+            var url = location.origin + '/notes/' + id;
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(url).then(function() {
+                    var old = btn.textContent;
+                    btn.textContent = '已复制';
+                    setTimeout(function() { btn.textContent = old; }, 1500);
+                });
+            } else {
+                prompt('复制此链接分享：', url);
+            }
+        }
+        </script>
         {% else %}
         <div class="bg-white rounded-lg shadow-sm p-12 text-center">
             <div class="text-gray-400 text-lg mb-2">{{ '没有匹配的笔记' if (current_q or current_tag) else '还没有笔记' }}</div>
