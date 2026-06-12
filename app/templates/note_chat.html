@@ -65,7 +65,7 @@
 </form>
 
 <script>
-var history = [];  // [{q, a}]
+var chatHistory = [];  // [{q, a}]
 var totalCost = 0;
 
 function esc(s) {
@@ -91,7 +91,7 @@ function addAiMsg(question, data) {
             }).join('')
             + '</div>';
     }
-    var idx = history.length;
+    var idx = chatHistory.length;
     box.insertAdjacentHTML('beforeend',
         '<div class="flex justify-start"><div class="bg-white shadow-sm rounded-lg px-4 py-3 text-sm max-w-[85%] w-full">'
         + '<div class="text-gray-800" style="white-space:pre-wrap">' + esc(data.answer) + '</div>'
@@ -114,7 +114,7 @@ document.getElementById('ask-form').addEventListener('submit', function(e) {
     document.getElementById('ask-btn').disabled = true;
 
     // 带上最近 3 轮对话作为上下文
-    var hist = history.slice(-3).map(function(h) {
+    var hist = chatHistory.slice(-3).map(function(h) {
         return 'Q: ' + h.q + '\nA: ' + h.a.substring(0, 500);
     }).join('\n\n');
 
@@ -126,7 +126,7 @@ document.getElementById('ask-form').addEventListener('submit', function(e) {
     fetch('/notes/chat/ask', {method: 'POST', body: fd})
         .then(function(r) { return r.json(); })
         .then(function(data) {
-            history.push({q: q, a: data.answer});
+            chatHistory.push({q: q, a: data.answer});
             totalCost += (data.cost || 0);
             document.getElementById('total-cost').textContent = totalCost.toFixed(4);
             addAiMsg(q, data);
@@ -141,7 +141,7 @@ document.getElementById('ask-form').addEventListener('submit', function(e) {
 });
 
 function saveNote(idx) {
-    var h = history[idx];
+    var h = chatHistory[idx];
     if (!h) return;
     var folder = prompt('存到哪个文件夹？（留空 = 不分类，用 / 分层，如 资料/AI问答）', 'AI问答');
     if (folder === null) return;
@@ -152,7 +152,7 @@ function saveNote(idx) {
 }
 
 function clearChat() {
-    history = [];
+    chatHistory = [];
     document.getElementById('chat-box').innerHTML = '';
 }
 
