@@ -17,6 +17,7 @@ def load_settings() -> dict:
         "fallback_order": ["claude", "openai", "deepseek", "qwen"],
         "serverchan_key": "",
         "pushplus_token": "",
+        "feishu_webhook": "",
         "routes": {"code": "auto", "writing": "auto", "analysis": "auto", "review": "auto"},
     }
     if CONFIG_FILE.exists():
@@ -53,6 +54,7 @@ async def settings_save(
     fallback_4: str = Form("qwen"),
     serverchan_key: str = Form(""),
     pushplus_token: str = Form(""),
+    feishu_webhook: str = Form(""),
     route_code: str = Form("auto"),
     route_writing: str = Form("auto"),
     route_analysis: str = Form("auto"),
@@ -72,6 +74,7 @@ async def settings_save(
         "fallback_order": fallback_order,
         "serverchan_key": serverchan_key,
         "pushplus_token": pushplus_token,
+        "feishu_webhook": feishu_webhook,
         "routes": {
             "code": route_code,
             "writing": route_writing,
@@ -81,3 +84,12 @@ async def settings_save(
     }
     save_settings(data)
     return RedirectResponse("/settings", status_code=303)
+
+
+@router.post("/settings/test-notify")
+async def settings_test_notify():
+    from app.services.notifier import notify_wechat
+    result = await notify_wechat("AI-PM 测试通知", "如果你看到这条消息，说明通知渠道配置成功！")
+    status = "ok" if result["sent"] else "fail"
+    detail = result["channel"] if result["sent"] else result["error"]
+    return RedirectResponse(f"/settings?notify_test={status}&detail={detail}", status_code=303)

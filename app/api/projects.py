@@ -51,14 +51,18 @@ async def project_new_form(request: Request):
 
 
 @router.post("/projects/new")
-async def project_create(name: str = Form(...), description: str = Form(""), owner: str = Form(""), budget: float = Form(0), revenue: float = Form(0)):
+async def project_create(
+    name: str = Form(...), description: str = Form(""), owner: str = Form(""),
+    budget: float = Form(0), revenue: float = Form(0),
+    automation_level: str = Form("manual"), ai_budget: float = Form(0),
+):
     project_id = str(uuid.uuid4())
     now = datetime.now().isoformat()
     db = await get_db()
     try:
         await db.execute(
-            "INSERT INTO projects (id, name, description, owner, status, budget, revenue, created_at, updated_at) VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?)",
-            (project_id, name, description, owner, budget, revenue, now, now),
+            "INSERT INTO projects (id, name, description, owner, status, budget, revenue, automation_level, ai_budget, created_at, updated_at) VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?)",
+            (project_id, name, description, owner, budget, revenue, automation_level, ai_budget, now, now),
         )
         await db.commit()
     finally:
@@ -99,6 +103,14 @@ async def project_detail(request: Request, project_id: str):
             (project_id,),
         )
         project_decisions = [dict(row) for row in await cursor.fetchall()]
+
+        # 外部支出台账
+        cursor = await db.execute(
+            "SELECT * FROM expenses WHERE project_id = ? ORDER BY created_at DESC",
+            (project_id,),
+        )
+        expenses = [dict(row) for row in await cursor.fetchall()]
+        expense_total = round(sum(e["amount"] or 0 for e in expenses), 2)
     finally:
         await db.close()
 
@@ -106,12 +118,15 @@ async def project_detail(request: Request, project_id: str):
     task_board = {s: [t for t in tasks if t["status"] == s] for s in statuses}
     task_tree = _build_task_tree(tasks)
 
+    from app.services.auto_runner import is_running
     return request.app.state.templates.TemplateResponse(
         request, "project_detail.html",
         {
             "request": request, "project": project, "task_board": task_board,
             "tasks": tasks, "task_tree": task_tree, "project_cost": project_cost,
             "project_notes": project_notes, "project_decisions": project_decisions,
+            "expenses": expenses, "expense_total": expense_total,
+            "auto_running": is_running(project_id),
         },
     )
 
@@ -130,14 +145,50 @@ async def project_edit_form(request: Request, project_id: str):
 
 
 @router.post("/projects/{project_id}/edit")
-async def project_update(project_id: str, name: str = Form(...), description: str = Form(""), owner: str = Form(""), status: str = Form("active"), budget: float = Form(0), revenue: float = Form(0)):
+async def project_update(
+    project_id: str, name: str = Form(...), description: str = Form(""), owner: str = Form(""),
+    status: str = Form("active"), budget: float = Form(0), revenue: float = Form(0),
+    automation_level: str = Form("manual"), ai_budget: float = Form(0),
+):
     now = datetime.now().isoformat()
     db = await get_db()
     try:
         await db.execute(
-            "UPDATE projects SET name=?, description=?, owner=?, status=?, budget=?, revenue=?, updated_at=? WHERE id=?",
-            (name, description, owner, status, budget, revenue, now, project_id),
+            "UPDATE projects SET name=?, description=?, owner=?, status=?, budget=?, revenue=?, automation_level=?, ai_budget=?, updated_at=? WHERE id=?",
+            (name, description, owner, status, budget, revenue, automation_level, ai_budget, now, project_id),
         )
+        await db.commit()
+    finally:
+        await db.close()
+    return RedirectResponse(f"/projects/{project_id}", status_code=303)
+
+
+@router.post("/projects/{project_id}/expenses/new")
+async def expense_create(
+    project_id: str,
+    title: str = Form(...),
+    amount: float = Form(0),
+    category: str = Form("其他"),
+    note: str = Form(""),
+):
+    now = datetime.now().isoformat()
+    db = await get_db()
+    try:
+        await db.execute(
+            "INSERT INTO expenses (id, project_id, title, amount, category, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (str(uuid.uuid4()), project_id, title, amount, category, note, now),
+        )
+        await db.commit()
+    finally:
+        await db.close()
+    return RedirectResponse(f"/projects/{project_id}", status_code=303)
+
+
+@router.post("/projects/{project_id}/expenses/{expense_id}/delete")
+async def expense_delete(project_id: str, expense_id: str):
+    db = await get_db()
+    try:
+        await db.execute("DELETE FROM expenses WHERE id = ? AND project_id = ?", (expense_id, project_id))
         await db.commit()
     finally:
         await db.close()

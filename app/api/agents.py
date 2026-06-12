@@ -3,8 +3,26 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from app.services.task_engine import decompose_project
 from app.services.agent_manager import execute_task, review_task, estimate_task_cost
 from app.services.notifier import notify_wechat
+from app.services.auto_runner import start_auto, stop_auto
 
 router = APIRouter()
+
+
+@router.post("/projects/{project_id}/auto/start")
+async def api_auto_start(project_id: str):
+    started = start_auto(project_id)
+    if started:
+        try:
+            await notify_wechat("🚀 自动执行已启动", "AI 任务将排队自动执行，完成或卡住时会通知你。")
+        except Exception:
+            pass
+    return RedirectResponse(f"/projects/{project_id}", status_code=303)
+
+
+@router.post("/projects/{project_id}/auto/stop")
+async def api_auto_stop(project_id: str):
+    stop_auto(project_id)
+    return RedirectResponse(f"/projects/{project_id}", status_code=303)
 
 
 @router.post("/projects/{project_id}/decompose")

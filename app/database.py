@@ -90,6 +90,17 @@ CREATE TABLE IF NOT EXISTS folders (
     path TEXT PRIMARY KEY
 );
 
+CREATE TABLE IF NOT EXISTS expenses (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    amount REAL DEFAULT 0,
+    category TEXT DEFAULT '其他',
+    note TEXT DEFAULT '',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (project_id) REFERENCES projects(id)
+);
+
 CREATE TABLE IF NOT EXISTS backups (
     id TEXT PRIMARY KEY,
     filename TEXT NOT NULL,
@@ -114,6 +125,8 @@ MIGRATIONS = [
     "ALTER TABLE notes ADD COLUMN folder TEXT DEFAULT ''",
     "ALTER TABLE notes ADD COLUMN deleted_at TEXT DEFAULT NULL",
     "ALTER TABLE notes ADD COLUMN image_path TEXT DEFAULT ''",
+    "ALTER TABLE projects ADD COLUMN automation_level TEXT DEFAULT 'manual'",
+    "ALTER TABLE projects ADD COLUMN ai_budget REAL DEFAULT 0",
 ]
 
 
