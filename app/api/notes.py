@@ -52,9 +52,17 @@ async def note_list(request: Request, tag: str = "", q: str = "", project_id: st
                 if t:
                     tag_counts[t] = tag_counts.get(t, 0) + 1
 
-        # 文件夹树（含每个文件夹的笔记数）
-        cursor = await db.execute("SELECT folder, COUNT(*) as cnt FROM notes WHERE folder != '' GROUP BY folder ORDER BY folder")
-        folder_counts = [(row["folder"], row["cnt"]) for row in await cursor.fetchall()]
+        # 文件夹树（含每个文件夹的笔记数 + 空文件夹 + 自动补全父级）
+        cursor = await db.execute("SELECT folder, COUNT(*) as cnt FROM notes WHERE folder != '' GROUP BY folder")
+        counts = {row["folder"]: row["cnt"] for row in await cursor.fetchall()}
+        cursor = await db.execute("SELECT path FROM folders")
+        for row in await cursor.fetchall():
+            counts.setdefault(row["path"], 0)
+        for p in list(counts.keys()):
+            parts = p.split("/")
+            for i in range(1, len(parts)):
+                counts.setdefault("/".join(parts[:i]), 0)
+        folder_counts = sorted(counts.items())
         cursor = await db.execute("SELECT COUNT(*) as cnt FROM notes WHERE folder = '' OR folder IS NULL")
         row = await cursor.fetchone()
         unfiled_count = row["cnt"]
@@ -382,6 +390,68 @@ async def notes_batch(action: str = Form(...), ids: str = Form(...), folder: str
             )
         elif action == "delete":
             await db.execute(f"DELETE FROM notes WHERE id IN ({placeholders})", id_list)
+        await db.commit()
+    finally:
+        await db.close()
+    return RedirectResponse("/notes", status_code=303)
+
+
+# ── 文件夹管理 ────────────────────────────────────────
+
+@router.post("/folders/create")
+async def folder_create(path: str = Form(...)):
+    clean = path.strip().strip("/")
+    if clean:
+        db = await get_db()
+        try:
+            await db.execute("INSERT OR IGNORE INTO folders (path) VALUES (?)", (clean,))
+            await db.commit()
+        finally:
+            await db.close()
+    return RedirectResponse(f"/notes?folder={clean}" if clean else "/notes", status_code=303)
+
+
+@router.post("/folders/rename")
+async def folder_rename(old: str = Form(...), new: str = Form(...)):
+    old_clean = old.strip().strip("/")
+    new_clean = new.strip().strip("/")
+    if not old_clean or not new_clean or old_clean == new_clean:
+        return RedirectResponse("/notes", status_code=303)
+    now = datetime.now().isoformat()
+    db = await get_db()
+    try:
+        # 改名/移动：本文件夹和所有子文件夹的笔记路径前缀替换
+        await db.execute(
+            "UPDATE notes SET folder = ? || substr(folder, ?), updated_at = ? WHERE folder = ? OR folder LIKE ?",
+            (new_clean, len(old_clean) + 1, now, old_clean, f"{old_clean}/%"),
+        )
+        # 同步 folders 表里的记录
+        cursor = await db.execute("SELECT path FROM folders WHERE path = ? OR path LIKE ?", (old_clean, f"{old_clean}/%"))
+        old_paths = [row["path"] for row in await cursor.fetchall()]
+        for p in old_paths:
+            await db.execute("DELETE FROM folders WHERE path = ?", (p,))
+            await db.execute("INSERT OR IGNORE INTO folders (path) VALUES (?)", (new_clean + p[len(old_clean):],))
+        await db.execute("INSERT OR IGNORE INTO folders (path) VALUES (?)", (new_clean,))
+        await db.commit()
+    finally:
+        await db.close()
+    return RedirectResponse(f"/notes?folder={new_clean}", status_code=303)
+
+
+@router.post("/folders/delete")
+async def folder_delete(path: str = Form(...)):
+    clean = path.strip().strip("/")
+    if not clean:
+        return RedirectResponse("/notes", status_code=303)
+    now = datetime.now().isoformat()
+    db = await get_db()
+    try:
+        # 笔记不删除，移到未分类
+        await db.execute(
+            "UPDATE notes SET folder = '', updated_at = ? WHERE folder = ? OR folder LIKE ?",
+            (now, clean, f"{clean}/%"),
+        )
+        await db.execute("DELETE FROM folders WHERE path = ? OR path LIKE ?", (clean, f"{clean}/%"))
         await db.commit()
     finally:
         await db.close()

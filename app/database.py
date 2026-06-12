@@ -86,6 +86,10 @@ CREATE TABLE IF NOT EXISTS decisions (
     FOREIGN KEY (project_id) REFERENCES projects(id)
 );
 
+CREATE TABLE IF NOT EXISTS folders (
+    path TEXT PRIMARY KEY
+);
+
 CREATE TABLE IF NOT EXISTS backups (
     id TEXT PRIMARY KEY,
     filename TEXT NOT NULL,

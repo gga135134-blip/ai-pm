@@ -27,21 +27,66 @@
         </form>
 
         <!-- 文件夹 -->
+        <style>
+        .frow .fops { display: none; }
+        .frow:hover .fops { display: flex; }
+        .frow:hover .fcnt { display: none; }
+        </style>
         <div class="mb-4">
-            <h3 class="text-xs font-semibold text-gray-500 uppercase mb-2">文件夹</h3>
+            <div class="flex items-center justify-between mb-2">
+                <h3 class="text-xs font-semibold text-gray-500 uppercase">文件夹</h3>
+                <button onclick="createFolder()" class="text-xs text-blue-600 hover:underline">+ 新建</button>
+            </div>
             <a href="/notes" class="block text-sm py-1 px-2 rounded {% if not current_folder %}bg-blue-50 text-blue-700{% else %}text-gray-600 hover:bg-gray-100{% endif %}">&#128193; 全部</a>
             {% for f, cnt in folder_counts %}
-            <a href="/notes?folder={{ f }}" title="{{ f }}"
-               class="flex items-center justify-between text-sm py-1 px-2 rounded {% if current_folder == f %}bg-blue-50 text-blue-700{% else %}text-gray-600 hover:bg-gray-100{% endif %}"
-               style="padding-left: {{ 8 + f.count('/') * 14 }}px">
-                <span class="truncate">&#128193; {{ f.split('/')[-1] }}</span>
-                <span class="text-xs text-gray-400 ml-1">{{ cnt }}</span>
-            </a>
+            <div class="frow flex items-center justify-between text-sm py-1 px-2 rounded {% if current_folder == f %}bg-blue-50{% else %}hover:bg-gray-100{% endif %}"
+                 style="padding-left: {{ 8 + f.count('/') * 14 }}px">
+                <a href="/notes?folder={{ f }}" title="{{ f }}" class="flex-1 truncate {% if current_folder == f %}text-blue-700{% else %}text-gray-600{% endif %}">&#128193; {{ f.split('/')[-1] }}</a>
+                <span class="fcnt text-xs text-gray-400 ml-1">{{ cnt }}</span>
+                <span class="fops gap-1 ml-1">
+                    <button onclick="renameFolder('{{ f }}')" title="重命名/移动（改路径即可换层级）" class="text-xs text-gray-400 hover:text-blue-600">改</button>
+                    <button onclick="deleteFolder('{{ f }}', {{ cnt }})" title="删除文件夹（笔记移到未分类）" class="text-xs text-gray-400 hover:text-red-600">删</button>
+                </span>
+            </div>
             {% endfor %}
             {% if unfiled_count and folder_counts %}
             <span class="block text-xs text-gray-400 px-2 mt-1">未分类: {{ unfiled_count }} 条</span>
             {% endif %}
         </div>
+        <script>
+        function pfSubmit(url, data) {
+            var form = document.createElement('form');
+            form.method = 'POST';
+            form.action = url;
+            Object.keys(data).forEach(function(k) {
+                var inp = document.createElement('input');
+                inp.type = 'hidden'; inp.name = k; inp.value = data[k];
+                form.appendChild(inp);
+            });
+            document.body.appendChild(form);
+            form.submit();
+        }
+
+        function createFolder() {
+            var p = prompt('新文件夹名称（用 / 创建子层级，如 资料/竞品分析）');
+            if (!p || !p.trim()) return;
+            pfSubmit('/folders/create', {path: p.trim()});
+        }
+
+        function renameFolder(path) {
+            var np = prompt('重命名/移动文件夹\n（直接修改完整路径即可：改名字 = 重命名，改层级 = 移动）', path);
+            if (!np || !np.trim() || np.trim() === path) return;
+            pfSubmit('/folders/rename', {old: path, 'new': np.trim()});
+        }
+
+        function deleteFolder(path, cnt) {
+            var msg = '删除文件夹「' + path + '」？\n';
+            msg += cnt > 0 ? '里面的笔记不会被删除，会移到"未分类"。' : '（这是个空文件夹）';
+            msg += '\n子文件夹也会一并删除。';
+            if (!confirm(msg)) return;
+            pfSubmit('/folders/delete', {path: path});
+        }
+        </script>
 
         <!-- 项目筛选 -->
         <div class="mb-4">
