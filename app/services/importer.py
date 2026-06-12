@@ -8,6 +8,45 @@ from app.database import get_db
 
 SUPPORTED_TEXT = {".md", ".txt", ".csv", ".json", ".py", ".js", ".html", ".css", ".yaml", ".yml", ".toml", ".ini", ".log", ".xml"}
 
+SUPPORTED_IMAGES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp"}
+IMAGE_MAX_BYTES = 8 * 1024 * 1024  # 单张最大 8MB
+
+
+def save_image_upload(filename: str, content: bytes) -> dict:
+    """保存上传的图片到 data/uploads/，返回 {"path": "/uploads/xx.png", "media_type": ...} 或 {"error": ...}"""
+    from app.config import BASE_DIR
+
+    ext = Path(filename).suffix.lower()
+    if ext not in SUPPORTED_IMAGES:
+        return {"error": f"不支持的图片格式: {filename}（支持 png/jpg/jpeg/gif/webp）"}
+    if len(content) > IMAGE_MAX_BYTES:
+        return {"error": f"图片过大: {filename}（{len(content) // 1024 // 1024}MB，最大 8MB）"}
+
+    uploads_dir = BASE_DIR / "data" / "uploads"
+    uploads_dir.mkdir(parents=True, exist_ok=True)
+    saved_name = f"{uuid.uuid4().hex}{ext}"
+    (uploads_dir / saved_name).write_bytes(content)
+    return {"path": f"/uploads/{saved_name}", "media_type": SUPPORTED_IMAGES[ext], "original": filename}
+
+
+def load_images_base64(paths: list[str]) -> list[dict]:
+    """把 /uploads/xx.png 路径列表读成识图 API 需要的 base64 格式"""
+    import base64
+    from app.config import BASE_DIR
+
+    images = []
+    for p in paths:
+        name = p.replace("/uploads/", "").strip()
+        fpath = BASE_DIR / "data" / "uploads" / name
+        if not fpath.exists():
+            continue
+        ext = fpath.suffix.lower()
+        media_type = SUPPORTED_IMAGES.get(ext)
+        if not media_type:
+            continue
+        images.append({"media_type": media_type, "data": base64.b64encode(fpath.read_bytes()).decode()})
+    return images
+
 
 class _TextExtractor(HTMLParser):
     """从 HTML 提取正文文本，跳过脚本/样式/导航"""

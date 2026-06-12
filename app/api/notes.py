@@ -3,8 +3,8 @@ from datetime import datetime
 from fastapi import APIRouter, Request, Form, Query, UploadFile, File
 from fastapi.responses import HTMLResponse, RedirectResponse
 from app.database import get_db
-from app.services.importer import import_file, import_folder, import_upload, import_url
-from app.services.note_ai import classify_content, summarize_notes, generate_weekly_report, chat_with_notes, organize_notes, apply_organize_actions
+from app.services.importer import import_file, import_folder, import_upload, import_url, save_image_upload
+from app.services.note_ai import classify_content, summarize_notes, generate_weekly_report, chat_with_notes, organize_notes, apply_organize_actions, analyze_image_paths
 from app.services.backup import create_backup, list_backups, cleanup_old_backups
 
 router = APIRouter()
@@ -189,6 +189,73 @@ async def import_upload_files(
         r = await import_upload(f.filename, content, project_id, author, tags, folder)
         results.append(r)
     return await _import_result_page(request, "upload", results)
+
+
+@router.post("/notes/import/images")
+async def import_images(
+    request: Request,
+    files: list[UploadFile] = File(...),
+    mode: str = Form("plain"),
+    project_id: str = Form(""),
+    author: str = Form(""),
+    tags: str = Form(""),
+    folder: str = Form(""),
+):
+    folder = folder.strip().strip("/")
+    clean_tags = ",".join(["图片"] + [t.strip() for t in tags.split(",") if t.strip()])
+    now = datetime.now().isoformat()
+
+    # 1. 先保存所有图片
+    saved, errors = [], []
+    for f in files[:10]:
+        content = await f.read()
+        r = save_image_upload(f.filename, content)
+        if "error" in r:
+            errors.append({"error": r["error"]})
+        else:
+            saved.append(r)
+
+    items = list(errors)
+    db = await get_db()
+    try:
+        if mode == "article" and saved:
+            # 多图合并成一篇知识文章
+            paths = [s["path"] for s in saved]
+            ai_result = await analyze_image_paths(paths, mode="article")
+            content_text = ai_result["response"]
+            # 第一行如果是 # 标题，提取为笔记标题
+            title = f"图片整理 {now[:10]}"
+            first_line = content_text.strip().splitlines()[0] if content_text.strip() else ""
+            if first_line.startswith("#"):
+                title = first_line.lstrip("#").strip()[:100]
+            note_id = str(uuid.uuid4())
+            await db.execute(
+                """INSERT INTO notes (id, title, content, author, project_id, tags, source_type, folder, image_path, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, 'image_article', ?, ?, ?, ?)""",
+                (note_id, title, content_text, author, project_id or None, clean_tags, folder, ",".join(paths), now, now),
+            )
+            items.append({"id": note_id, "title": f"{title}（{len(paths)} 张图，费用 ${ai_result['cost']:.4f}）"})
+        else:
+            # 每张图一条笔记（plain 不分析 / analyze 逐张分析）
+            for s in saved:
+                content_text = f"（图片笔记：{s['original']}）"
+                cost_note = ""
+                if mode == "analyze":
+                    ai_result = await analyze_image_paths([s["path"]], mode="analyze")
+                    content_text = ai_result["response"]
+                    cost_note = f"（已 AI 分析，费用 ${ai_result['cost']:.4f}）"
+                note_id = str(uuid.uuid4())
+                await db.execute(
+                    """INSERT INTO notes (id, title, content, author, project_id, tags, source_type, folder, image_path, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, 'image', ?, ?, ?, ?)""",
+                    (note_id, s["original"], content_text, author, project_id or None, clean_tags, folder, s["path"], now, now),
+                )
+                items.append({"id": note_id, "title": s["original"] + cost_note})
+        await db.commit()
+    finally:
+        await db.close()
+
+    return await _import_result_page(request, "images", items)
 
 
 @router.post("/notes/import/url")
@@ -376,16 +443,33 @@ async def weekly_report_generate(request: Request, model: str = Form("auto")):
 TRASH_KEEP_DAYS = 30
 
 
+def _delete_image_files(image_paths: list[str]):
+    """彻底删除笔记时清掉对应的图片文件"""
+    from app.config import BASE_DIR
+    for p in image_paths:
+        for part in (p or "").split(","):
+            name = part.replace("/uploads/", "").strip()
+            if name:
+                f = BASE_DIR / "data" / "uploads" / name
+                try:
+                    f.unlink(missing_ok=True)
+                except OSError:
+                    pass
+
+
 async def _purge_expired_trash():
     """清除回收站里超过 30 天的笔记（每次打开回收站/列表时顺手清理）"""
     from datetime import timedelta
     cutoff = (datetime.now() - timedelta(days=TRASH_KEEP_DAYS)).isoformat()
     db = await get_db()
     try:
+        cursor = await db.execute("SELECT image_path FROM notes WHERE deleted_at IS NOT NULL AND deleted_at < ? AND image_path != ''", (cutoff,))
+        imgs = [row["image_path"] for row in await cursor.fetchall()]
         await db.execute("DELETE FROM notes WHERE deleted_at IS NOT NULL AND deleted_at < ?", (cutoff,))
         await db.commit()
     finally:
         await db.close()
+    _delete_image_files(imgs)
 
 
 @router.get("/notes/trash", response_class=HTMLResponse)
@@ -434,13 +518,18 @@ async def trash_purge(ids: str = Form("")):
             # 彻底删除指定笔记
             id_list = [i.strip() for i in ids.split(",") if i.strip()]
             placeholders = ",".join(["?"] * len(id_list))
+            cursor = await db.execute(f"SELECT image_path FROM notes WHERE deleted_at IS NOT NULL AND id IN ({placeholders}) AND image_path != ''", id_list)
+            imgs = [row["image_path"] for row in await cursor.fetchall()]
             await db.execute(f"DELETE FROM notes WHERE deleted_at IS NOT NULL AND id IN ({placeholders})", id_list)
         else:
             # 清空整个回收站
+            cursor = await db.execute("SELECT image_path FROM notes WHERE deleted_at IS NOT NULL AND image_path != ''")
+            imgs = [row["image_path"] for row in await cursor.fetchall()]
             await db.execute("DELETE FROM notes WHERE deleted_at IS NOT NULL")
         await db.commit()
     finally:
         await db.close()
+    _delete_image_files(imgs)
     return RedirectResponse("/notes/trash", status_code=303)
 
 
@@ -626,6 +715,29 @@ async def note_update(
         await db.commit()
     finally:
         await db.close()
+    return RedirectResponse(f"/notes/{note_id}", status_code=303)
+
+
+@router.post("/notes/{note_id}/analyze-images")
+async def note_analyze_images(note_id: str):
+    db = await get_db()
+    try:
+        cursor = await db.execute("SELECT image_path, content FROM notes WHERE id = ?", (note_id,))
+        row = await cursor.fetchone()
+    finally:
+        await db.close()
+    if row and row["image_path"]:
+        paths = [p for p in row["image_path"].split(",") if p.strip()]
+        mode = "article" if len(paths) > 1 else "analyze"
+        ai_result = await analyze_image_paths(paths, mode=mode)
+        now = datetime.now().isoformat()
+        new_content = (row["content"] or "") + f"\n\n---\n[AI 图片分析 {now[:16]}]\n\n" + ai_result["response"]
+        db = await get_db()
+        try:
+            await db.execute("UPDATE notes SET content = ?, updated_at = ? WHERE id = ?", (new_content, now, note_id))
+            await db.commit()
+        finally:
+            await db.close()
     return RedirectResponse(f"/notes/{note_id}", status_code=303)
 
 

@@ -148,6 +148,7 @@
                         {% if n.is_pinned %}
                         <span class="text-yellow-500 text-xs" title="已置顶">&#9733;</span>
                         {% endif %}
+                        {% if n.image_path %}<span class="text-xs" title="含图片">&#128247;</span>{% endif %}
                         <h3 class="font-medium text-gray-800 truncate">{{ n.title }}</h3>
                     </div>
                     {% if n.content %}

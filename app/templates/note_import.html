@@ -11,6 +11,7 @@
     <div class="flex gap-2">
         <button onclick="showTab('file')" id="tab-file" class="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium">上传文件</button>
         <button onclick="showTab('folder')" id="tab-folder" class="px-4 py-2 rounded-lg bg-gray-200 text-gray-600 text-sm font-medium">上传整个文件夹</button>
+        <button onclick="showTab('image')" id="tab-image" class="px-4 py-2 rounded-lg bg-gray-200 text-gray-600 text-sm font-medium">图片</button>
         <button onclick="showTab('url')" id="tab-url" class="px-4 py-2 rounded-lg bg-gray-200 text-gray-600 text-sm font-medium">网页链接</button>
         <button onclick="showTab('path')" id="tab-path" class="px-4 py-2 rounded-lg bg-gray-200 text-gray-600 text-sm font-medium">从服务器路径导入</button>
     </div>
@@ -91,6 +92,60 @@
                 </div>
             </div>
             <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 transition">上传整个文件夹</button>
+        </form>
+    </div>
+
+    <!-- 图片导入 -->
+    <div id="panel-image" class="bg-white rounded-lg shadow-sm p-6" style="display:none">
+        <h2 class="text-lg font-semibold text-gray-700 mb-4">上传图片</h2>
+        <p class="text-sm text-gray-500 mb-4">支持 png / jpg / gif / webp，单张最大 8MB，一次最多 10 张。AI 分析需要配置 Claude 或 OpenAI 的 Key（DeepSeek 不支持识图）</p>
+        <form method="POST" action="/notes/import/images" enctype="multipart/form-data" class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">选择图片（可多选）</label>
+                <input type="file" name="files" multiple accept=".png,.jpg,.jpeg,.gif,.webp,image/*"
+                    class="w-full border rounded-lg px-3 py-2 text-sm">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">处理方式</label>
+                <div class="space-y-2">
+                    <label class="flex items-start gap-2 text-sm text-gray-700 cursor-pointer">
+                        <input type="radio" name="mode" value="plain" checked class="mt-0.5">
+                        <span><strong>仅上传</strong> — 每张图存为一条图片笔记，不调 AI（免费）</span>
+                    </label>
+                    <label class="flex items-start gap-2 text-sm text-gray-700 cursor-pointer">
+                        <input type="radio" name="mode" value="analyze" class="mt-0.5">
+                        <span><strong>逐张 AI 分析</strong> — 每张图提取文字 + 内容说明，各存一条笔记</span>
+                    </label>
+                    <label class="flex items-start gap-2 text-sm text-gray-700 cursor-pointer">
+                        <input type="radio" name="mode" value="article" class="mt-0.5">
+                        <span><strong>合并成知识文章</strong> — 所有图片的文字信息整合成一篇结构化文章，存一条笔记</span>
+                    </label>
+                </div>
+            </div>
+            <div class="grid grid-cols-4 gap-3">
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">存入文件夹</label>
+                    <input type="text" name="folder" list="folder-list" placeholder="如: 资料/截图" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">关联项目</label>
+                    <select name="project_id" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                        <option value="">不关联</option>
+                        {% for p in projects %}
+                        <option value="{{ p.id }}">{{ p.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">作者</label>
+                    <input type="text" name="author" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">额外标签</label>
+                    <input type="text" name="tags" placeholder="标签1,标签2" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                </div>
+            </div>
+            <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 transition">上传图片</button>
         </form>
     </div>
 
@@ -176,7 +231,7 @@
 
     <script>
     function showTab(name) {
-        ['file', 'folder', 'url', 'path'].forEach(function(n) {
+        ['file', 'folder', 'image', 'url', 'path'].forEach(function(n) {
             document.getElementById('panel-' + n).style.display = (n === name) ? 'block' : 'none';
             var btn = document.getElementById('tab-' + n);
             if (n === name) {

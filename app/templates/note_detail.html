@@ -16,6 +16,11 @@
                     {{ note.title }}
                 </h1>
                 <div class="flex gap-2">
+                    {% if note.image_path %}
+                    <form method="POST" action="/notes/{{ note.id }}/analyze-images" onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').textContent='分析中…'">
+                        <button class="text-sm px-3 py-1 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition">AI 分析图片</button>
+                    </form>
+                    {% endif %}
                     <form method="POST" action="/notes/{{ note.id }}/pin">
                         <button class="text-sm px-3 py-1 border rounded-lg hover:bg-gray-50 transition">{{ '取消置顶' if note.is_pinned else '置顶' }}</button>
                     </form>
@@ -42,6 +47,19 @@
                 <span>创建: {{ note.created_at[:16] if note.created_at else '' }}</span>
                 <span>更新: {{ note.updated_at[:16] if note.updated_at else '' }}</span>
             </div>
+
+            <!-- 图片 -->
+            {% if note.image_path %}
+            <div class="grid {% if note.image_path.split(',')|length > 1 %}grid-cols-2{% else %}grid-cols-1{% endif %} gap-3 mb-6">
+                {% for img in note.image_path.split(',') %}
+                {% if img.strip() %}
+                <a href="{{ img.strip() }}" target="_blank" title="点击查看原图">
+                    <img src="{{ img.strip() }}" class="rounded-lg border w-full hover:opacity-90 transition" loading="lazy">
+                </a>
+                {% endif %}
+                {% endfor %}
+            </div>
+            {% endif %}
 
             <!-- 正文 -->
             <div id="note-content" class="prose text-sm text-gray-700 leading-relaxed" style="white-space:pre-wrap;max-width:none">{{ note.content }}</div>

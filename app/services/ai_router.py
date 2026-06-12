@@ -117,6 +117,72 @@ async def ask_ai(prompt: str, model: str = "auto", task_type: str = "", system_p
     return last_error or {"response": "[错误] 所有模型均不可用", "model": "none", "tokens": 0, "cost": 0}
 
 
+async def ask_ai_vision(prompt: str, images: list[dict], system_prompt: str = "") -> dict:
+    """识图调用。images: [{"media_type": "image/png", "data": "<base64字符串>"}]
+    DeepSeek 不支持识图，自动选 Claude 或 OpenAI。"""
+    config = _load_config()
+    if config.get("anthropic_api_key"):
+        try:
+            return await _call_claude_vision(prompt, images, system_prompt, config)
+        except Exception as e:
+            log.warning("Claude vision failed: %s", e)
+            if not config.get("openai_api_key"):
+                return {"response": f"[错误] Claude 识图调用失败: {e}", "model": "claude", "tokens": 0, "cost": 0}
+    if config.get("openai_api_key"):
+        try:
+            return await _call_openai_vision(prompt, images, system_prompt, config)
+        except Exception as e:
+            return {"response": f"[错误] OpenAI 识图调用失败: {e}", "model": "openai", "tokens": 0, "cost": 0}
+    return {
+        "response": "[错误] 图片分析需要 Claude 或 OpenAI 的 API Key（DeepSeek 不支持识图）。请到「设置」页面配置 Anthropic 或 OpenAI 的 Key 后再试。",
+        "model": "none", "tokens": 0, "cost": 0,
+    }
+
+
+async def _call_claude_vision(prompt: str, images: list[dict], system_prompt: str, config: dict) -> dict:
+    import anthropic
+
+    client = anthropic.AsyncAnthropic(api_key=config["anthropic_api_key"])
+    content = []
+    for img in images:
+        content.append({
+            "type": "image",
+            "source": {"type": "base64", "media_type": img["media_type"], "data": img["data"]},
+        })
+    content.append({"type": "text", "text": prompt})
+    kwargs = {"model": "claude-sonnet-4-20250514", "max_tokens": 4096, "messages": [{"role": "user", "content": content}]}
+    if system_prompt:
+        kwargs["system"] = system_prompt
+
+    resp = await client.messages.create(**kwargs)
+    text = resp.content[0].text
+    inp, out = resp.usage.input_tokens, resp.usage.output_tokens
+    prices = PRICE_TABLE["claude"]
+    cost = inp * prices["input"] + out * prices["output"]
+    return {"response": text, "model": "claude(识图)", "tokens": inp + out, "cost": round(cost, 6)}
+
+
+async def _call_openai_vision(prompt: str, images: list[dict], system_prompt: str, config: dict) -> dict:
+    from openai import AsyncOpenAI
+
+    client = AsyncOpenAI(api_key=config["openai_api_key"])
+    content = []
+    for img in images:
+        content.append({"type": "image_url", "image_url": {"url": f"data:{img['media_type']};base64,{img['data']}"}})
+    content.append({"type": "text", "text": prompt})
+    messages = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({"role": "user", "content": content})
+
+    resp = await client.chat.completions.create(model="gpt-4o", messages=messages, max_tokens=4096)
+    text = resp.choices[0].message.content
+    usage = resp.usage
+    prices = PRICE_TABLE["openai"]
+    cost = usage.prompt_tokens * prices["input"] + usage.completion_tokens * prices["output"]
+    return {"response": text, "model": "openai(识图)", "tokens": usage.total_tokens, "cost": round(cost, 6)}
+
+
 async def _call_model(model: str, prompt: str, system_prompt: str, config: dict) -> dict:
     if model == "claude":
         return await _call_claude(prompt, system_prompt, config)

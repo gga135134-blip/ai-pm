@@ -113,6 +113,7 @@ MIGRATIONS = [
     "ALTER TABLE notes ADD COLUMN source_type TEXT DEFAULT 'manual'",
     "ALTER TABLE notes ADD COLUMN folder TEXT DEFAULT ''",
     "ALTER TABLE notes ADD COLUMN deleted_at TEXT DEFAULT NULL",
+    "ALTER TABLE notes ADD COLUMN image_path TEXT DEFAULT ''",
 ]
 
 

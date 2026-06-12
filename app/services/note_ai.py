@@ -3,7 +3,27 @@ import re
 import uuid
 from datetime import datetime
 from app.database import get_db
-from app.services.ai_router import ask_ai
+from app.services.ai_router import ask_ai, ask_ai_vision
+
+IMAGE_ANALYZE_SYSTEM = """你是图片分析专家。请分析用户给的图片：
+
+输出格式：
+## 图片文字
+（完整提取图片中的所有文字，保持原有结构；没有文字就写"无"）
+
+## 内容说明
+（2-4 句话说明图片的关键信息：是什么、讲了什么、有什么值得注意的）
+
+简洁准确，不要废话。"""
+
+IMAGE_ARTICLE_SYSTEM = """你是知识整理专家。用户会给你多张图片（截图、白板照片、文档照片等），请把所有图片中的文字和信息整合成一篇结构化的知识文章。
+
+要求：
+- 起一个准确的标题（第一行用 # 标题 格式）
+- 内容有层级（## 小节），要点清晰
+- 多张图重复的内容去重，相关的内容合并到一起
+- 保留重要的数字、名称、结论
+- 直接输出文章，不要解释你做了什么"""
 
 CHAT_SYSTEM = """你是一个知识库 AI 助手。用户会给你一批笔记和一条指令（可能是提问、整理、分类、总结、提炼待办等任何要求）。
 
@@ -388,6 +408,24 @@ async def chat_with_notes(question: str, history: str = "", model: str = "auto",
         "model": result["model"],
         "cost": result["cost"],
     }
+
+
+async def analyze_image_paths(paths: list[str], mode: str = "analyze") -> dict:
+    """分析图片。mode=analyze（提取文字+说明）/ article（多图合并成知识文章）"""
+    from app.services.importer import load_images_base64
+
+    images = load_images_base64(paths)
+    if not images:
+        return {"response": "[错误] 没有可分析的图片文件", "model": "none", "tokens": 0, "cost": 0}
+
+    if mode == "article":
+        prompt = f"请把这 {len(images)} 张图片的内容整合成一篇知识文章。"
+        system = IMAGE_ARTICLE_SYSTEM
+    else:
+        prompt = "请分析这张图片。" if len(images) == 1 else f"请逐张分析这 {len(images)} 张图片（用 ### 图1、### 图2 分隔）。"
+        system = IMAGE_ANALYZE_SYSTEM
+
+    return await ask_ai_vision(prompt=prompt, images=images, system_prompt=system)
 
 
 async def generate_weekly_report(model: str = "auto") -> dict:
