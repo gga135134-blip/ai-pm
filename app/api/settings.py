@@ -12,8 +12,9 @@ def load_settings() -> dict:
         "anthropic_api_key": "",
         "openai_api_key": "",
         "deepseek_api_key": "",
+        "qwen_api_key": "",
         "default_ai_model": "claude",
-        "fallback_order": ["claude", "openai", "deepseek"],
+        "fallback_order": ["claude", "openai", "deepseek", "qwen"],
         "serverchan_key": "",
         "pushplus_token": "",
         "routes": {"code": "auto", "writing": "auto", "analysis": "auto", "review": "auto"},
@@ -44,10 +45,12 @@ async def settings_save(
     anthropic_api_key: str = Form(""),
     openai_api_key: str = Form(""),
     deepseek_api_key: str = Form(""),
+    qwen_api_key: str = Form(""),
     default_ai_model: str = Form("claude"),
     fallback_1: str = Form("claude"),
     fallback_2: str = Form("openai"),
     fallback_3: str = Form("deepseek"),
+    fallback_4: str = Form("qwen"),
     serverchan_key: str = Form(""),
     pushplus_token: str = Form(""),
     route_code: str = Form("auto"),
@@ -56,7 +59,7 @@ async def settings_save(
     route_review: str = Form("auto"),
 ):
     fallback_order = []
-    for m in [fallback_1, fallback_2, fallback_3]:
+    for m in [fallback_1, fallback_2, fallback_3, fallback_4]:
         if m and m not in fallback_order:
             fallback_order.append(m)
 
@@ -64,6 +67,7 @@ async def settings_save(
         "anthropic_api_key": anthropic_api_key,
         "openai_api_key": openai_api_key,
         "deepseek_api_key": deepseek_api_key,
+        "qwen_api_key": qwen_api_key,
         "default_ai_model": default_ai_model,
         "fallback_order": fallback_order,
         "serverchan_key": serverchan_key,

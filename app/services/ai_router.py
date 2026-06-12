@@ -10,9 +10,12 @@ PRICE_TABLE = {
     "claude": {"input": 0.003 / 1000, "output": 0.015 / 1000, "label": "Claude Sonnet"},
     "openai": {"input": 0.005 / 1000, "output": 0.015 / 1000, "label": "GPT-4o"},
     "deepseek": {"input": 0.00014 / 1000, "output": 0.00028 / 1000, "label": "DeepSeek V3"},
+    "qwen": {"input": 0.00011 / 1000, "output": 0.00028 / 1000, "label": "通义千问 Plus"},
 }
 
-DEFAULT_FALLBACK_ORDER = ["claude", "openai", "deepseek"]
+QWEN_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+
+DEFAULT_FALLBACK_ORDER = ["claude", "openai", "deepseek", "qwen"]
 
 
 def _load_config() -> dict:
@@ -41,6 +44,8 @@ def get_model_for_task(task_type: str = "", explicit_model: str = "auto") -> str
     # 按已配置 Key 的优先级自动选
     if config.get("deepseek_api_key"):
         return "deepseek"
+    if config.get("qwen_api_key"):
+        return "qwen"
     if config.get("anthropic_api_key"):
         return "claude"
     if config.get("openai_api_key"):
@@ -62,6 +67,7 @@ def get_fallback_chain(primary: str) -> list[str]:
         "claude": "anthropic_api_key",
         "openai": "openai_api_key",
         "deepseek": "deepseek_api_key",
+        "qwen": "qwen_api_key",
     }
     available = [m for m in full if config.get(key_map.get(m, ""), "")]
     # 如果一个都没配置，至少返回主模型让它走错误提示
@@ -132,11 +138,39 @@ async def ask_ai_vision(prompt: str, images: list[dict], system_prompt: str = ""
         try:
             return await _call_openai_vision(prompt, images, system_prompt, config)
         except Exception as e:
-            return {"response": f"[错误] OpenAI 识图调用失败: {e}", "model": "openai", "tokens": 0, "cost": 0}
+            log.warning("OpenAI vision failed: %s", e)
+            if not config.get("qwen_api_key"):
+                return {"response": f"[错误] OpenAI 识图调用失败: {e}", "model": "openai", "tokens": 0, "cost": 0}
+    if config.get("qwen_api_key"):
+        try:
+            return await _call_qwen_vision(prompt, images, system_prompt, config)
+        except Exception as e:
+            return {"response": f"[错误] 通义千问识图调用失败: {e}", "model": "qwen-vl", "tokens": 0, "cost": 0}
     return {
-        "response": "[错误] 图片分析需要 Claude 或 OpenAI 的 API Key（DeepSeek 不支持识图）。请到「设置」页面配置 Anthropic 或 OpenAI 的 Key 后再试。",
+        "response": "[错误] 图片分析需要 Claude、OpenAI 或 通义千问 的 API Key（DeepSeek 不支持识图）。请到「设置」页面配置任意一家的 Key 后再试。",
         "model": "none", "tokens": 0, "cost": 0,
     }
+
+
+async def _call_qwen_vision(prompt: str, images: list[dict], system_prompt: str, config: dict) -> dict:
+    from openai import AsyncOpenAI
+
+    client = AsyncOpenAI(api_key=config["qwen_api_key"], base_url=QWEN_BASE_URL)
+    content = []
+    for img in images:
+        content.append({"type": "image_url", "image_url": {"url": f"data:{img['media_type']};base64,{img['data']}"}})
+    content.append({"type": "text", "text": prompt})
+    messages = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({"role": "user", "content": content})
+
+    resp = await client.chat.completions.create(model="qwen-vl-plus", messages=messages, max_tokens=4096)
+    text = resp.choices[0].message.content
+    usage = resp.usage
+    # qwen-vl-plus 约 ¥1.5/1M 输入、¥4.5/1M 输出
+    cost = usage.prompt_tokens * (0.00021 / 1000) + usage.completion_tokens * (0.00062 / 1000)
+    return {"response": text, "model": "qwen-vl(识图)", "tokens": usage.total_tokens, "cost": round(cost, 6)}
 
 
 async def _call_claude_vision(prompt: str, images: list[dict], system_prompt: str, config: dict) -> dict:
@@ -188,8 +222,31 @@ async def _call_model(model: str, prompt: str, system_prompt: str, config: dict)
         return await _call_claude(prompt, system_prompt, config)
     elif model == "deepseek":
         return await _call_deepseek(prompt, system_prompt, config)
+    elif model == "qwen":
+        return await _call_qwen(prompt, system_prompt, config)
     else:
         return await _call_openai(prompt, system_prompt, config)
+
+
+async def _call_qwen(prompt: str, system_prompt: str, config: dict) -> dict:
+    from openai import AsyncOpenAI
+
+    api_key = config.get("qwen_api_key", "")
+    if not api_key:
+        return {"response": "[错误] 未配置通义千问 API Key", "model": "qwen", "tokens": 0, "cost": 0}
+
+    client = AsyncOpenAI(api_key=api_key, base_url=QWEN_BASE_URL)
+    messages = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({"role": "user", "content": prompt})
+
+    resp = await client.chat.completions.create(model="qwen-plus", messages=messages, max_tokens=4096)
+    text = resp.choices[0].message.content
+    usage = resp.usage
+    prices = PRICE_TABLE["qwen"]
+    cost = usage.prompt_tokens * prices["input"] + usage.completion_tokens * prices["output"]
+    return {"response": text, "model": "qwen", "tokens": usage.total_tokens, "cost": round(cost, 6)}
 
 
 async def _call_claude(prompt: str, system_prompt: str, config: dict) -> dict:
