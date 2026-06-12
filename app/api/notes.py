@@ -14,8 +14,8 @@ router = APIRouter()
 async def note_list(request: Request, tag: str = "", q: str = "", project_id: str = "", folder: str = ""):
     db = await get_db()
     try:
-        # 构建查询
-        where_parts = []
+        # 构建查询（回收站里的不显示）
+        where_parts = ["n.deleted_at IS NULL"]
         params = []
         if tag:
             where_parts.append("(',' || n.tags || ',' LIKE ?)")
@@ -31,7 +31,7 @@ async def note_list(request: Request, tag: str = "", q: str = "", project_id: st
             where_parts.append("(n.folder = ? OR n.folder LIKE ?)")
             params.extend([folder, f"{folder}/%"])
 
-        where_clause = "WHERE " + " AND ".join(where_parts) if where_parts else ""
+        where_clause = "WHERE " + " AND ".join(where_parts)
 
         cursor = await db.execute(f"""
             SELECT n.*, p.name as project_name
@@ -43,7 +43,7 @@ async def note_list(request: Request, tag: str = "", q: str = "", project_id: st
         notes = [dict(row) for row in await cursor.fetchall()]
 
         # 获取所有标签用于侧边栏
-        cursor = await db.execute("SELECT tags FROM notes WHERE tags != ''")
+        cursor = await db.execute("SELECT tags FROM notes WHERE tags != '' AND deleted_at IS NULL")
         all_tags_raw = [row["tags"] for row in await cursor.fetchall()]
         tag_counts = {}
         for raw in all_tags_raw:
@@ -53,7 +53,7 @@ async def note_list(request: Request, tag: str = "", q: str = "", project_id: st
                     tag_counts[t] = tag_counts.get(t, 0) + 1
 
         # 文件夹树（含每个文件夹的笔记数 + 空文件夹 + 自动补全父级）
-        cursor = await db.execute("SELECT folder, COUNT(*) as cnt FROM notes WHERE folder != '' GROUP BY folder")
+        cursor = await db.execute("SELECT folder, COUNT(*) as cnt FROM notes WHERE folder != '' AND deleted_at IS NULL GROUP BY folder")
         counts = {row["folder"]: row["cnt"] for row in await cursor.fetchall()}
         cursor = await db.execute("SELECT path FROM folders")
         for row in await cursor.fetchall():
@@ -63,7 +63,7 @@ async def note_list(request: Request, tag: str = "", q: str = "", project_id: st
             for i in range(1, len(parts)):
                 counts.setdefault("/".join(parts[:i]), 0)
         folder_counts = sorted(counts.items())
-        cursor = await db.execute("SELECT COUNT(*) as cnt FROM notes WHERE folder = '' OR folder IS NULL")
+        cursor = await db.execute("SELECT COUNT(*) as cnt FROM notes WHERE (folder = '' OR folder IS NULL) AND deleted_at IS NULL")
         row = await cursor.fetchone()
         unfiled_count = row["cnt"]
 
@@ -93,7 +93,7 @@ async def note_list(request: Request, tag: str = "", q: str = "", project_id: st
 async def _get_all_folders() -> list[str]:
     db = await get_db()
     try:
-        cursor = await db.execute("SELECT DISTINCT folder FROM notes WHERE folder != '' ORDER BY folder")
+        cursor = await db.execute("SELECT DISTINCT folder FROM notes WHERE folder != '' AND deleted_at IS NULL ORDER BY folder")
         return [row["folder"] for row in await cursor.fetchall()]
     finally:
         await db.close()
@@ -278,7 +278,7 @@ async def notes_chat_page(request: Request):
     folders = await _get_all_folders()
     db = await get_db()
     try:
-        cursor = await db.execute("SELECT tags FROM notes WHERE tags != ''")
+        cursor = await db.execute("SELECT tags FROM notes WHERE tags != '' AND deleted_at IS NULL")
         all_tags_raw = [row["tags"] for row in await cursor.fetchall()]
     finally:
         await db.close()
@@ -371,6 +371,79 @@ async def weekly_report_generate(request: Request, model: str = Form("auto")):
     )
 
 
+# ── 回收站（必须在 {note_id} 之前注册）────────────────
+
+TRASH_KEEP_DAYS = 30
+
+
+async def _purge_expired_trash():
+    """清除回收站里超过 30 天的笔记（每次打开回收站/列表时顺手清理）"""
+    from datetime import timedelta
+    cutoff = (datetime.now() - timedelta(days=TRASH_KEEP_DAYS)).isoformat()
+    db = await get_db()
+    try:
+        await db.execute("DELETE FROM notes WHERE deleted_at IS NOT NULL AND deleted_at < ?", (cutoff,))
+        await db.commit()
+    finally:
+        await db.close()
+
+
+@router.get("/notes/trash", response_class=HTMLResponse)
+async def trash_page(request: Request):
+    await _purge_expired_trash()
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            "SELECT id, title, folder, tags, deleted_at FROM notes WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC"
+        )
+        trashed = [dict(row) for row in await cursor.fetchall()]
+    finally:
+        await db.close()
+    # 计算每条剩余天数
+    from datetime import timedelta
+    for t in trashed:
+        try:
+            expire = datetime.fromisoformat(t["deleted_at"]) + timedelta(days=TRASH_KEEP_DAYS)
+            t["days_left"] = max((expire - datetime.now()).days, 0)
+        except (ValueError, TypeError):
+            t["days_left"] = TRASH_KEEP_DAYS
+    return request.app.state.templates.TemplateResponse(
+        request, "note_trash.html", {"request": request, "trashed": trashed, "keep_days": TRASH_KEEP_DAYS}
+    )
+
+
+@router.post("/notes/trash/restore")
+async def trash_restore(ids: str = Form(...)):
+    id_list = [i.strip() for i in ids.split(",") if i.strip()]
+    if id_list:
+        placeholders = ",".join(["?"] * len(id_list))
+        db = await get_db()
+        try:
+            await db.execute(f"UPDATE notes SET deleted_at = NULL WHERE id IN ({placeholders})", id_list)
+            await db.commit()
+        finally:
+            await db.close()
+    return RedirectResponse("/notes/trash", status_code=303)
+
+
+@router.post("/notes/trash/purge")
+async def trash_purge(ids: str = Form("")):
+    db = await get_db()
+    try:
+        if ids.strip():
+            # 彻底删除指定笔记
+            id_list = [i.strip() for i in ids.split(",") if i.strip()]
+            placeholders = ",".join(["?"] * len(id_list))
+            await db.execute(f"DELETE FROM notes WHERE deleted_at IS NOT NULL AND id IN ({placeholders})", id_list)
+        else:
+            # 清空整个回收站
+            await db.execute("DELETE FROM notes WHERE deleted_at IS NOT NULL")
+        await db.commit()
+    finally:
+        await db.close()
+    return RedirectResponse("/notes/trash", status_code=303)
+
+
 # ── 批量管理 ──────────────────────────────────────────
 
 @router.post("/notes/batch")
@@ -389,7 +462,11 @@ async def notes_batch(action: str = Form(...), ids: str = Form(...), folder: str
                 [clean_folder, now] + id_list,
             )
         elif action == "delete":
-            await db.execute(f"DELETE FROM notes WHERE id IN ({placeholders})", id_list)
+            # 软删除：移入回收站
+            await db.execute(
+                f"UPDATE notes SET deleted_at = ? WHERE id IN ({placeholders})",
+                [now] + id_list,
+            )
         await db.commit()
     finally:
         await db.close()
@@ -493,7 +570,7 @@ async def note_detail(request: Request, note_id: str):
                 params = [f"%,{t},%" for t in tag_list]
                 params.append(note_id)
                 cursor = await db.execute(
-                    f"SELECT id, title, tags, updated_at FROM notes WHERE ({like_parts}) AND id != ? ORDER BY updated_at DESC LIMIT 10",
+                    f"SELECT id, title, tags, updated_at FROM notes WHERE ({like_parts}) AND id != ? AND deleted_at IS NULL ORDER BY updated_at DESC LIMIT 10",
                     params,
                 )
                 related = [dict(row) for row in await cursor.fetchall()]
@@ -568,9 +645,11 @@ async def note_toggle_pin(note_id: str):
 
 @router.post("/notes/{note_id}/delete")
 async def note_delete(note_id: str):
+    now = datetime.now().isoformat()
     db = await get_db()
     try:
-        await db.execute("DELETE FROM notes WHERE id = ?", (note_id,))
+        # 软删除：移入回收站，30 天后自动清除
+        await db.execute("UPDATE notes SET deleted_at = ? WHERE id = ?", (now, note_id))
         await db.commit()
     finally:
         await db.close()

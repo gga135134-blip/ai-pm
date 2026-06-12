@@ -140,11 +140,11 @@ async def summarize_notes(note_ids: list[str] = None, tag: str = "", model: str 
     try:
         if note_ids:
             placeholders = ",".join(["?" for _ in note_ids])
-            cursor = await db.execute(f"SELECT title, content, tags FROM notes WHERE id IN ({placeholders})", note_ids)
+            cursor = await db.execute(f"SELECT title, content, tags FROM notes WHERE id IN ({placeholders}) AND deleted_at IS NULL", note_ids)
         elif tag:
-            cursor = await db.execute("SELECT title, content, tags FROM notes WHERE ',' || tags || ',' LIKE ?", (f"%,{tag},%",))
+            cursor = await db.execute("SELECT title, content, tags FROM notes WHERE ',' || tags || ',' LIKE ? AND deleted_at IS NULL", (f"%,{tag},%",))
         else:
-            cursor = await db.execute("SELECT title, content, tags FROM notes ORDER BY updated_at DESC LIMIT 20")
+            cursor = await db.execute("SELECT title, content, tags FROM notes WHERE deleted_at IS NULL ORDER BY updated_at DESC LIMIT 20")
         notes = [dict(row) for row in await cursor.fetchall()]
     finally:
         await db.close()
@@ -228,20 +228,20 @@ async def _fetch_notes_by_scope(scope: str, question: str = "", limit: int = 80)
     try:
         if scope == "all":
             cursor = await db.execute(
-                "SELECT id, title, content, tags, folder FROM notes ORDER BY updated_at DESC LIMIT ?", (limit,)
+                "SELECT id, title, content, tags, folder FROM notes WHERE deleted_at IS NULL ORDER BY updated_at DESC LIMIT ?", (limit,)
             )
             return [dict(row) for row in await cursor.fetchall()]
         if scope.startswith("folder:"):
             f = scope[len("folder:"):]
             cursor = await db.execute(
-                "SELECT id, title, content, tags, folder FROM notes WHERE folder = ? OR folder LIKE ? ORDER BY updated_at DESC LIMIT ?",
+                "SELECT id, title, content, tags, folder FROM notes WHERE (folder = ? OR folder LIKE ?) AND deleted_at IS NULL ORDER BY updated_at DESC LIMIT ?",
                 (f, f"{f}/%", limit),
             )
             return [dict(row) for row in await cursor.fetchall()]
         if scope.startswith("tag:"):
             t = scope[len("tag:"):]
             cursor = await db.execute(
-                "SELECT id, title, content, tags, folder FROM notes WHERE ',' || tags || ',' LIKE ? ORDER BY updated_at DESC LIMIT ?",
+                "SELECT id, title, content, tags, folder FROM notes WHERE ',' || tags || ',' LIKE ? AND deleted_at IS NULL ORDER BY updated_at DESC LIMIT ?",
                 (f"%,{t},%", limit),
             )
             return [dict(row) for row in await cursor.fetchall()]
@@ -254,7 +254,7 @@ async def _fetch_notes_by_scope(scope: str, question: str = "", limit: int = 80)
         for w in words:
             params.extend([f"%{w}%"] * 3)
         cursor = await db.execute(
-            f"SELECT id, title, content, tags, folder FROM notes WHERE {like_parts} ORDER BY updated_at DESC LIMIT 30",
+            f"SELECT id, title, content, tags, folder FROM notes WHERE ({like_parts}) AND deleted_at IS NULL ORDER BY updated_at DESC LIMIT 30",
             params,
         )
         candidates = [dict(row) for row in await cursor.fetchall()]
@@ -354,56 +354,7 @@ async def chat_with_notes(question: str, history: str = "", model: str = "auto",
     """
     TOTAL_MAX_CHARS = 80_000  # 喂给 AI 的笔记总量上限
 
-    notes = []
-    db = await get_db()
-    try:
-        if scope == "all":
-            cursor = await db.execute(
-                "SELECT id, title, content, tags, folder FROM notes ORDER BY updated_at DESC LIMIT 80"
-            )
-            notes = [dict(row) for row in await cursor.fetchall()]
-        elif scope.startswith("folder:"):
-            f = scope[len("folder:"):]
-            cursor = await db.execute(
-                "SELECT id, title, content, tags, folder FROM notes WHERE folder = ? OR folder LIKE ? ORDER BY updated_at DESC LIMIT 80",
-                (f, f"{f}/%"),
-            )
-            notes = [dict(row) for row in await cursor.fetchall()]
-        elif scope.startswith("tag:"):
-            t = scope[len("tag:"):]
-            cursor = await db.execute(
-                "SELECT id, title, content, tags, folder FROM notes WHERE ',' || tags || ',' LIKE ? ORDER BY updated_at DESC LIMIT 80",
-                (f"%,{t},%",),
-            )
-            notes = [dict(row) for row in await cursor.fetchall()]
-        else:
-            # auto：按指令里的关键词检索打分
-            words = [w for w in re.split(r"[\s,，。、？?！!：:；;\"'（）()]+", question) if len(w) >= 2][:8]
-            if words:
-                like_parts = " OR ".join(["(title LIKE ? OR content LIKE ? OR tags LIKE ?)"] * len(words))
-                params = []
-                for w in words:
-                    params.extend([f"%{w}%"] * 3)
-                cursor = await db.execute(
-                    f"SELECT id, title, content, tags, folder FROM notes WHERE {like_parts} ORDER BY updated_at DESC LIMIT 30",
-                    params,
-                )
-                candidates = [dict(row) for row in await cursor.fetchall()]
-
-                def score(n):
-                    s = 0
-                    for w in words:
-                        if w in (n["title"] or ""):
-                            s += 3
-                        if w in (n["tags"] or ""):
-                            s += 2
-                        s += min((n["content"] or "").count(w), 5)
-                    return s
-
-                candidates.sort(key=score, reverse=True)
-                notes = candidates[:6]
-    finally:
-        await db.close()
+    notes = await _fetch_notes_by_scope(scope, question)
 
     # 拼上下文：单条截断 + 总量控制，超出的笔记只列标题
     per_note_max = 2500 if len(notes) <= 10 else 1200
@@ -450,7 +401,7 @@ async def generate_weekly_report(model: str = "auto") -> dict:
         """)
         tasks = [dict(row) for row in await cursor.fetchall()]
 
-        cursor = await db.execute("SELECT title, content, tags FROM notes WHERE created_at >= datetime('now', '-7 days') ORDER BY created_at DESC")
+        cursor = await db.execute("SELECT title, content, tags FROM notes WHERE created_at >= datetime('now', '-7 days') AND deleted_at IS NULL ORDER BY created_at DESC")
         notes = [dict(row) for row in await cursor.fetchall()]
 
         cursor = await db.execute("SELECT title, decision, reason, made_by FROM decisions WHERE created_at >= datetime('now', '-7 days') ORDER BY created_at DESC")

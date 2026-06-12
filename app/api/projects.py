@@ -88,7 +88,7 @@ async def project_detail(request: Request, project_id: str):
 
         # 项目关联的笔记（资料）
         cursor = await db.execute(
-            "SELECT id, title, tags, source_type, updated_at FROM notes WHERE project_id = ? ORDER BY updated_at DESC",
+            "SELECT id, title, tags, source_type, updated_at FROM notes WHERE project_id = ? AND deleted_at IS NULL ORDER BY updated_at DESC",
             (project_id,),
         )
         project_notes = [dict(row) for row in await cursor.fetchall()]
@@ -172,7 +172,7 @@ async def project_clone(project_id: str):
         )
 
         # 复制项目笔记（资料），不复制决策记录（决策应该是新项目重新做的）
-        cursor = await db.execute("SELECT * FROM notes WHERE project_id = ?", (project_id,))
+        cursor = await db.execute("SELECT * FROM notes WHERE project_id = ? AND deleted_at IS NULL", (project_id,))
         src_notes = [dict(row) for row in await cursor.fetchall()]
         for n in src_notes:
             await db.execute(

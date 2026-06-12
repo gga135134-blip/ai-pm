@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}回收站 - 知识库{% endblock %}
+{% block content %}
+<div class="mb-4 text-sm text-gray-400">
+    <a href="/notes" class="hover:text-gray-600">知识库</a> / <span class="text-gray-600">回收站</span>
+</div>
+
+<div class="flex items-center justify-between mb-4">
+    <div>
+        <h1 class="text-2xl font-bold text-gray-800">回收站</h1>
+        <p class="text-sm text-gray-400 mt-1">删除的笔记保留 {{ keep_days }} 天，到期自动清除</p>
+    </div>
+    {% if trashed %}
+    <form method="POST" action="/notes/trash/purge" onsubmit="return confirm('确定清空回收站？{{ trashed|length }} 条笔记将被彻底删除，不可恢复！')">
+        <input type="hidden" name="ids" value="">
+        <button class="bg-red-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-red-700 transition">清空回收站</button>
+    </form>
+    {% endif %}
+</div>
+
+{% if trashed %}
+<div class="space-y-2">
+    {% for t in trashed %}
+    <div class="bg-white rounded-lg shadow-sm p-4 flex items-center justify-between gap-3">
+        <div class="flex-1 min-w-0">
+            <h3 class="font-medium text-gray-700 truncate">{{ t.title }}</h3>
+            <div class="flex items-center gap-3 mt-1 text-xs text-gray-400">
+                {% if t.folder %}<span class="bg-yellow-50 text-yellow-700 px-2 py-0.5 rounded">&#128193; {{ t.folder }}</span>{% endif %}
+                <span>删除于 {{ t.deleted_at[:16] }}</span>
+                <span class="{% if t.days_left <= 7 %}text-red-500{% endif %}">{{ t.days_left }} 天后自动清除</span>
+            </div>
+        </div>
+        <div class="flex gap-2 flex-shrink-0">
+            <form method="POST" action="/notes/trash/restore">
+                <input type="hidden" name="ids" value="{{ t.id }}">
+                <button class="text-sm px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">还原</button>
+            </form>
+            <form method="POST" action="/notes/trash/purge" onsubmit="return confirm('彻底删除「{{ t.title }}」？不可恢复！')">
+                <input type="hidden" name="ids" value="{{ t.id }}">
+                <button class="text-sm px-3 py-1.5 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition">彻底删除</button>
+            </form>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="bg-white rounded-lg shadow-sm p-12 text-center">
+    <div class="text-gray-400 text-lg">回收站是空的</div>
+    <a href="/notes" class="text-blue-600 hover:underline text-sm mt-2 inline-block">返回知识库</a>
+</div>
+{% endif %}
+{% endblock %}

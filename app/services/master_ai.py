@@ -69,7 +69,7 @@ async def get_context_for_master() -> str:
         """)
         projects = [dict(row) for row in await cursor.fetchall()]
 
-        cursor = await db.execute("SELECT COUNT(*) as cnt FROM notes")
+        cursor = await db.execute("SELECT COUNT(*) as cnt FROM notes WHERE deleted_at IS NULL")
         note_count = (await cursor.fetchone())["cnt"]
     finally:
         await db.close()
