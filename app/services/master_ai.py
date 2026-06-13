@@ -131,11 +131,33 @@ async def get_context_for_master() -> str:
     return "\n".join(lines)
 
 
+async def _get_recent_history(limit: int = 12) -> str:
+    """读最近的对话历史，让总 AI 记得上下文（关键！否则它是金鱼）"""
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            "SELECT content, direction FROM messages WHERE channel = 'master_ai' ORDER BY created_at DESC LIMIT ?",
+            (limit,),
+        )
+        rows = [dict(r) for r in await cursor.fetchall()]
+    finally:
+        await db.close()
+    rows.reverse()  # 时间正序
+    lines = []
+    for r in rows:
+        who = "董事会" if r["direction"] == "in" else "你(总AI)"
+        # 去掉 AI 回复里的 [执行结果] 尾巴，保持历史干净
+        content = r["content"].split("\n\n[执行结果]")[0]
+        lines.append(f"{who}: {content}")
+    return "\n".join(lines)
+
+
 async def master_chat(message: str, sender: str, model: str = "auto") -> dict:
     """总 AI 处理一条消息"""
 
-    # 1. 收集上下文
+    # 1. 收集上下文 + 对话历史
     context = await get_context_for_master()
+    history = await _get_recent_history()  # 存入本条消息前先读历史
 
     # 2. 保存用户消息到对话记录
     now = datetime.now().isoformat()
@@ -151,12 +173,13 @@ async def master_chat(message: str, sender: str, model: str = "auto") -> dict:
         await db.close()
 
     # 3. 问总 AI
+    history_block = f"最近的对话记录（请结合上下文理解，不要重复发问已问过的内容）：\n{history}\n\n" if history else ""
     prompt = f"""系统状态：
 {context}
 
-用户 [{sender}] 说：{message}
+{history_block}董事会成员 [{sender}] 最新说：{message}
 
-请分析意图并决定行动。"""
+请结合上面的对话记录分析意图并决定行动。"""
 
     from app.services.constitution import with_constitution
     result = await ask_ai(prompt=prompt, model=model, task_type="analysis", system_prompt=with_constitution(MASTER_SYSTEM))
