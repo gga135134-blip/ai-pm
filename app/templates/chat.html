@@ -58,29 +58,125 @@
 
     <!-- 输入区域 -->
     <div class="bg-white rounded-lg shadow-sm p-6">
-        <form method="POST" action="/chat/send" class="flex gap-3">
+        <form class="flex gap-3" id="chat-form">
             <div class="w-24">
-                <select name="sender" class="w-full border rounded-lg px-3 py-3 text-base outline-none font-medium">
+                <select name="sender" id="chat-sender" class="w-full border rounded-lg px-3 py-3 text-base outline-none font-medium">
                     <option value="Gaga">Gaga</option>
                     <option value="An">An</option>
                 </select>
             </div>
-            <textarea name="message" required placeholder="跟总 AI 说点什么..." autofocus rows="3"
+            <textarea name="message" id="chat-input" required placeholder="跟总 AI 说点什么...（Enter 发送，Shift+Enter 换行）" autofocus rows="3"
                 class="flex-1 border rounded-lg px-4 py-3 text-base outline-none focus:ring-2 focus:ring-purple-500 resize-none"></textarea>
             <div class="w-28">
-                <select name="model" class="w-full border rounded-lg px-3 py-3 text-base outline-none font-medium">
+                <select name="model" id="chat-model" class="w-full border rounded-lg px-3 py-3 text-base outline-none font-medium">
                     <option value="auto">自动</option>
                     <option value="claude">Claude</option>
                     <option value="deepseek">DeepSeek</option>
                 </select>
             </div>
-            <button type="submit" class="bg-purple-600 text-white px-8 py-3 rounded-lg text-base font-medium hover:bg-purple-700 transition">发送</button>
+            <button type="submit" id="chat-send-btn" class="bg-purple-600 text-white px-8 py-3 rounded-lg text-base font-medium hover:bg-purple-700 transition">发送</button>
         </form>
     </div>
 </div>
 
 <script>
-    var el = document.getElementById('chat-messages');
-    if (el) el.scrollTop = el.scrollHeight;
+    var box = document.getElementById('chat-messages');
+    if (box) box.scrollTop = box.scrollHeight;
+
+    var chatForm = document.getElementById('chat-form');
+    var sendBtn = document.getElementById('chat-send-btn');
+    var input = document.getElementById('chat-input');
+    var busy = false;
+
+    function esc(s) {
+        var d = document.createElement('div');
+        d.textContent = s;
+        return d.innerHTML;
+    }
+
+    function nowHM() {
+        var d = new Date();
+        return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+    }
+
+    function addUserMsg(text) {
+        // 第一次发消息时清掉占位提示
+        var hint = box.querySelector('.text-center.text-gray-400');
+        if (hint) hint.remove();
+        box.insertAdjacentHTML('beforeend',
+            '<div class="flex justify-end"><div class="max-w-2xl">'
+            + '<div class="bg-blue-600 text-white rounded-lg rounded-br-none px-5 py-4">'
+            + '<div class="text-base leading-relaxed" style="white-space:pre-wrap">' + esc(text) + '</div></div>'
+            + '<div class="text-sm text-gray-400 mt-2 text-right">' + nowHM() + '</div></div></div>');
+        box.scrollTop = box.scrollHeight;
+    }
+
+    function addThinking() {
+        box.insertAdjacentHTML('beforeend',
+            '<div class="flex justify-start" id="thinking-bubble"><div class="max-w-2xl">'
+            + '<div class="flex items-center gap-2 mb-2"><span class="text-sm font-semibold text-purple-600">总 AI</span></div>'
+            + '<div class="bg-gray-100 text-gray-500 rounded-lg rounded-bl-none px-5 py-4 text-base">正在思考…</div>'
+            + '</div></div>');
+        box.scrollTop = box.scrollHeight;
+    }
+
+    function addAiMsg(text) {
+        box.insertAdjacentHTML('beforeend',
+            '<div class="flex justify-start"><div class="max-w-2xl">'
+            + '<div class="flex items-center gap-2 mb-2"><span class="text-sm font-semibold text-purple-600">总 AI</span></div>'
+            + '<div class="bg-gray-100 text-gray-800 rounded-lg rounded-bl-none px-5 py-4">'
+            + '<div class="text-base leading-relaxed" style="white-space:pre-wrap">' + esc(text) + '</div></div>'
+            + '<div class="text-sm text-gray-400 mt-2">' + nowHM() + '</div></div></div>');
+        box.scrollTop = box.scrollHeight;
+    }
+
+    function send() {
+        if (busy) return;
+        var text = input.value.trim();
+        if (!text) return;
+        busy = true;
+        sendBtn.disabled = true;
+        sendBtn.textContent = '发送中…';
+        sendBtn.classList.add('opacity-60');
+
+        addUserMsg(text);
+        input.value = '';
+        addThinking();
+
+        var fd = new FormData();
+        fd.append('message', text);
+        fd.append('sender', document.getElementById('chat-sender').value);
+        fd.append('model', document.getElementById('chat-model').value);
+
+        fetch('/chat/ask', {method: 'POST', body: fd})
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var t = document.getElementById('thinking-bubble');
+                if (t) t.remove();
+                addAiMsg(data.reply || '(无回复)');
+            })
+            .catch(function(err) {
+                var t = document.getElementById('thinking-bubble');
+                if (t) t.remove();
+                addAiMsg('[出错了] ' + err);
+            })
+            .finally(function() {
+                busy = false;
+                sendBtn.disabled = false;
+                sendBtn.textContent = '发送';
+                sendBtn.classList.remove('opacity-60');
+                input.focus();
+            });
+    }
+
+    chatForm.addEventListener('submit', function(e) { e.preventDefault(); send(); });
+
+    // Enter 发送，Shift+Enter 换行
+    input.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            send();
+        }
+    });
 </script>
 {% endblock %}

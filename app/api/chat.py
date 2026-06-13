@@ -1,9 +1,21 @@
 from fastapi import APIRouter, Request, Form
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from app.database import get_db
 from app.services.master_ai import master_chat
 
 router = APIRouter()
+
+
+@router.post("/chat/ask")
+async def chat_ask(message: str = Form(...), sender: str = Form("Gaga"), model: str = Form("auto")):
+    """AJAX 发送：返回 AI 回复 JSON，前端无刷新更新对话"""
+    result = await master_chat(message, sender, model)
+    return JSONResponse({
+        "reply": result["reply"],
+        "action": result.get("action", "chat"),
+        "model": result.get("model", ""),
+        "cost": result.get("cost", 0),
+    })
 
 
 @router.get("/chat", response_class=HTMLResponse)
