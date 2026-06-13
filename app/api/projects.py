@@ -9,6 +9,28 @@ from app.services.note_ai import classify_content
 router = APIRouter()
 
 
+async def ensure_project_codes():
+    """给所有还没有编号的项目按创建顺序分配 P001、P002…"""
+    db = await get_db()
+    try:
+        cursor = await db.execute("SELECT code FROM projects WHERE code != '' AND code IS NOT NULL")
+        existing = [row["code"] for row in await cursor.fetchall()]
+        max_num = 0
+        for c in existing:
+            if c and c[1:].isdigit():
+                max_num = max(max_num, int(c[1:]))
+
+        cursor = await db.execute("SELECT id FROM projects WHERE code = '' OR code IS NULL ORDER BY created_at ASC")
+        missing = [row["id"] for row in await cursor.fetchall()]
+        for pid in missing:
+            max_num += 1
+            await db.execute("UPDATE projects SET code = ? WHERE id = ?", (f"P{max_num:03d}", pid))
+        if missing:
+            await db.commit()
+    finally:
+        await db.close()
+
+
 def _build_task_tree(tasks: list[dict]) -> list[dict]:
     by_id = {t["id"]: {**t, "children": []} for t in tasks}
     roots = []
@@ -24,6 +46,7 @@ def _build_task_tree(tasks: list[dict]) -> list[dict]:
 
 @router.get("/projects", response_class=HTMLResponse)
 async def project_list(request: Request):
+    await ensure_project_codes()
     db = await get_db()
     try:
         cursor = await db.execute("""
@@ -67,6 +90,7 @@ async def project_create(
         await db.commit()
     finally:
         await db.close()
+    await ensure_project_codes()
     return RedirectResponse(f"/projects/{project_id}", status_code=303)
 
 

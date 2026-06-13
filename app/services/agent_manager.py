@@ -70,7 +70,8 @@ async def execute_task(task_id: str) -> dict:
     finally:
         await db.close()
 
-    result = await ask_ai(prompt=prompt, model=task["ai_model"], task_type=task_type, system_prompt=EXECUTE_SYSTEM)
+    from app.services.constitution import with_constitution
+    result = await ask_ai(prompt=prompt, model=task["ai_model"], task_type=task_type, system_prompt=with_constitution(EXECUTE_SYSTEM))
 
     db = await get_db()
     try:
@@ -105,7 +106,8 @@ async def review_task(task_id: str) -> dict:
 
     prompt = f"任务：{task['title']}\n描述：{task['description']}\n\nAI 执行结果：\n{task['result']}"
 
-    result = await ask_ai(prompt=prompt, model="auto", task_type="review", system_prompt=REVIEW_SYSTEM)
+    from app.services.constitution import with_constitution
+    result = await ask_ai(prompt=prompt, model="auto", task_type="review", system_prompt=with_constitution(REVIEW_SYSTEM))
 
     try:
         text = result["response"]

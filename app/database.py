@@ -127,6 +127,7 @@ MIGRATIONS = [
     "ALTER TABLE notes ADD COLUMN image_path TEXT DEFAULT ''",
     "ALTER TABLE projects ADD COLUMN automation_level TEXT DEFAULT 'manual'",
     "ALTER TABLE projects ADD COLUMN ai_budget REAL DEFAULT 0",
+    "ALTER TABLE projects ADD COLUMN code TEXT DEFAULT ''",
 ]
 
 

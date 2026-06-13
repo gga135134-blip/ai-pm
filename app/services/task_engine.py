@@ -29,11 +29,12 @@ DECOMPOSE_SYSTEM = """你是一个项目管理专家。用户会给你一个项�
 
 
 async def decompose_project(project_id: str, goal: str, model: str = "auto") -> list[dict]:
+    from app.services.constitution import with_constitution
     result = await ask_ai(
         prompt=f"请将以下项目目标拆解为具体任务：\n\n{goal}",
         model=model,
         task_type="analysis",
-        system_prompt=DECOMPOSE_SYSTEM,
+        system_prompt=with_constitution(DECOMPOSE_SYSTEM),
     )
 
     try:

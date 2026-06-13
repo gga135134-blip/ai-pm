@@ -11,7 +11,10 @@
     {% for p in projects %}
     <a href="/projects/{{ p.id }}" class="bg-white rounded-lg shadow-sm p-5 hover:shadow-md transition block">
         <div class="flex items-center justify-between mb-2">
-            <h3 class="font-semibold text-gray-800 truncate">{{ p.name }}</h3>
+            <h3 class="font-semibold text-gray-800 truncate">
+                {% if p.code %}<span class="text-xs font-mono bg-gray-800 text-white px-1.5 py-0.5 rounded mr-1">{{ p.code }}</span>{% endif %}
+                {{ p.name }}
+            </h3>
             <span class="text-xs px-2 py-1 rounded whitespace-nowrap ml-2 status-{{ p.status }}">{{ p.status }}</span>
         </div>
         {% if p.description %}

@@ -35,10 +35,19 @@ def save_settings(data: dict):
 
 @router.get("/settings", response_class=HTMLResponse)
 async def settings_page(request: Request):
+    from app.services.constitution import get_constitution
     config = load_settings()
+    config["company_manual"] = get_constitution()  # 没存过则给默认手册
     return request.app.state.templates.TemplateResponse(
         request, "settings.html", {"request": request, "config": config}
     )
+
+
+@router.post("/settings/manual")
+async def settings_save_manual(company_manual: str = Form("")):
+    from app.services.constitution import save_constitution
+    save_constitution(company_manual)
+    return RedirectResponse("/settings", status_code=303)
 
 
 @router.post("/settings")
