@@ -233,7 +233,7 @@ async def master_chat(message: str, sender: str, model: str = "auto") -> dict:
     # 5. 执行动作
     action_result = None
     if action == "do_now":
-        action_result = await _action_do_now(params)
+        action_result = await _action_do_now(params, history)
     elif action == "create_project":
         action_result = await _action_create_project(params)
     elif action == "decompose":
@@ -252,9 +252,13 @@ async def master_chat(message: str, sender: str, model: str = "auto") -> dict:
     # 6. 保存 AI 回复
     ai_msg_id = str(uuid.uuid4())
     now2 = datetime.now().isoformat()
-    full_reply = reply
-    if action_result:
-        full_reply += f"\n\n[执行结果] {action_result}"
+    if action == "do_now" and action_result:
+        # do_now：直接展示真实执行结果，不要前面那句动手前的乐观承诺（避免"忽悠感"）
+        full_reply = action_result
+    else:
+        full_reply = reply
+        if action_result:
+            full_reply += f"\n\n[执行结果] {action_result}"
 
     db = await get_db()
     try:
@@ -284,7 +288,7 @@ async def master_chat(message: str, sender: str, model: str = "auto") -> dict:
 
 # ── 动作执行器 ──────────────────────────────────────
 
-async def _action_do_now(params: dict) -> str:
+async def _action_do_now(params: dict, history: str = "") -> str:
     """总 AI 当场用工具干一件具体的事"""
     from app.services.agent_tools import run_agent_loop
     from app.services.constitution import with_constitution
@@ -293,7 +297,9 @@ async def _action_do_now(params: dict) -> str:
     if not task:
         return "没有具体任务内容"
     project_id = await _resolve_project(params.get("project") or "")
-    result = await run_agent_loop(task, system=with_constitution(EXECUTE_SYSTEM), project_id=project_id)
+    # 带上对话背景，避免 agent 每轮失忆、自相矛盾
+    full_task = f"对话背景（供你理解上下文）：\n{history}\n\n──────\n当前要你完成的具体任务：{task}" if history else task
+    result = await run_agent_loop(full_task, system=with_constitution(EXECUTE_SYSTEM), project_id=project_id)
     text = result["response"]
     steps = result.get("steps", [])
     if steps:
