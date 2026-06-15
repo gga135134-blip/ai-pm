@@ -42,13 +42,17 @@ MASTER_SYSTEM = """你现在的角色是**总 AI（项目总监）**。董事会
 立项流程（重要）：
 - 当董事会提出一个新想法时，**不要急着创建项目**。先用 "chat" 追问核心框架：目标、AI 预算、外部预算、大概执行时间、授权等级（每步确认 还是 预算内全自动）。
 - 把框架聊清楚后，用 "chat" 给出一份"项目框架草案 + 初步任务清单"，请董事会确认。
-- 董事会明确说"确认/可以/建吧"之后，才用 "create_project" 正式创建，description 里写完整框架。创建后建议紧接着 decompose 拆任务。
+- **董事会一旦说"确认/可以/建吧/开工/是的"等同意的话，你这一轮就必须返回 action="create_project"，绝对不能再用 chat 拖延或继续追问。** 这是硬性要求。create_project 会自动按 goal 拆出任务。
+
+关于能力边界（重要）：
+- 你和执行 agent 只能产出"文字成果"：方案、文案、分析、策划、报告、调研。
+- 你**不能**真正写代码跑爬虫、不能调用外部接口、不能联网抓数据。涉及这类需要技术落地或花钱买服务（API、代理IP、第三方工具）的事，要作为 "decision" 提请董事会拍板，**不要向董事会索要账号密码、代理IP、密钥等凭据**。
 
 规则：
 - 项目一律用编号称呼（如 P003），方便董事会指代。
 - reply 用中文，简洁直接，不说客套话。
 - params 里引用项目用 "project" 字段，填编号（P003）或项目名都行。
-- 只返回 JSON，不要其他内容。"""
+- 只返回 JSON，不要返回任何 JSON 以外的文字。"""
 
 
 async def _resolve_project(ref: str) -> str | None:
@@ -152,6 +156,47 @@ async def _get_recent_history(limit: int = 12) -> str:
     return "\n".join(lines)
 
 
+def _extract_action_json(text: str) -> dict:
+    """从 AI 回复里稳健地提取 {action, params, reply} JSON。
+    解析失败时，把整段文字当作 reply 返回（action=chat），但去掉裸 JSON 的观感。"""
+    raw = (text or "").strip()
+
+    # 去掉 ```json ... ``` 围栏
+    candidate = raw
+    if "```" in candidate:
+        import re as _re
+        m = _re.search(r"```(?:json)?\s*(.+?)```", candidate, _re.DOTALL)
+        if m:
+            candidate = m.group(1).strip()
+
+    # 直接尝试
+    try:
+        obj = json.loads(candidate)
+        if isinstance(obj, dict) and ("action" in obj or "reply" in obj):
+            return obj
+    except json.JSONDecodeError:
+        pass
+
+    # 从第一个 { 到最后一个 } 截取再试
+    start, end = candidate.find("{"), candidate.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        try:
+            obj = json.loads(candidate[start:end + 1])
+            if isinstance(obj, dict) and ("action" in obj or "reply" in obj):
+                return obj
+        except json.JSONDecodeError:
+            pass
+
+    # 实在解析不了：当纯聊天，但如果整段就是个裸 JSON，尽量只取 reply 字段的值
+    import re as _re
+    m = _re.search(r'"reply"\s*:\s*"((?:[^"\\]|\\.)*)"', raw)
+    if m:
+        reply_text = m.group(1).encode().decode("unicode_escape", errors="ignore")
+        return {"action": "chat", "params": {}, "reply": reply_text}
+
+    return {"action": "chat", "params": {}, "reply": raw}
+
+
 async def master_chat(message: str, sender: str, model: str = "auto") -> dict:
     """总 AI 处理一条消息"""
 
@@ -184,20 +229,11 @@ async def master_chat(message: str, sender: str, model: str = "auto") -> dict:
     from app.services.constitution import with_constitution
     result = await ask_ai(prompt=prompt, model=model, task_type="analysis", system_prompt=with_constitution(MASTER_SYSTEM))
 
-    # 4. 解析响应
-    try:
-        resp_text = result["response"]
-        if "```json" in resp_text:
-            resp_text = resp_text.split("```json")[1].split("```")[0]
-        elif "```" in resp_text:
-            resp_text = resp_text.split("```")[1].split("```")[0]
-        parsed = json.loads(resp_text.strip())
-    except (json.JSONDecodeError, IndexError):
-        parsed = {"action": "chat", "params": {}, "reply": result["response"]}
-
+    # 4. 解析响应（稳健提取 JSON，解析不出来才退化为纯聊天）
+    parsed = _extract_action_json(result["response"])
     action = parsed.get("action", "chat")
-    params = parsed.get("params", {})
-    reply = parsed.get("reply", "我理解了，正在处理...")
+    params = parsed.get("params", {}) or {}
+    reply = parsed.get("reply") or parsed.get("response") or "我理解了，正在处理..."
 
     # 5. 执行动作
     action_result = None
