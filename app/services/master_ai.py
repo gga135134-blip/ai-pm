@@ -31,7 +31,7 @@ MASTER_SYSTEM = """你现在的角色是**总 AI（项目总监）**。董事会
 
 可用动作：
 - "chat": 纯对话/追问/汇报，不做任何改动。params: {}
-- "create_project": 正式创建项目（必须先聊清目标/预算/时间/授权等级，并得到董事会确认后才用）。params: {"name": "项目名", "description": "完整的项目框架描述", "owner": "负责人", "ai_budget": AI费用预算美元数字, "automation_level": "manual 或 auto"}
+- "create_project": 正式创建项目（必须先聊清目标/预算/时间/授权等级，并得到董事会确认后才用）。创建时会自动按 goal 拆解出任务，不要再单独 decompose。params: {"name": "项目名", "description": "完整的项目框架描述", "goal": "用于拆解任务的核心目标", "owner": "负责人", "ai_budget": AI费用预算美元数字, "automation_level": "manual 或 auto"}
 - "decompose": 给项目拆解任务。params: {"project": "项目编号如P003或项目名", "goal": "目标描述"}
 - "execute_tasks": 批量执行某项目的待办AI任务。params: {"project": "项目编号或名称"}
 - "classify_text": 智能分类一段文字入知识库。params: {"text": "内容", "project": "可选项目编号/名称"}
@@ -258,6 +258,7 @@ async def _action_create_project(params: dict) -> str:
     owner = params.get("owner", "")
     ai_budget = float(params.get("ai_budget") or 0)
     automation_level = params.get("automation_level", "manual")
+    goal = params.get("goal") or desc  # 用于自动拆解任务的目标
     pid = str(uuid.uuid4())
     now = datetime.now().isoformat()
     db = await get_db()
@@ -276,7 +277,18 @@ async def _action_create_project(params: dict) -> str:
         code = (await cursor.fetchone())["code"]
     finally:
         await db.close()
-    return f"已创建项目 [{code}]「{name}」，可在项目页查看"
+
+    # 建完直接拆任务，避免建出空项目
+    task_note = ""
+    if goal:
+        try:
+            tasks = await decompose_project(pid, goal)
+            if tasks:
+                task_note = f"，并自动拆解出 {len(tasks)} 个任务"
+        except Exception as e:
+            task_note = f"（任务拆解失败: {e}，可稍后手动拆解）"
+
+    return f"已创建项目 [{code}]「{name}」{task_note}，可在项目页查看"
 
 
 async def _action_decompose(params: dict) -> str:
