@@ -11,8 +11,11 @@ app = FastAPI(title="AI 项目管理平台")
 APP_DIR = Path(__file__).resolve().parent
 UPLOADS_DIR = BASE_DIR / "data" / "uploads"
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+WORKSPACE_DIR = BASE_DIR / "data" / "workspace"
+WORKSPACE_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(APP_DIR / "static")), name="static")
 app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
+app.mount("/workspace", StaticFiles(directory=str(WORKSPACE_DIR)), name="workspace")
 app.state.templates = Jinja2Templates(directory=str(APP_DIR / "templates"))
 
 app.include_router(chat.router)

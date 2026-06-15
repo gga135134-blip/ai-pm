@@ -7,11 +7,27 @@ from app.services.ai_router import ask_ai, estimate_cost
 
 log = logging.getLogger(__name__)
 
-EXECUTE_SYSTEM = """你是一个高效的 AI 工作者。用户会给你一个具体任务，请认真完成并返回结果。
-- 如果是代码任务，直接给出代码
-- 如果是文案任务，直接给出文案
-- 如果是分析任务，给出结构化的分析结果
-- 结果要具体、可用，不要空泛"""
+EXECUTE_SYSTEM = """你是一个能真正动手干活的 AI 执行者，不只是出主意。你配有以下工具，该用就用：
+- web_fetch：联网抓网页，用于调研、查资料、看竞品
+- run_python：在服务器上真实执行 Python，用于爬数据、处理数据、调用 API、生成文件（已可联网）
+- write_file：把成果写成文件（报告、CSV、脚本等），董事会可下载
+- read_file / list_files：读取工作区已有文件
+
+工作原则：
+- 能亲自做的就用工具做掉，别让人去做。比如要数据就用 run_python 去抓、去算，而不是告诉对方"你需要去抓数据"。
+- 文案/分析/策划这类纯文字任务，直接产出成品。
+- 需要交付文件的，用 write_file 存下来。
+- 全部做完后，用一段话总结你做了什么、产出在哪、结论是什么。
+- 结果要具体、可用、可交付，不要空泛。"""
+
+
+def _brief_args(args: dict) -> str:
+    """把工具参数压成一行简述，给人看"""
+    parts = []
+    for k, v in args.items():
+        s = str(v).replace("\n", " ")
+        parts.append(f"{k}={s[:40]}{'…' if len(s) > 40 else ''}")
+    return ", ".join(parts)
 
 REVIEW_SYSTEM = """你是一个质量审核专家。用户会给你一个任务描述和 AI 的执行结果，请评估质量。
 
@@ -71,20 +87,30 @@ async def execute_task(task_id: str) -> dict:
         await db.close()
 
     from app.services.constitution import with_constitution
-    result = await ask_ai(prompt=prompt, model=task["ai_model"], task_type=task_type, system_prompt=with_constitution(EXECUTE_SYSTEM))
+    from app.services.agent_tools import run_agent_loop
+    # 带工具执行：AI 能联网、跑代码、读写文件，真正动手干活
+    result = await run_agent_loop(prompt, system=with_constitution(EXECUTE_SYSTEM), project_id=task.get("project_id"))
+
+    # 把工具调用过程附在结果后面，让董事会看得到 agent 干了啥
+    steps = result.get("steps", [])
+    result_text = result["response"]
+    if steps:
+        log_lines = ["", "", "──────────", f"🔧 执行过程（调用了 {len(steps)} 次工具）："]
+        for i, s in enumerate(steps, 1):
+            log_lines.append(f"{i}. {s['tool']}({_brief_args(s['args'])})")
+        result_text = result_text + "\n".join(log_lines)
 
     db = await get_db()
     try:
         now = datetime.now().isoformat()
-        fallback_note = f" (备用模型，原模型: {result['fallback_from']})" if result.get("fallback_from") else ""
         await db.execute(
             """INSERT INTO agent_runs (id, task_id, model, prompt, response, tokens_used, cost, status, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, 'success', ?)""",
-            (run_id, task_id, result["model"] + fallback_note, prompt, result["response"], result["tokens"], result["cost"], now),
+            (run_id, task_id, result["model"], prompt, result_text, result["tokens"], result["cost"], now),
         )
         await db.execute(
             "UPDATE tasks SET status = 'reviewing', result = ?, progress = 80, updated_at = ? WHERE id = ?",
-            (result["response"], now, task_id),
+            (result_text, now, task_id),
         )
         await db.commit()
     finally:

@@ -1,0 +1,271 @@
+"""AI 工具层 —— 给执行 agent 装上"手脚"，让它能真正动手干活而不只是产出文字。
+
+工具：
+- web_fetch   联网抓取网页正文（调研、查资料）
+- run_python  在服务器上真实执行 Python（爬数据、算数据、生成文件）
+- write_file  写文件到项目工作区（产出 Excel/脚本/文档，可下载）
+- read_file   读回工作区的文件继续加工
+- list_files  列出工作区文件
+
+注意：按董事会决策，当前阶段**不做沙箱**，run_python 直接在服务器上执行。
+工作区隔离在 data/workspace/<project_id>/，文件可通过 /workspace 访问下载。
+"""
+import sys
+import json
+import asyncio
+import logging
+from pathlib import Path
+from app.config import BASE_DIR
+from app.services.ai_router import QWEN_BASE_URL, PRICE_TABLE, _load_config
+
+log = logging.getLogger(__name__)
+
+WORKSPACE_ROOT = BASE_DIR / "data" / "workspace"
+RUN_TIMEOUT = 120  # 单次代码执行最长 120 秒，防卡死（这是防挂起，不是沙箱）
+MAX_TOOL_OUTPUT = 12000  # 工具返回给 AI 的内容上限，防止撑爆上下文
+
+
+def _workspace(project_id: str | None) -> Path:
+    d = WORKSPACE_ROOT / (project_id or "general")
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _truncate(text: str, limit: int = MAX_TOOL_OUTPUT) -> str:
+    if len(text) > limit:
+        return text[:limit] + f"\n…（输出过长，已截断，共 {len(text)} 字符）"
+    return text
+
+
+# ── 工具实现 ──────────────────────────────────────────
+
+async def tool_web_fetch(url: str) -> str:
+    import httpx
+    from app.services.importer import _TextExtractor
+
+    url = url.strip()
+    if not url.startswith(("http://", "https://")):
+        url = "https://" + url
+    try:
+        async with httpx.AsyncClient(timeout=25, follow_redirects=True, headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
+        }) as client:
+            resp = await client.get(url)
+            resp.raise_for_status()
+    except Exception as e:
+        return f"抓取失败: {e}"
+    parser = _TextExtractor()
+    try:
+        parser.feed(resp.text)
+    except Exception:
+        pass
+    text = parser.get_text()
+    return _truncate(f"标题: {parser.title}\n来源: {url}\n\n{text}") if text else f"未提取到正文内容: {url}"
+
+
+async def tool_run_python(code: str, project_id: str | None) -> str:
+    workdir = _workspace(project_id)
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            sys.executable, "-c", code,
+            cwd=str(workdir),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+        try:
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=RUN_TIMEOUT)
+        except asyncio.TimeoutError:
+            proc.kill()
+            return f"执行超时（超过 {RUN_TIMEOUT} 秒已强制终止）"
+    except Exception as e:
+        return f"执行出错: {e}"
+    out = stdout.decode("utf-8", errors="replace") if stdout else ""
+    rc = proc.returncode
+    head = f"[退出码 {rc}]\n" if rc != 0 else ""
+    return _truncate(head + (out or "（无输出）"))
+
+
+def tool_write_file(filename: str, content: str, project_id: str | None) -> str:
+    workdir = _workspace(project_id)
+    safe = Path(filename).name  # 防目录穿越
+    fpath = workdir / safe
+    try:
+        fpath.write_text(content, encoding="utf-8")
+    except Exception as e:
+        return f"写入失败: {e}"
+    pid = project_id or "general"
+    return f"已写入文件: {safe}（{len(content)} 字符），下载地址 /workspace/{pid}/{safe}"
+
+
+def tool_read_file(filename: str, project_id: str | None) -> str:
+    workdir = _workspace(project_id)
+    safe = Path(filename).name
+    fpath = workdir / safe
+    if not fpath.exists():
+        return f"文件不存在: {safe}"
+    try:
+        return _truncate(fpath.read_text(encoding="utf-8", errors="replace"))
+    except Exception as e:
+        return f"读取失败: {e}"
+
+
+def tool_list_files(project_id: str | None) -> str:
+    workdir = _workspace(project_id)
+    files = [f.name for f in workdir.iterdir() if f.is_file()]
+    return "工作区文件: " + (", ".join(files) if files else "（空）")
+
+
+# ── 工具 schema（OpenAI 函数调用格式）──────────────────
+
+TOOL_SCHEMAS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "web_fetch",
+            "description": "抓取一个网页的正文内容，用于联网调研、查资料、看竞品页面。",
+            "parameters": {
+                "type": "object",
+                "properties": {"url": {"type": "string", "description": "网页完整地址"}},
+                "required": ["url"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "run_python",
+            "description": "在服务器上真实执行 Python 代码并返回输出。可用于爬数据、处理数据、调用 API、生成文件。已预装常见库（requests/httpx 等）。代码在项目工作区目录下运行，生成的文件留在工作区。",
+            "parameters": {
+                "type": "object",
+                "properties": {"code": {"type": "string", "description": "要执行的完整 Python 代码"}},
+                "required": ["code"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "write_file",
+            "description": "把内容写成文件保存到项目工作区，董事会可下载。适合产出报告、CSV、脚本等。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "filename": {"type": "string", "description": "文件名，如 report.md、data.csv"},
+                    "content": {"type": "string", "description": "文件内容"},
+                },
+                "required": ["filename", "content"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "read_file",
+            "description": "读取项目工作区里已有的文件内容。",
+            "parameters": {
+                "type": "object",
+                "properties": {"filename": {"type": "string"}},
+                "required": ["filename"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_files",
+            "description": "列出项目工作区里的所有文件。",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+]
+
+
+async def _dispatch_tool(name: str, args: dict, project_id: str | None) -> str:
+    try:
+        if name == "web_fetch":
+            return await tool_web_fetch(args.get("url", ""))
+        if name == "run_python":
+            return await tool_run_python(args.get("code", ""), project_id)
+        if name == "write_file":
+            return tool_write_file(args.get("filename", "untitled.txt"), args.get("content", ""), project_id)
+        if name == "read_file":
+            return tool_read_file(args.get("filename", ""), project_id)
+        if name == "list_files":
+            return tool_list_files(project_id)
+        return f"未知工具: {name}"
+    except Exception as e:
+        return f"工具 {name} 执行异常: {e}"
+
+
+# ── 工具调用客户端（OpenAI 兼容：DeepSeek/通义千问/OpenAI）──
+
+def _get_tool_client():
+    """选一个支持函数调用的 OpenAI 兼容模型。返回 (client, model_name, price_key)。"""
+    from openai import AsyncOpenAI
+    config = _load_config()
+    if config.get("deepseek_api_key"):
+        return AsyncOpenAI(api_key=config["deepseek_api_key"], base_url="https://api.deepseek.com"), "deepseek-chat", "deepseek"
+    if config.get("qwen_api_key"):
+        return AsyncOpenAI(api_key=config["qwen_api_key"], base_url=QWEN_BASE_URL), "qwen-plus", "qwen"
+    if config.get("openai_api_key"):
+        return AsyncOpenAI(api_key=config["openai_api_key"]), "gpt-4o", "openai"
+    return None, None, None
+
+
+async def run_agent_loop(prompt: str, system: str, project_id: str | None = None, max_steps: int = 10) -> dict:
+    """带工具的执行循环：AI 自主调用工具直到完成任务。
+    返回 {response, model, tokens, cost, steps}（steps 是工具调用日志，给人看 agent 干了啥）。"""
+    client, model_name, price_key = _get_tool_client()
+    if not client:
+        return {"response": "[错误] 工具执行需要 DeepSeek / 通义千问 / OpenAI 的 API Key（支持函数调用）。请到设置页配置。",
+                "model": "none", "tokens": 0, "cost": 0, "steps": []}
+
+    messages = [{"role": "system", "content": system}, {"role": "user", "content": prompt}]
+    prices = PRICE_TABLE.get(price_key, PRICE_TABLE["deepseek"])
+    total_tokens, total_cost, steps = 0, 0.0, []
+
+    for _ in range(max_steps):
+        try:
+            resp = await client.chat.completions.create(
+                model=model_name, messages=messages, tools=TOOL_SCHEMAS,
+                tool_choice="auto", max_tokens=4096,
+            )
+        except Exception as e:
+            return {"response": f"[错误] 模型调用失败: {e}", "model": model_name, "tokens": total_tokens, "cost": round(total_cost, 6), "steps": steps}
+
+        if resp.usage:
+            total_tokens += resp.usage.total_tokens
+            total_cost += resp.usage.prompt_tokens * prices["input"] + resp.usage.completion_tokens * prices["output"]
+
+        msg = resp.choices[0].message
+        if not msg.tool_calls:
+            # 没有再调工具，说明任务完成
+            return {"response": msg.content or "（无输出）", "model": f"{model_name}(agent)",
+                    "tokens": total_tokens, "cost": round(total_cost, 6), "steps": steps}
+
+        # 记录并执行工具调用
+        messages.append({
+            "role": "assistant",
+            "content": msg.content or "",
+            "tool_calls": [tc.model_dump() for tc in msg.tool_calls],
+        })
+        for tc in msg.tool_calls:
+            try:
+                args = json.loads(tc.function.arguments or "{}")
+            except json.JSONDecodeError:
+                args = {}
+            result = await _dispatch_tool(tc.function.name, args, project_id)
+            steps.append({"tool": tc.function.name, "args": args, "result": result[:500]})
+            messages.append({"role": "tool", "tool_call_id": tc.id, "content": result})
+
+    # 达到步数上限，再让模型基于已有信息给个总结
+    messages.append({"role": "user", "content": "已达到工具调用上限，请基于目前掌握的信息给出最终结果。"})
+    try:
+        resp = await client.chat.completions.create(model=model_name, messages=messages, max_tokens=4096)
+        if resp.usage:
+            total_tokens += resp.usage.total_tokens
+            total_cost += resp.usage.prompt_tokens * prices["input"] + resp.usage.completion_tokens * prices["output"]
+        final = resp.choices[0].message.content or "（无输出）"
+    except Exception as e:
+        final = f"（达到步数上限，且总结失败: {e}）"
+    return {"response": final, "model": f"{model_name}(agent)", "tokens": total_tokens, "cost": round(total_cost, 6), "steps": steps}
