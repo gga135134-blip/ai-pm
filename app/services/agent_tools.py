@@ -37,6 +37,23 @@ def _truncate(text: str, limit: int = MAX_TOOL_OUTPUT) -> str:
     return text
 
 
+def _sanitize_output(text: str) -> str:
+    """清掉模型泄漏的工具调用标记（DeepSeek 特殊 token、伪 XML invoke/parameter 等），
+    这些是内部机制，不该展示给董事会。"""
+    import re as _re
+    if not text:
+        return text
+    # DeepSeek 工具调用特殊 token，如 <｜tool▁calls▁begin｜>
+    text = _re.sub(r'<[｜|][^>]*[｜|]>', '', text)
+    # 伪 XML 工具标记 <tool_calls> <invoke ...> <parameter ...> 及其闭合
+    text = _re.sub(r'</?\s*(?:tool_calls|invoke|parameter)\b[^>]*>', '', text)
+    # 残留的 invoke name= / parameter name= 行
+    text = _re.sub(r'^\s*(?:invoke|parameter)\s+name=.*$', '', text, flags=_re.MULTILINE)
+    # 收敛多余空行
+    text = _re.sub(r'\n{3,}', '\n\n', text)
+    return text.strip()
+
+
 # ── 工具实现 ──────────────────────────────────────────
 
 async def tool_web_fetch(url: str) -> str:
@@ -212,7 +229,7 @@ def _get_tool_client():
     return None, None, None
 
 
-async def run_agent_loop(prompt: str, system: str, project_id: str | None = None, max_steps: int = 10) -> dict:
+async def run_agent_loop(prompt: str, system: str, project_id: str | None = None, max_steps: int = 18) -> dict:
     """带工具的执行循环：AI 自主调用工具直到完成任务。
     返回 {response, model, tokens, cost, steps}（steps 是工具调用日志，给人看 agent 干了啥）。"""
     client, model_name, price_key = _get_tool_client()
@@ -240,7 +257,7 @@ async def run_agent_loop(prompt: str, system: str, project_id: str | None = None
         msg = resp.choices[0].message
         if not msg.tool_calls:
             # 没有再调工具，说明任务完成
-            return {"response": msg.content or "（无输出）", "model": f"{model_name}(agent)",
+            return {"response": _sanitize_output(msg.content) or "（无输出）", "model": f"{model_name}(agent)",
                     "tokens": total_tokens, "cost": round(total_cost, 6), "steps": steps}
 
         # 记录并执行工具调用
@@ -265,7 +282,7 @@ async def run_agent_loop(prompt: str, system: str, project_id: str | None = None
         if resp.usage:
             total_tokens += resp.usage.total_tokens
             total_cost += resp.usage.prompt_tokens * prices["input"] + resp.usage.completion_tokens * prices["output"]
-        final = resp.choices[0].message.content or "（无输出）"
+        final = _sanitize_output(resp.choices[0].message.content) or "（无输出）"
     except Exception as e:
         final = f"（达到步数上限，且总结失败: {e}）"
     return {"response": final, "model": f"{model_name}(agent)", "tokens": total_tokens, "cost": round(total_cost, 6), "steps": steps}
