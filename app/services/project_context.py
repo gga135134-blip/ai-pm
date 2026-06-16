@@ -96,19 +96,27 @@ async def build_project_context(project_id: str, task_title: str, task_descripti
     blocks = []
     blocks.append(f"## 项目背景\n项目编号：{proj['code']}\n项目名称：{proj['name']}\n项目描述：{proj['description'] or '(无)'}")
 
-    # 知识库笔记总清单（强制塞，让 AI 一打开就看到知识库有什么；不放内容，省 token）
+    # 知识库导航：默认只放一行提示，让 AI 知道仓库存在但不污染上下文。
+    # 当任务描述提到"资料/上传/整理/已有/汇总/翻一下"等触发词时，才自动列清单。
     if all_notes:
-        src_map = {"ai_classified": "[AI分类]", "ai_summary": "[AI整理]", "auto_progress": "[进度]",
-                   "file_import": "[文件]", "upload": "[上传]", "url_import": "[网页]",
-                   "image": "[图片]", "image_article": "[图片整理]", "ai_chat": "[AI问答]",
-                   "ai_weekly": "[周报]", "master_ai": "[总AI]", "manual": "[手动]"}
-        list_lines = [f"\n## 📚 本项目知识库笔记清单（共 {len(all_notes)} 篇——这些都是董事会上传/AI 整理产出的项目资料）"]
-        for n in all_notes:
-            star = "⭐" if n["is_core"] else "  "
-            src = src_map.get(n.get("source_type"), "")
-            list_lines.append(f"  {star} id={n['id'][:8]} | {src}{n['title']}")
-        list_lines.append("\n（要读笔记全文：调 read_kb_note 工具，传 id 或标题。绝对不要再用 run_python 去文件系统里找！）")
-        blocks.append("\n".join(list_lines))
+        task_text = (task_title or "") + " " + (task_description or "")
+        triggers = ["上传", "资料", "整理", "汇总", "已有", "翻", "查一下", "看看", "梳理", "归类", "整合", "笔记", "资料库", "知识库"]
+        should_list = any(t in task_text for t in triggers)
+
+        if should_list:
+            src_map = {"ai_classified": "[AI分类]", "ai_summary": "[AI整理]", "auto_progress": "[进度]",
+                       "file_import": "[文件]", "upload": "[上传]", "url_import": "[网页]",
+                       "image": "[图片]", "image_article": "[图片整理]", "ai_chat": "[AI问答]",
+                       "ai_weekly": "[周报]", "master_ai": "[总AI]", "manual": "[手动]"}
+            list_lines = [f"\n## 📚 本项目知识库笔记清单（共 {len(all_notes)} 篇 · 任务提及资料/整理类操作，已为你列出）"]
+            for n in all_notes:
+                star = "⭐" if n["is_core"] else "  "
+                src = src_map.get(n.get("source_type"), "")
+                list_lines.append(f"  {star} id={n['id'][:8]} | {src}{n['title']}")
+            list_lines.append("\n（读全文用 read_kb_note；不要去文件系统找它们，它们在数据库里）")
+            blocks.append("\n".join(list_lines))
+        else:
+            blocks.append(f"\n💡 本项目知识库另有 {len(all_notes)} 篇笔记（已含上方核心档与相关参考）。如需翻看更多：list_kb_notes 列目录、read_kb_note 读全文。")
 
     total_chars = sum(len(b) for b in blocks)
 
