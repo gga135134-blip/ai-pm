@@ -88,6 +88,19 @@
     var input = document.getElementById('chat-input');
     var busy = false;
 
+    // 草稿自动保存：切页面/刷新都不丢
+    var DRAFT_KEY = 'chat_draft_v1';
+    try {
+        var saved = localStorage.getItem(DRAFT_KEY);
+        if (saved) input.value = saved;
+    } catch (e) {}
+    input.addEventListener('input', function() {
+        try { localStorage.setItem(DRAFT_KEY, input.value); } catch (e) {}
+    });
+    function clearDraft() {
+        try { localStorage.removeItem(DRAFT_KEY); } catch (e) {}
+    }
+
     function esc(s) {
         var d = document.createElement('div');
         d.textContent = s;
@@ -141,6 +154,7 @@
 
         addUserMsg(text);
         input.value = '';
+        clearDraft();
         addThinking();
 
         var fd = new FormData();
