@@ -89,6 +89,44 @@ async def task_update_status(task_id: str, status: str = Form(...)):
     return RedirectResponse(f"/projects/{project_id}", status_code=303)
 
 
+@router.post("/tasks/{task_id}/answer")
+async def task_answer(task_id: str, reply: str = Form(...)):
+    """回答 AI 的提问/补充信息：把回答追加进任务描述，重置为 pending 让自动执行循环或手动重跑接续干。"""
+    import asyncio
+    reply = reply.strip()
+    if not reply:
+        db = await get_db()
+        try:
+            cursor = await db.execute("SELECT project_id FROM tasks WHERE id = ?", (task_id,))
+            project_id = (await cursor.fetchone())["project_id"]
+        finally:
+            await db.close()
+        return RedirectResponse(f"/tasks/{task_id}", status_code=303)
+
+    now = datetime.now().isoformat()
+    addition = f"\n\n--- 董事会补充（{now[:16]}）---\n{reply}"
+    db = await get_db()
+    try:
+        cursor = await db.execute("SELECT description, project_id FROM tasks WHERE id = ?", (task_id,))
+        row = await cursor.fetchone()
+        new_desc = (row["description"] or "") + addition
+        # 把任务重置为 pending，进度回到 0，状态清空。让 auto_runner 自动捡起来，或人手动点 AI 执行
+        await db.execute(
+            """UPDATE tasks SET description = ?, status = 'pending', progress = 0,
+               needs_human = 0, updated_at = ? WHERE id = ?""",
+            (new_desc, now, task_id),
+        )
+        await db.commit()
+    finally:
+        await db.close()
+
+    # 立刻在后台触发一次执行（不等结果，前端立即跳回任务页可见状态变化）
+    from app.services.agent_manager import execute_task
+    asyncio.create_task(execute_task(task_id))
+
+    return RedirectResponse(f"/tasks/{task_id}", status_code=303)
+
+
 @router.post("/tasks/{task_id}/handoff")
 async def task_handoff(task_id: str, to: str = Form(...), assignee_name: str = Form("")):
     """任务交接：to='human' 人工接管 / to='ai' 交给AI"""
