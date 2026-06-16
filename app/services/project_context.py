@@ -51,6 +51,15 @@ async def build_project_context(project_id: str, task_title: str, task_descripti
         )
         core_notes = [dict(r) for r in await cursor.fetchall()]
 
+        # ②.5 全部笔记标题清单（不读内容，仅 id+标题+源类型；让 AI 看到知识库里到底有什么）
+        cursor = await db.execute(
+            """SELECT id, title, is_core, source_type FROM notes
+               WHERE project_id = ? AND deleted_at IS NULL
+               ORDER BY is_core DESC, updated_at DESC""",
+            (project_id,),
+        )
+        all_notes = [dict(r) for r in await cursor.fetchall()]
+
         # ③ 参考资料：本项目其他笔记按关键词检索打分，取前 MAX_REF_NOTES
         keywords = _extract_keywords(task_title + " " + (task_description or ""))
         ref_notes = []
@@ -87,7 +96,21 @@ async def build_project_context(project_id: str, task_title: str, task_descripti
     blocks = []
     blocks.append(f"## 项目背景\n项目编号：{proj['code']}\n项目名称：{proj['name']}\n项目描述：{proj['description'] or '(无)'}")
 
-    total_chars = len(blocks[0])
+    # 知识库笔记总清单（强制塞，让 AI 一打开就看到知识库有什么；不放内容，省 token）
+    if all_notes:
+        src_map = {"ai_classified": "[AI分类]", "ai_summary": "[AI整理]", "auto_progress": "[进度]",
+                   "file_import": "[文件]", "upload": "[上传]", "url_import": "[网页]",
+                   "image": "[图片]", "image_article": "[图片整理]", "ai_chat": "[AI问答]",
+                   "ai_weekly": "[周报]", "master_ai": "[总AI]", "manual": "[手动]"}
+        list_lines = [f"\n## 📚 本项目知识库笔记清单（共 {len(all_notes)} 篇——这些都是董事会上传/AI 整理产出的项目资料）"]
+        for n in all_notes:
+            star = "⭐" if n["is_core"] else "  "
+            src = src_map.get(n.get("source_type"), "")
+            list_lines.append(f"  {star} id={n['id'][:8]} | {src}{n['title']}")
+        list_lines.append("\n（要读笔记全文：调 read_kb_note 工具，传 id 或标题。绝对不要再用 run_python 去文件系统里找！）")
+        blocks.append("\n".join(list_lines))
+
+    total_chars = sum(len(b) for b in blocks)
 
     # 核心档
     if core_notes:
