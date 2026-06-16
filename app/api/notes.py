@@ -741,6 +741,25 @@ async def note_analyze_images(note_id: str):
     return RedirectResponse(f"/notes/{note_id}", status_code=303)
 
 
+@router.post("/notes/{note_id}/toggle-core")
+async def note_toggle_core(note_id: str):
+    """切换核心档标记：⭐ 标的笔记每次任务执行都会强制全文加载给 AI"""
+    db = await get_db()
+    try:
+        cursor = await db.execute("SELECT is_core FROM notes WHERE id = ?", (note_id,))
+        row = await cursor.fetchone()
+        new_val = 0 if row["is_core"] else 1
+        now = datetime.now().isoformat()
+        await db.execute(
+            "UPDATE notes SET is_core = ?, updated_at = ? WHERE id = ?",
+            (new_val, now, note_id),
+        )
+        await db.commit()
+    finally:
+        await db.close()
+    return RedirectResponse(f"/notes/{note_id}", status_code=303)
+
+
 @router.post("/notes/{note_id}/pin")
 async def note_toggle_pin(note_id: str):
     db = await get_db()

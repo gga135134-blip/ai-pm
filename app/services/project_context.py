@@ -1,0 +1,123 @@
+"""项目知识上下文 —— 任务执行时自动加载本项目的核心档和相关参考资料给 AI。
+
+两层策略：
+  1. 核心档（is_core=1）：本项目所有核心笔记，全文塞入（这是项目"宪法"，必须看）
+  2. 参考资料：按任务标题/描述关键词，从本项目其他笔记里检索最相关的若干篇（摘要）
+
+总量受字符上限保护，避免 token 爆炸。
+"""
+import re
+from app.database import get_db
+
+# 单篇核心笔记最大字符数（防一篇笔记太长撑爆）
+CORE_NOTE_MAX_CHARS = 8000
+# 单篇参考笔记最大字符数
+REF_NOTE_MAX_CHARS = 1500
+# 整个上下文（核心+参考）总字符上限
+TOTAL_CONTEXT_MAX_CHARS = 50000
+# 参考笔记最多取几篇
+MAX_REF_NOTES = 8
+
+
+def _extract_keywords(text: str) -> list[str]:
+    """从任务描述里粗暴提取关键词（>=2字的中英文片段）"""
+    parts = re.split(r"[\s,，。、？?！!：:；;\"'（）()【】\[\]{}\.]+", text or "")
+    return [p for p in parts if len(p) >= 2][:8]
+
+
+async def build_project_context(project_id: str, task_title: str, task_description: str = "") -> str:
+    """构造给任务 AI 的项目背景。返回拼好的文本块，可直接插到 prompt 前面。"""
+    if not project_id:
+        return ""
+
+    db = await get_db()
+    try:
+        # ① 项目元信息
+        cursor = await db.execute(
+            "SELECT code, name, description, status FROM projects WHERE id = ?",
+            (project_id,),
+        )
+        proj_row = await cursor.fetchone()
+        if not proj_row:
+            return ""
+        proj = dict(proj_row)
+
+        # ② 核心档：全部 is_core=1 且未删除
+        cursor = await db.execute(
+            """SELECT id, title, content, updated_at FROM notes
+               WHERE project_id = ? AND is_core = 1 AND deleted_at IS NULL
+               ORDER BY updated_at DESC""",
+            (project_id,),
+        )
+        core_notes = [dict(r) for r in await cursor.fetchall()]
+
+        # ③ 参考资料：本项目其他笔记按关键词检索打分，取前 MAX_REF_NOTES
+        keywords = _extract_keywords(task_title + " " + (task_description or ""))
+        ref_notes = []
+        if keywords:
+            like_parts = " OR ".join(["(title LIKE ? OR content LIKE ? OR tags LIKE ?)"] * len(keywords))
+            params = [project_id]
+            for kw in keywords:
+                params.extend([f"%{kw}%"] * 3)
+            cursor = await db.execute(
+                f"""SELECT id, title, content, tags FROM notes
+                    WHERE project_id = ? AND is_core = 0 AND deleted_at IS NULL
+                      AND ({like_parts})
+                    ORDER BY updated_at DESC LIMIT 30""",
+                params,
+            )
+            candidates = [dict(r) for r in await cursor.fetchall()]
+
+            def score(n):
+                s = 0
+                for kw in keywords:
+                    if kw in (n["title"] or ""):
+                        s += 3
+                    if kw in (n["tags"] or ""):
+                        s += 2
+                    s += min((n["content"] or "").count(kw), 5)
+                return s
+
+            candidates.sort(key=score, reverse=True)
+            ref_notes = candidates[:MAX_REF_NOTES]
+    finally:
+        await db.close()
+
+    # 拼上下文
+    blocks = []
+    blocks.append(f"## 项目背景\n项目编号：{proj['code']}\n项目名称：{proj['name']}\n项目描述：{proj['description'] or '(无)'}")
+
+    total_chars = len(blocks[0])
+
+    # 核心档
+    if core_notes:
+        core_block_lines = ["\n## 📖 项目核心档（必读·不许违背）"]
+        for n in core_notes:
+            content = (n["content"] or "")[:CORE_NOTE_MAX_CHARS]
+            if len(n["content"] or "") > CORE_NOTE_MAX_CHARS:
+                content += "\n…（核心档过长已截断）"
+            piece = f"\n### ⭐ {n['title']}\n{content}"
+            if total_chars + len(piece) > TOTAL_CONTEXT_MAX_CHARS:
+                core_block_lines.append(f"\n### ⭐ {n['title']}\n（因总上下文上限，本篇被省略，请用 read_file 或追问董事会获取细节）")
+            else:
+                core_block_lines.append(piece)
+                total_chars += len(piece)
+        blocks.append("\n".join(core_block_lines))
+    else:
+        blocks.append("\n## 📖 项目核心档\n（本项目还没有核心档。如果你的任务需要明确的目标/定位/规格等核心信息但找不到，请向董事会索取，不要凭空假设。）")
+
+    # 参考资料
+    if ref_notes:
+        ref_block_lines = [f"\n## 📚 相关参考资料（自动检索本项目知识库，共 {len(ref_notes)} 篇）"]
+        for n in ref_notes:
+            content = (n["content"] or "")[:REF_NOTE_MAX_CHARS]
+            if len(n["content"] or "") > REF_NOTE_MAX_CHARS:
+                content += "\n…（参考资料已截断，需要全文可用 read_file 或追问）"
+            piece = f"\n### {n['title']}\n{content}"
+            if total_chars + len(piece) > TOTAL_CONTEXT_MAX_CHARS:
+                break
+            ref_block_lines.append(piece)
+            total_chars += len(piece)
+        blocks.append("\n".join(ref_block_lines))
+
+    return "\n".join(blocks) + "\n\n---\n"

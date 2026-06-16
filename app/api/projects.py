@@ -116,7 +116,7 @@ async def project_detail(request: Request, project_id: str):
 
         # 项目关联的笔记（资料）
         cursor = await db.execute(
-            "SELECT id, title, tags, source_type, updated_at FROM notes WHERE project_id = ? AND deleted_at IS NULL ORDER BY updated_at DESC",
+            "SELECT id, title, tags, source_type, is_core, updated_at FROM notes WHERE project_id = ? AND deleted_at IS NULL ORDER BY is_core DESC, updated_at DESC",
             (project_id,),
         )
         project_notes = [dict(row) for row in await cursor.fetchall()]
@@ -135,6 +135,13 @@ async def project_detail(request: Request, project_id: str):
         )
         expenses = [dict(row) for row in await cursor.fetchall()]
         expense_total = round(sum(e["amount"] or 0 for e in expenses), 2)
+
+        # 核心档计数（项目"宪法"）
+        cursor = await db.execute(
+            "SELECT COUNT(*) as cnt FROM notes WHERE project_id = ? AND is_core = 1 AND deleted_at IS NULL",
+            (project_id,),
+        )
+        core_count = (await cursor.fetchone())["cnt"]
 
         # 作战室：最近本项目的 AI 执行记录（含工具步骤）
         cursor = await db.execute(
@@ -162,6 +169,7 @@ async def project_detail(request: Request, project_id: str):
             "expenses": expenses, "expense_total": expense_total,
             "auto_running": is_running(project_id),
             "runs_with_tools": runs_with_tools,
+            "core_count": core_count,
         },
     )
 

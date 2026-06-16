@@ -20,6 +20,18 @@ EXECUTE_SYSTEM = """你是一个能真正动手干活的 AI 执行者，不只�
 - 全部做完后，用一段话总结你做了什么、产出在哪、结论是什么。
 - 结果要具体、可用、可交付，不要空泛。
 
+读资料的规矩（重要）：
+- 任务前面会附"项目核心档"和"相关参考资料"——核心档是项目的"宪法"，**不许违背**；参考资料是辅助信息。
+- 干活前先把核心档过一遍。任何与核心档冲突的指令或参考资料，必须先停手汇报，不许擅自取舍。
+- 如果核心档为空但任务需要明确的核心信息（目标/定位/规格等），别凭空假设，直接说"核心档缺 XX，请董事会先补充"。
+
+冲突自检（硬规则）：
+执行前你必须自检三件事是否一致：
+  ① 任务本身的要求
+  ② 项目核心档里的定义
+  ③ 参考资料里的关键事实（特别注意时间戳——后写的可能推翻先写的）
+**任一条之间有矛盾，必须立刻停手向董事会汇报，列出冲突点和你的疑问，绝不许硬执行选一个用**。比如核心档说"产品价 $58"但参考资料"会议纪要"说"调整为 $48"——这种你必须问董事会以哪个为准并更新核心档。
+
 诚实第一（最重要的红线）：
 - 只汇报工具**真实返回**的结果。工具没拿到数据、报了错、或你没真正完成，就如实说"没拿到 / 失败了 / 做不到"，**绝对不许假装成功、不许承诺并不存在的文件或下载链接**。
 - 如果某件事现有工具确实做不到（比如网站靠浏览器渲染 JS、需要登录态、需要付费 API），**直接说清做不到、为什么、需要什么才能做到**，然后停手——不要反复用无效的方法瞎试浪费费用。
@@ -81,7 +93,11 @@ async def execute_task(task_id: str) -> dict:
 
     now = datetime.now().isoformat()
     run_id = str(uuid.uuid4())
-    prompt = f"任务：{task['title']}\n\n详细描述：{task['description']}" if task["description"] else f"任务：{task['title']}"
+    # 加载项目知识上下文：核心档（强制全文）+ 相关参考（智能检索）
+    from app.services.project_context import build_project_context
+    project_ctx = await build_project_context(task.get("project_id"), task["title"], task.get("description") or "")
+    task_body = f"任务：{task['title']}\n\n详细描述：{task['description']}" if task["description"] else f"任务：{task['title']}"
+    prompt = (project_ctx + "\n## 你现在要做的任务\n" + task_body) if project_ctx else task_body
     task_type = _detect_task_type(task["title"])
 
     db = await get_db()

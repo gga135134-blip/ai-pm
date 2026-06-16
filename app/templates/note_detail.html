@@ -12,6 +12,7 @@
         <div class="bg-white rounded-lg shadow-sm p-6">
             <div class="flex items-center justify-between mb-4">
                 <h1 class="text-xl font-bold text-gray-800">
+                    {% if note.is_core %}<span class="text-amber-500 mr-1" title="项目核心档（AI 任务必读）">⭐</span>{% endif %}
                     {% if note.is_pinned %}<span class="text-yellow-500 mr-1">&#9733;</span>{% endif %}
                     {{ note.title }}
                 </h1>
@@ -19,6 +20,14 @@
                     {% if note.image_path %}
                     <form method="POST" action="/notes/{{ note.id }}/analyze-images" onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').textContent='分析中…'">
                         <button class="text-sm px-3 py-1 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition">AI 分析图片</button>
+                    </form>
+                    {% endif %}
+                    {% if note.project_id %}
+                    <form method="POST" action="/notes/{{ note.id }}/toggle-core">
+                        <button class="text-sm px-3 py-1 border rounded-lg hover:bg-gray-50 transition {% if note.is_core %}bg-amber-50 border-amber-300 text-amber-700{% endif %}"
+                                title="标为核心档后，该项目所有 AI 任务执行时都会强制读取本笔记全文">
+                            {{ '⭐ 已设为核心' if note.is_core else '设为项目核心档' }}
+                        </button>
                     </form>
                     {% endif %}
                     <form method="POST" action="/notes/{{ note.id }}/pin">

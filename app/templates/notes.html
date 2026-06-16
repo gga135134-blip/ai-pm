@@ -145,6 +145,7 @@
                 <input type="checkbox" class="note-check mt-1.5 flex-shrink-0" value="{{ n.id }}" onchange="updateBatchBar()">
                 <a href="/notes/{{ n.id }}" class="flex-1 min-w-0 block">
                     <div class="flex items-center gap-2">
+                        {% if n.is_core %}<span class="text-amber-500 text-xs" title="项目核心档（AI 任务必读）">⭐</span>{% endif %}
                         {% if n.is_pinned %}
                         <span class="text-yellow-500 text-xs" title="已置顶">&#9733;</span>
                         {% endif %}

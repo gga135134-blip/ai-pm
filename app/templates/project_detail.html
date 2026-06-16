@@ -11,6 +11,9 @@
             {% if project.code %}<span class="text-sm font-mono bg-gray-800 text-white px-2 py-1 rounded">{{ project.code }}</span>{% endif %}
             <h1 class="text-2xl font-bold text-gray-800">{{ project.name }}</h1>
             <span class="text-xs px-2 py-1 rounded status-{{ project.status }}">{{ project.status }}</span>
+            <span class="text-xs {% if core_count %}text-amber-700 bg-amber-50 px-2 py-0.5 rounded{% else %}text-gray-400{% endif %}" title="核心档=AI每次任务必读的项目宪法">
+                ⭐ 核心档: {{ core_count }} 篇{% if not core_count %}（建议把项目目标/定位/规格标为核心档）{% endif %}
+            </span>
             <span class="text-xs text-purple-600 font-medium">AI 费用: ${{ project_cost }}</span>
             {% if project.budget %}<span class="text-xs text-gray-500">预算: ¥{{ project.budget }}</span>{% endif %}
             {% if project.revenue %}<span class="text-xs text-green-600 font-medium">收款: ¥{{ project.revenue }}</span>{% endif %}
@@ -301,14 +304,17 @@ function switchView(name) {
         {% if project_notes %}
         <div class="space-y-2">
             {% for n in project_notes %}
-            <a href="/notes/{{ n.id }}" class="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 transition">
+            <a href="/notes/{{ n.id }}" class="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 transition {% if n.is_core %}bg-amber-50 border-amber-200{% endif %}">
                 <div class="flex items-center gap-2">
+                    {% if n.is_core %}<span class="text-amber-500" title="项目核心档（AI 任务必读）">⭐</span>{% endif %}
                     {% if n.source_type == 'ai_classified' %}
                     <span class="text-xs bg-purple-100 text-purple-600 px-2 py-0.5 rounded">AI分类</span>
                     {% elif n.source_type == 'file_import' or n.source_type == 'upload' %}
                     <span class="text-xs bg-green-100 text-green-600 px-2 py-0.5 rounded">文件</span>
                     {% elif n.source_type == 'master_ai' %}
                     <span class="text-xs bg-indigo-100 text-indigo-600 px-2 py-0.5 rounded">总AI</span>
+                    {% elif n.source_type == 'auto_progress' %}
+                    <span class="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded">进度</span>
                     {% else %}
                     <span class="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded">手动</span>
                     {% endif %}
