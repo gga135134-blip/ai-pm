@@ -149,6 +149,32 @@ async def _run_one_task(task: dict, project: dict, spent_before: float) -> dict:
     return {"task": after, "status": after["status"], "cost": task_cost}
 
 
+async def _heal_stuck_running(project_id: str):
+    """启动前自愈：把卡在 running 但内存里没活跃 worker 的任务重置回 pending。
+    这通常是进程被中断/重启留下的孤儿任务。"""
+    from app.services.worker_status import get_project_workers
+    active_task_ids = {w.get("task_id") for w in get_project_workers(project_id)}
+    now = datetime.now().isoformat()
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            "SELECT id, title FROM tasks WHERE project_id = ? AND status = 'running'",
+            (project_id,),
+        )
+        stuck = [(r["id"], r["title"]) for r in await cursor.fetchall() if r["id"] not in active_task_ids]
+        for tid, title in stuck:
+            await db.execute(
+                "UPDATE tasks SET status = 'pending', updated_at = ? WHERE id = ?",
+                (now, tid),
+            )
+            log.info("Healed stuck-running task %s (%s) -> pending", tid, title)
+        if stuck:
+            await db.commit()
+        return len(stuck)
+    finally:
+        await db.close()
+
+
 async def run_project_auto(project_id: str):
     """并行编排：最多 N 个 worker agent 同时干活，完成一个补一个。
     总 AI 角色由 auto_runner 扮演——派工、限预算、通知董事会。"""
@@ -161,6 +187,11 @@ async def run_project_auto(project_id: str):
         project = dict(row)
     finally:
         await db.close()
+
+    # 启动前自愈：清理上次崩溃/重启留下的卡死 running 任务
+    healed = await _heal_stuck_running(project_id)
+    if healed:
+        log.info("Project %s: healed %d stuck-running tasks before launch", project_id, healed)
 
     _running[project_id] = True
     budget = project.get("ai_budget") or 0

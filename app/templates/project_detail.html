@@ -140,10 +140,11 @@
     <button onclick="switchView('decisions')" class="text-sm px-3 py-1 rounded-lg" data-tab="decisions">决策 ({{ project_decisions|length }})</button>
     <button onclick="switchView('expenses')" class="text-sm px-3 py-1 rounded-lg" data-tab="expenses">支出 (¥{{ expense_total }})</button>
     <button onclick="switchView('warroom')" class="text-sm px-3 py-1 rounded-lg" data-tab="warroom">🛰️ AI 作战室</button>
+    <button onclick="switchView('projai')" class="text-sm px-3 py-1 rounded-lg" data-tab="projai">💬 项目 AI</button>
 </div>
 <script>
 function switchView(name) {
-    ['board','tree','docs','decisions','expenses','warroom'].forEach(function(v){
+    ['board','tree','docs','decisions','expenses','warroom','projai'].forEach(function(v){
         var el = document.getElementById(v+'-view');
         if(el) el.style.display = v===name ? (v==='board'?'grid':'block') : 'none';
     });
@@ -495,6 +496,143 @@ function switchView(name) {
         } else {
             if (pollTimer){ clearInterval(pollTimer); pollTimer = null; }
         }
+    };
+})();
+</script>
+
+<!-- 项目 AI 对话视图 -->
+<div id="projai-view" class="space-y-4" style="display:none">
+    <div class="bg-white rounded-lg shadow-sm p-4">
+        <div class="flex items-start justify-between mb-3">
+            <div>
+                <h3 class="text-sm font-semibold text-gray-700">💬 [{{ project.code }}]「{{ project.name }}」专属 AI</h3>
+                <p class="text-xs text-gray-400 mt-1">只懂本项目（核心档+所有任务+笔记）。可以让它当场干活、追加任务、启停自动执行。</p>
+            </div>
+            <form method="POST" action="/projects/{{ project.id }}/ai-clear" onsubmit="return confirm('清空本项目所有对话？')">
+                <button class="text-xs px-3 py-1 border rounded-lg text-gray-500 hover:bg-gray-50">清空</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="projai-messages" class="bg-white rounded-lg shadow-sm p-4 space-y-3" style="min-height:300px;max-height:500px;overflow-y:auto">
+        <div class="text-center text-gray-400 text-sm py-12" id="projai-empty">
+            还没有对话。试试说："这个项目目前进度怎么样？" 或 "帮我新建一个任务：撰写品牌故事"
+        </div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow-sm p-3">
+        <form id="projai-form" class="flex gap-2">
+            <select id="projai-sender" class="w-20 border rounded-lg px-2 py-2 text-sm outline-none">
+                <option value="Gaga">Gaga</option>
+                <option value="An">An</option>
+            </select>
+            <textarea id="projai-input" required rows="2" placeholder="跟项目 AI 说点什么...（Enter 发送, Shift+Enter 换行）"
+                class="flex-1 border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500 resize-none"></textarea>
+            <button type="submit" id="projai-send" class="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-purple-700 transition self-stretch">发送</button>
+        </form>
+    </div>
+</div>
+
+<script>
+(function(){
+    var projectId = "{{ project.id }}";
+    var box, input, sendBtn, form;
+    var loaded = false, busy = false;
+    var DRAFT_KEY = 'projai_draft_' + projectId;
+
+    function esc(s){ var d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+    function nowHM(){ var d=new Date(); return ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2); }
+
+    function addUserMsg(text, time){
+        document.getElementById('projai-empty') && document.getElementById('projai-empty').remove();
+        box.insertAdjacentHTML('beforeend',
+            '<div class="flex justify-end"><div class="max-w-[80%]">'
+            + '<div class="bg-blue-600 text-white rounded-lg rounded-br-none px-4 py-3"><div class="text-sm leading-relaxed" style="white-space:pre-wrap">' + esc(text) + '</div></div>'
+            + '<div class="text-xs text-gray-400 mt-1 text-right">' + (time||nowHM()) + '</div></div></div>');
+        box.scrollTop = box.scrollHeight;
+    }
+    function addAiMsg(text, time){
+        document.getElementById('projai-empty') && document.getElementById('projai-empty').remove();
+        box.insertAdjacentHTML('beforeend',
+            '<div class="flex justify-start"><div class="max-w-[85%] w-full">'
+            + '<div class="text-xs font-semibold text-purple-600 mb-1">💬 项目 AI</div>'
+            + '<div class="bg-gray-100 text-gray-800 rounded-lg rounded-bl-none px-4 py-3"><div class="text-sm leading-relaxed" style="white-space:pre-wrap">' + esc(text) + '</div></div>'
+            + '<div class="text-xs text-gray-400 mt-1">' + (time||nowHM()) + '</div></div></div>');
+        box.scrollTop = box.scrollHeight;
+    }
+    function addThinking(){
+        box.insertAdjacentHTML('beforeend',
+            '<div class="flex justify-start" id="projai-thinking"><div><div class="bg-gray-100 text-gray-500 rounded-lg px-4 py-3 text-sm">正在思考…</div></div></div>');
+        box.scrollTop = box.scrollHeight;
+    }
+
+    function loadHistory(){
+        if (loaded) return;
+        fetch('/projects/' + projectId + '/ai-messages')
+            .then(function(r){ return r.json(); })
+            .then(function(data){
+                loaded = true;
+                if (!data.messages || data.messages.length === 0) return;
+                document.getElementById('projai-empty') && document.getElementById('projai-empty').remove();
+                data.messages.forEach(function(m){
+                    var t = (m.created_at || '').substring(11, 16);
+                    if (m.direction === 'in') addUserMsg(m.content, t);
+                    else addAiMsg(m.content, t);
+                });
+            });
+    }
+
+    function send(){
+        if (busy) return;
+        var text = input.value.trim();
+        if (!text) return;
+        busy = true; sendBtn.disabled = true; sendBtn.textContent = '发送中…'; sendBtn.classList.add('opacity-60');
+        addUserMsg(text);
+        input.value = '';
+        try { localStorage.removeItem(DRAFT_KEY); } catch(e){}
+        addThinking();
+
+        var fd = new FormData();
+        fd.append('message', text);
+        fd.append('sender', document.getElementById('projai-sender').value);
+
+        fetch('/projects/' + projectId + '/ai-ask', {method:'POST', body:fd})
+            .then(function(r){ return r.json(); })
+            .then(function(data){
+                var t = document.getElementById('projai-thinking'); if (t) t.remove();
+                addAiMsg(data.reply || '(无回复)');
+            })
+            .catch(function(err){
+                var t = document.getElementById('projai-thinking'); if (t) t.remove();
+                addAiMsg('[出错了] ' + err);
+            })
+            .finally(function(){
+                busy = false; sendBtn.disabled = false; sendBtn.textContent = '发送'; sendBtn.classList.remove('opacity-60');
+                input.focus();
+            });
+    }
+
+    function init(){
+        box = document.getElementById('projai-messages');
+        input = document.getElementById('projai-input');
+        sendBtn = document.getElementById('projai-send');
+        form = document.getElementById('projai-form');
+        // 草稿恢复
+        try { var d = localStorage.getItem(DRAFT_KEY); if (d) input.value = d; } catch(e){}
+        input.addEventListener('input', function(){
+            try { localStorage.setItem(DRAFT_KEY, input.value); } catch(e){}
+        });
+        form.addEventListener('submit', function(e){ e.preventDefault(); send(); });
+        input.addEventListener('keydown', function(e){
+            if (e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); send(); }
+        });
+    }
+    init();
+
+    var origSwitch = window.switchView;
+    window.switchView = function(name){
+        origSwitch(name);
+        if (name === 'projai'){ loadHistory(); setTimeout(function(){ input && input.focus(); }, 50); }
     };
 })();
 </script>

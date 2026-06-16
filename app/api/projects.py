@@ -238,6 +238,42 @@ async def expense_delete(project_id: str, expense_id: str):
     return RedirectResponse(f"/projects/{project_id}", status_code=303)
 
 
+@router.get("/projects/{project_id}/ai-messages")
+async def project_ai_messages(project_id: str):
+    """项目 AI 对话历史 JSON"""
+    from fastapi.responses import JSONResponse
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            "SELECT content, direction, created_at FROM messages WHERE channel = 'project_ai' AND project_id = ? ORDER BY created_at ASC LIMIT 100",
+            (project_id,),
+        )
+        rows = [dict(r) for r in await cursor.fetchall()]
+    finally:
+        await db.close()
+    return JSONResponse({"messages": rows})
+
+
+@router.post("/projects/{project_id}/ai-ask")
+async def project_ai_ask(project_id: str, message: str = Form(...), sender: str = Form("Gaga"), model: str = Form("auto")):
+    """项目 AI 接收消息并回复"""
+    from fastapi.responses import JSONResponse
+    from app.services.project_ai import project_chat
+    result = await project_chat(project_id, message, sender, model)
+    return JSONResponse(result)
+
+
+@router.post("/projects/{project_id}/ai-clear")
+async def project_ai_clear(project_id: str):
+    db = await get_db()
+    try:
+        await db.execute("DELETE FROM messages WHERE channel = 'project_ai' AND project_id = ?", (project_id,))
+        await db.commit()
+    finally:
+        await db.close()
+    return RedirectResponse(f"/projects/{project_id}", status_code=303)
+
+
 @router.post("/projects/{project_id}/delete")
 async def project_delete(project_id: str):
     db = await get_db()
