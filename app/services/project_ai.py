@@ -35,10 +35,17 @@ PROJECT_AI_SYSTEM = """你是 **项目 {code} 「{name}」 的专属 AI**，只�
 
 可用 action：
 - "chat": 纯对话/汇报/追问，不做任何改动。params: {{}}
-- "do_now": 当场用工具做一件具体的事（联网抓资料、跑代码、生成文件）。本项目工作区会自动归属。params: {{"task": "具体描述"}}
+- "do_now": 当场用工具做一件具体的事（联网抓资料、跑代码、生成文件、**读知识库笔记**）。本项目工作区会自动归属。params: {{"task": "具体描述"}}
 - "create_task": 在本项目新建一个任务。params: {{"title": "任务标题", "description": "详细描述", "assignee": "ai 或留空表示人工", "priority": 1-5, "ai_model": "auto/claude/openai/deepseek/qwen"}}
 - "start_auto": 启动本项目的自动执行（worker 并行干所有待办 AI 任务）。params: {{}}
 - "stop_auto": 停止本项目自动执行。params: {{}}
+
+**两个不同的存储（必须区分清楚，否则会答错）**：
+- **📚 知识库笔记**：董事会上传/AI 整理产出的内容，存数据库。上面"项目当前状态"里已经列出了本项目所有笔记的标题。
+  - 想看笔记**内容**：用 do_now，task 描述里说"读知识库笔记《xxx》并 yyy"，do_now 调用的执行 agent 会自动加载本项目的核心档+相关笔记全文。
+  - 董事会说"上传了"、"整理出了笔记"、"在知识库放了 xxx" → 一律指**知识库**，不是工作区！
+- **📁 工作区文件**：只有执行 agent 用 run_python/write_file 产出的临时文件才在这里。**普通情况下董事会不会往工作区放东西**。
+- 如果你看到上面的"📚 知识库笔记清单"里有标题，那就**真的存在**，别说"没看到"。
 
 诚信红线：
 - 历史对话里 [执行结果] 是真实回执，看到 ❌ 就承认失败，别假装成功。
@@ -65,19 +72,16 @@ async def get_project_snapshot(project_id: str) -> str:
         )
         tasks = [dict(r) for r in await cursor.fetchall()]
 
-        # 核心档列表
+        # 知识库笔记清单（按 is_core 优先 + 最近更新）
         cursor = await db.execute(
-            "SELECT title FROM notes WHERE project_id = ? AND is_core = 1 AND deleted_at IS NULL ORDER BY updated_at DESC",
+            """SELECT title, is_core, source_type, updated_at FROM notes
+               WHERE project_id = ? AND deleted_at IS NULL
+               ORDER BY is_core DESC, updated_at DESC LIMIT 50""",
             (project_id,),
         )
-        core_notes = [r["title"] for r in await cursor.fetchall()]
-
-        # 笔记总数
-        cursor = await db.execute(
-            "SELECT COUNT(*) as cnt FROM notes WHERE project_id = ? AND deleted_at IS NULL",
-            (project_id,),
-        )
-        note_count = (await cursor.fetchone())["cnt"]
+        all_notes = [dict(r) for r in await cursor.fetchall()]
+        core_notes = [n["title"] for n in all_notes if n["is_core"]]
+        note_count = len(all_notes)
 
         # AI 费用
         cursor = await db.execute(
@@ -112,7 +116,22 @@ async def get_project_snapshot(project_id: str) -> str:
     else:
         lines.append("- ⭐ 核心档: 暂无（如果董事会确认了项目宪法、目标定位等，建议提醒他们标为核心档）")
 
-    lines.append(f"- 知识库: {note_count} 条笔记关联本项目")
+    # 列出全部笔记标题（带 ⭐ 标 + 源类型），让 AI 知道知识库里有什么
+    if all_notes:
+        lines.append(f"- 📚 知识库笔记清单（共 {note_count} 篇，本项目所有笔记标题如下）:")
+        for n in all_notes[:50]:
+            star = "⭐" if n["is_core"] else "  "
+            src_label = {"ai_classified": "[AI分类]", "ai_summary": "[AI整理]",
+                         "auto_progress": "[进度]", "file_import": "[文件]",
+                         "upload": "[上传]", "url_import": "[网页]",
+                         "image": "[图片]", "image_article": "[图片整理]",
+                         "ai_chat": "[AI问答]", "ai_weekly": "[周报]",
+                         "master_ai": "[总AI]"}.get(n.get("source_type"), "")
+            lines.append(f"    {star} {src_label}{n['title']}")
+        if note_count > 50:
+            lines.append(f"    …还有 {note_count - 50} 篇（用 do_now 可让执行 agent 智能检索全部）")
+    else:
+        lines.append("- 📚 知识库: 本项目暂无任何笔记")
     return "\n".join(lines)
 
 
