@@ -53,7 +53,12 @@ MASTER_SYSTEM = """你现在的角色是**总 AI（项目总监）**。董事会
 - 项目一律用编号称呼（如 P003），方便董事会指代。
 - reply 用中文，简洁直接，不说客套话。
 - params 里引用项目用 "project" 字段，填编号（P003）或项目名都行。
-- 只返回 JSON，不要返回任何 JSON 以外的文字。"""
+- 只返回 JSON，不要返回任何 JSON 以外的文字。
+
+**诚信红线（最重要）**：
+- 历史对话里 [执行结果] 是真实的动作执行回执，不是你的发言。仔细看它——如果它以 ❌ 开头，说明那个动作失败了，别假装成功、别在 reply 里说"已创建/已完成"。
+- 一个动作连续失败两次以上，必须停手在 reply 里向董事会汇报失败原因和建议，不要无限重试。
+- 你的 reply 文字不会真的执行任何事，**只有 action 字段会真触发动作**。所以"我会建一个项目"这种话毫无意义——要么这一轮就 action=create_project 真建，要么别说。"""
 
 
 async def _resolve_project(ref: str) -> str | None:
@@ -151,9 +156,8 @@ async def _get_recent_history(limit: int = 12) -> str:
     lines = []
     for r in rows:
         who = "董事会" if r["direction"] == "in" else "你(总AI)"
-        # 去掉 AI 回复里的 [执行结果] 尾巴，保持历史干净
-        content = r["content"].split("\n\n[执行结果]")[0]
-        lines.append(f"{who}: {content}")
+        # 保留 [执行结果]，让 AI 能看到上一轮动作真实成没成（不再被自己骗）
+        lines.append(f"{who}: {r['content']}")
     return "\n".join(lines)
 
 
@@ -230,24 +234,33 @@ async def master_chat(message: str, sender: str, model: str = "auto") -> dict:
     params = parsed.get("params", {}) or {}
     reply = parsed.get("reply") or parsed.get("response") or "我理解了，正在处理..."
 
-    # 5. 执行动作
+    # 5. 执行动作（统一包 try/except 暴露错误，避免静默失败让 AI 自己编"已成功"）
     action_result = None
-    if action == "do_now":
-        action_result = await _action_do_now(params, history)
-    elif action == "create_project":
-        action_result = await _action_create_project(params)
-    elif action == "decompose":
-        action_result = await _action_decompose(params)
-    elif action == "execute_tasks":
-        action_result = await _action_execute_tasks(params)
-    elif action == "classify_text":
-        action_result = await _action_classify(params)
-    elif action == "status_report":
-        action_result = await _action_status_report(params)
-    elif action == "decision":
-        action_result = await _action_decision(params)
-    elif action == "create_note":
-        action_result = await _action_create_note(params)
+    if action != "chat":
+        try:
+            if action == "do_now":
+                action_result = await _action_do_now(params, history)
+            elif action == "create_project":
+                action_result = await _action_create_project(params)
+            elif action == "decompose":
+                action_result = await _action_decompose(params)
+            elif action == "execute_tasks":
+                action_result = await _action_execute_tasks(params)
+            elif action == "classify_text":
+                action_result = await _action_classify(params)
+            elif action == "status_report":
+                action_result = await _action_status_report(params)
+            elif action == "decision":
+                action_result = await _action_decision(params)
+            elif action == "create_note":
+                action_result = await _action_create_note(params)
+            else:
+                action_result = f"❌ 未识别的动作: {action}"
+        except Exception as e:
+            import traceback
+            log = __import__("logging").getLogger(__name__)
+            log.exception("Action %s failed", action)
+            action_result = f"❌ 动作 {action} 执行失败: {type(e).__name__}: {e}"
 
     # 6. 保存 AI 回复
     ai_msg_id = str(uuid.uuid4())
