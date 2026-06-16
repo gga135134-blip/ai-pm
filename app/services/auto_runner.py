@@ -70,6 +70,33 @@ async def _get_next_task(project_id: str) -> dict | None:
         await db.close()
 
 
+async def _claim_next_task(project_id: str) -> dict | None:
+    """原子地领取一个待执行任务并立刻标记为 running，防止并发重复领取"""
+    from datetime import datetime as _dt
+    now = _dt.now().isoformat()
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            """SELECT * FROM tasks WHERE project_id = ? AND status = 'pending'
+            AND assignee = 'ai' AND needs_human = 0
+            ORDER BY priority ASC, created_at ASC LIMIT 1""",
+            (project_id,),
+        )
+        row = await cursor.fetchone()
+        if not row:
+            return None
+        task = dict(row)
+        # 立刻改状态防止下一次循环重复领取
+        await db.execute(
+            "UPDATE tasks SET status = 'running', updated_at = ? WHERE id = ? AND status = 'pending'",
+            (now, task["id"]),
+        )
+        await db.commit()
+        return task
+    finally:
+        await db.close()
+
+
 async def _get_task(task_id: str) -> dict:
     db = await get_db()
     try:
@@ -79,8 +106,52 @@ async def _get_task(task_id: str) -> dict:
         await db.close()
 
 
+MAX_PARALLEL_WORKERS = 3  # 一个项目最多同时跑几个 worker agent
+
+
+async def _run_one_task(task: dict, project: dict, spent_before: float) -> dict:
+    """跑一个任务的完整闭环：execute_task → 写进度笔记 → 返回结果。
+    出错也要捕获返回，避免拖垮 gather。"""
+    try:
+        await execute_task(task["id"])
+    except Exception as e:
+        log.error("Auto execute task %s failed: %s", task["id"], e)
+        now = datetime.now().isoformat()
+        db = await get_db()
+        try:
+            await db.execute(
+                "UPDATE tasks SET status = 'failed', updated_at = ? WHERE id = ?", (now, task["id"])
+            )
+            await db.commit()
+        finally:
+            await db.close()
+        try:
+            await notify_wechat(f"❌ 任务执行出错：{task['title']}", f"项目：{project['name']}\n错误：{e}")
+        except Exception:
+            pass
+        return {"task": task, "status": "failed", "cost": 0}
+
+    after = await _get_task(task["id"])
+    spent_after = await get_ai_spent(project["id"])
+    task_cost = round(spent_after - spent_before, 6)
+
+    if after["status"] == "done":
+        await _write_progress_note(project, after, "完成", task_cost)
+    elif after["status"] == "blocked":
+        await _write_progress_note(project, after, "未过审-待人工", task_cost)
+        try:
+            await notify_wechat(
+                f"🔍 任务需人工审核：{after['title']}",
+                f"项目：{project['name']}\nAI 审核未通过，已标记等你处理。",
+            )
+        except Exception:
+            pass
+    return {"task": after, "status": after["status"], "cost": task_cost}
+
+
 async def run_project_auto(project_id: str):
-    """自动执行循环：逐个跑完项目里所有可自动执行的 AI 任务"""
+    """并行编排：最多 N 个 worker agent 同时干活，完成一个补一个。
+    总 AI 角色由 auto_runner 扮演——派工、限预算、通知董事会。"""
     db = await get_db()
     try:
         cursor = await db.execute("SELECT * FROM projects WHERE id = ?", (project_id,))
@@ -94,7 +165,8 @@ async def run_project_auto(project_id: str):
     _running[project_id] = True
     budget = project.get("ai_budget") or 0
     warned_80 = False
-    done_count, blocked_count = 0, 0
+    done_count, blocked_count, failed_count = 0, 0, 0
+    workers: set[asyncio.Task] = set()
 
     try:
         while _running.get(project_id):
@@ -114,44 +186,52 @@ async def run_project_auto(project_id: str):
                         f"AI 费用已用 ${spent:.4f}（{spent / budget * 100:.0f}%），预算 ${budget:.2f}。",
                     )
 
-            # ── 取下一个任务 ──
-            task = await _get_next_task(project_id)
-            if not task:
+            # ── 派工：补满到 MAX_PARALLEL_WORKERS ──
+            while _running.get(project_id) and len(workers) < MAX_PARALLEL_WORKERS:
+                task = await _claim_next_task(project_id)
+                if not task:
+                    break
+                w = asyncio.create_task(_run_one_task(task, project, spent))
+                workers.add(w)
+                log.info("Project %s: dispatched worker for task %s (running=%d)", project_id, task["id"], len(workers))
+
+            if not workers:
+                # 没活了，结束
                 break
 
-            # ── 执行（含自动 AI 审核）──
-            try:
-                await execute_task(task["id"])
-            except Exception as e:
-                log.error("Auto execute task %s failed: %s", task["id"], e)
-                now = datetime.now().isoformat()
-                db = await get_db()
+            # ── 等任一 worker 完成，统计、继续派活 ──
+            done, workers = await asyncio.wait(workers, return_when=asyncio.FIRST_COMPLETED)
+            for w in done:
                 try:
-                    await db.execute(
-                        "UPDATE tasks SET status = 'failed', updated_at = ? WHERE id = ?", (now, task["id"])
-                    )
-                    await db.commit()
-                finally:
-                    await db.close()
-                await notify_wechat(f"❌ 任务执行出错：{task['title']}", f"项目：{project['name']}\n错误：{e}")
-                continue
+                    r = w.result()
+                    s = r.get("status")
+                    if s == "done":
+                        done_count += 1
+                    elif s == "blocked":
+                        blocked_count += 1
+                    elif s == "failed":
+                        failed_count += 1
+                except Exception as e:
+                    log.error("Worker task crashed: %s", e)
+                    failed_count += 1
 
-            # ── 记录进度到知识库 ──
-            after = await _get_task(task["id"])
-            spent_now = await get_ai_spent(project_id)
-            task_cost = round(spent_now - spent, 6)
-            if after["status"] == "done":
-                done_count += 1
-                await _write_progress_note(project, after, "完成", task_cost)
-            elif after["status"] == "blocked":
-                blocked_count += 1
-                await _write_progress_note(project, after, "未过审-待人工", task_cost)
-                await notify_wechat(
-                    f"🔍 任务需人工审核：{after['title']}",
-                    f"项目：{project['name']}\nAI 审核未通过，已标记等你处理。",
-                )
+            await asyncio.sleep(0.5)
 
-            await asyncio.sleep(1)
+        # 收尾：等剩下的 worker 跑完（如果是被 stop 中断的也要等当前任务结束）
+        if workers:
+            done, _ = await asyncio.wait(workers)
+            for w in done:
+                try:
+                    r = w.result()
+                    s = r.get("status")
+                    if s == "done":
+                        done_count += 1
+                    elif s == "blocked":
+                        blocked_count += 1
+                    elif s == "failed":
+                        failed_count += 1
+                except Exception:
+                    failed_count += 1
 
         # ── 收尾汇总 ──
         db = await get_db()
@@ -169,12 +249,12 @@ async def run_project_auto(project_id: str):
 
         final_spent = await get_ai_spent(project_id)
         summary = (
-            f"本轮完成 {done_count} 个任务，{blocked_count} 个待人工审核。\n"
+            f"完成 {done_count} 个、待人工审核 {blocked_count} 个、失败 {failed_count} 个。\n"
             f"还有 {counts.get('need_human') or 0} 个任务等你拍板，"
             f"{counts.get('human_tasks') or 0} 个人工任务。\n"
             f"项目累计 AI 费用：${final_spent:.4f}"
         )
-        if done_count or blocked_count:
+        if done_count or blocked_count or failed_count:
             await notify_wechat(f"✅ 自动执行结束：{project['name']}", summary)
     finally:
         _running.pop(project_id, None)

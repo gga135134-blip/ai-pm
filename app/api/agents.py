@@ -25,6 +25,23 @@ async def api_auto_stop(project_id: str):
     return RedirectResponse(f"/projects/{project_id}", status_code=303)
 
 
+@router.get("/projects/{project_id}/workers")
+async def api_project_workers(project_id: str):
+    """作战室数据：返回当前项目正在跑的 worker agent 状态（前端轮询）"""
+    from fastapi.responses import JSONResponse
+    from app.services.worker_status import get_project_workers
+    from app.services.auto_runner import is_running, get_ai_spent
+
+    workers = get_project_workers(project_id)
+    spent = await get_ai_spent(project_id)
+    return JSONResponse({
+        "auto_running": is_running(project_id),
+        "workers": workers,
+        "worker_count": len(workers),
+        "ai_spent": spent,
+    })
+
+
 @router.post("/projects/{project_id}/decompose")
 async def api_decompose(project_id: str, goal: str = Form(...), model: str = Form("auto")):
     await decompose_project(project_id, goal, model)

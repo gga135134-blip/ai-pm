@@ -229,7 +229,8 @@ def _get_tool_client():
     return None, None, None
 
 
-async def run_agent_loop(prompt: str, system: str, project_id: str | None = None, max_steps: int = 18) -> dict:
+async def run_agent_loop(prompt: str, system: str, project_id: str | None = None, max_steps: int = 18,
+                          on_step: callable = None) -> dict:
     """带工具的执行循环：AI 自主调用工具直到完成任务。
     返回 {response, model, tokens, cost, steps}（steps 是工具调用日志，给人看 agent 干了啥）。"""
     client, model_name, price_key = _get_tool_client()
@@ -271,9 +272,20 @@ async def run_agent_loop(prompt: str, system: str, project_id: str | None = None
                 args = json.loads(tc.function.arguments or "{}")
             except json.JSONDecodeError:
                 args = {}
+            # 实时回调：告诉外部"我现在要调这个工具"
+            if on_step:
+                try:
+                    on_step({"phase": "calling", "tool": tc.function.name, "args": args, "step": len(steps) + 1})
+                except Exception:
+                    pass
             result = await _dispatch_tool(tc.function.name, args, project_id)
             steps.append({"tool": tc.function.name, "args": args, "result": result[:500]})
             messages.append({"role": "tool", "tool_call_id": tc.id, "content": result})
+            if on_step:
+                try:
+                    on_step({"phase": "done", "tool": tc.function.name, "step": len(steps)})
+                except Exception:
+                    pass
 
     # 达到步数上限，再让模型基于已有信息给个总结
     messages.append({"role": "user", "content": "已达到工具调用上限，请基于目前掌握的信息给出最终结果。"})

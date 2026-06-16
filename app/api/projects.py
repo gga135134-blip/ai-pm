@@ -135,6 +135,16 @@ async def project_detail(request: Request, project_id: str):
         )
         expenses = [dict(row) for row in await cursor.fetchall()]
         expense_total = round(sum(e["amount"] or 0 for e in expenses), 2)
+
+        # 作战室：最近本项目的 AI 执行记录（含工具步骤）
+        cursor = await db.execute(
+            """SELECT r.*, t.title as task_title FROM agent_runs r
+               LEFT JOIN tasks t ON t.id = r.task_id
+               WHERE t.project_id = ? OR r.prompt LIKE ?
+               ORDER BY r.created_at DESC LIMIT 15""",
+            (project_id, f"%{project_id[:8]}%"),
+        )
+        runs_with_tools = [dict(row) for row in await cursor.fetchall()]
     finally:
         await db.close()
 
@@ -151,6 +161,7 @@ async def project_detail(request: Request, project_id: str):
             "project_notes": project_notes, "project_decisions": project_decisions,
             "expenses": expenses, "expense_total": expense_total,
             "auto_running": is_running(project_id),
+            "runs_with_tools": runs_with_tools,
         },
     )
 

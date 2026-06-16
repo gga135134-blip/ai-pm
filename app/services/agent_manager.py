@@ -93,8 +93,34 @@ async def execute_task(task_id: str) -> dict:
 
     from app.services.constitution import with_constitution
     from app.services.agent_tools import run_agent_loop
+    from app.services.worker_status import update_worker, clear_worker
+    from datetime import datetime as _dt
+
+    def _on_step(info):
+        if info.get("phase") == "calling":
+            args_brief = _brief_args(info.get("args") or {})
+            update_worker(task["id"], {
+                "task_id": task["id"],
+                "task_title": task["title"],
+                "project_id": task.get("project_id"),
+                "step": info.get("step"),
+                "tool": info.get("tool"),
+                "args_brief": args_brief,
+                "updated_at": _dt.now().isoformat(),
+            })
+
+    update_worker(task["id"], {
+        "task_id": task["id"], "task_title": task["title"],
+        "project_id": task.get("project_id"),
+        "step": 0, "tool": "思考中…", "args_brief": "",
+        "updated_at": _dt.now().isoformat(),
+    })
     # 带工具执行：AI 能联网、跑代码、读写文件，真正动手干活
-    result = await run_agent_loop(prompt, system=with_constitution(EXECUTE_SYSTEM), project_id=task.get("project_id"))
+    try:
+        result = await run_agent_loop(prompt, system=with_constitution(EXECUTE_SYSTEM),
+                                       project_id=task.get("project_id"), on_step=_on_step)
+    finally:
+        clear_worker(task["id"])
 
     # 把工具调用过程附在结果后面，让董事会看得到 agent 干了啥
     steps = result.get("steps", [])
