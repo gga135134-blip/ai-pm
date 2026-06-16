@@ -132,6 +132,74 @@ def tool_list_files(project_id: str | None) -> str:
     return "工作区文件: " + (", ".join(files) if files else "（空）")
 
 
+async def tool_list_kb_notes(project_id: str | None) -> str:
+    """列出本项目知识库里所有笔记标题（不读内容，节省 tokens）"""
+    from app.database import get_db
+    if not project_id:
+        return "无项目上下文，无法列知识库笔记"
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            """SELECT id, title, is_core, source_type, tags FROM notes
+               WHERE project_id = ? AND deleted_at IS NULL
+               ORDER BY is_core DESC, updated_at DESC""",
+            (project_id,),
+        )
+        notes = [dict(r) for r in await cursor.fetchall()]
+    finally:
+        await db.close()
+    if not notes:
+        return "本项目知识库暂无笔记"
+    src_map = {"ai_classified": "[AI分类]", "ai_summary": "[AI整理]", "auto_progress": "[进度]",
+               "file_import": "[文件]", "upload": "[上传]", "url_import": "[网页]",
+               "image": "[图片]", "image_article": "[图片整理]", "ai_chat": "[AI问答]",
+               "ai_weekly": "[周报]", "master_ai": "[总AI]"}
+    lines = [f"本项目知识库共 {len(notes)} 篇笔记（要读全文用 read_kb_note 工具）："]
+    for n in notes:
+        star = "⭐" if n["is_core"] else "  "
+        src = src_map.get(n.get("source_type"), "")
+        tags = f" #tags:{n['tags']}" if n.get("tags") else ""
+        lines.append(f"  {star} id={n['id'][:8]} | {src}{n['title']}{tags}")
+    return "\n".join(lines)
+
+
+async def tool_read_kb_note(query: str, project_id: str | None) -> str:
+    """读取知识库笔记全文。query 可以是笔记 id 前缀（8位）、id 全文，或笔记标题（模糊匹配）"""
+    from app.database import get_db
+    q = (query or "").strip()
+    if not q:
+        return "请提供笔记 id 或标题"
+    db = await get_db()
+    try:
+        # 1. 优先按 id 完整匹配
+        cursor = await db.execute(
+            "SELECT id, title, content, is_core FROM notes WHERE id = ? AND deleted_at IS NULL",
+            (q,),
+        )
+        row = await cursor.fetchone()
+        # 2. 按 id 前缀匹配
+        if not row:
+            cursor = await db.execute(
+                "SELECT id, title, content, is_core FROM notes WHERE id LIKE ? AND deleted_at IS NULL LIMIT 1",
+                (q + "%",),
+            )
+            row = await cursor.fetchone()
+        # 3. 按标题模糊匹配（限当前项目）
+        if not row and project_id:
+            cursor = await db.execute(
+                "SELECT id, title, content, is_core FROM notes WHERE project_id = ? AND title LIKE ? AND deleted_at IS NULL ORDER BY is_core DESC, updated_at DESC LIMIT 1",
+                (project_id, f"%{q}%"),
+            )
+            row = await cursor.fetchone()
+        if not row:
+            return f"没找到笔记: {q}"
+        note = dict(row)
+    finally:
+        await db.close()
+    star = "⭐ " if note["is_core"] else ""
+    return _truncate(f"# {star}{note['title']}\n\n{note['content'] or '(空)'}")
+
+
 # ── 工具 schema（OpenAI 函数调用格式）──────────────────
 
 TOOL_SCHEMAS = [
@@ -190,8 +258,28 @@ TOOL_SCHEMAS = [
         "type": "function",
         "function": {
             "name": "list_files",
-            "description": "列出项目工作区里的所有文件。",
+            "description": "列出项目工作区里的所有**临时文件**（仅是 run_python/write_file 产出的文件，不包含知识库笔记）。",
             "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_kb_notes",
+            "description": "列出本项目知识库的全部笔记标题（带 id 和源类型，⭐ 是核心档）。董事会上传/AI 整理产出的内容都在这里。想看具体内容用 read_kb_note。",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "read_kb_note",
+            "description": "读取本项目知识库笔记的全文。query 可以是 id 前缀（8位）、id 全文、或笔记标题（模糊匹配）。",
+            "parameters": {
+                "type": "object",
+                "properties": {"query": {"type": "string", "description": "笔记 id 或标题"}},
+                "required": ["query"],
+            },
         },
     },
 ]
@@ -209,6 +297,10 @@ async def _dispatch_tool(name: str, args: dict, project_id: str | None) -> str:
             return tool_read_file(args.get("filename", ""), project_id)
         if name == "list_files":
             return tool_list_files(project_id)
+        if name == "list_kb_notes":
+            return await tool_list_kb_notes(project_id)
+        if name == "read_kb_note":
+            return await tool_read_kb_note(args.get("query", ""), project_id)
         return f"未知工具: {name}"
     except Exception as e:
         return f"工具 {name} 执行异常: {e}"
