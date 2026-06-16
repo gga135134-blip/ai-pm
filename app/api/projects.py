@@ -259,8 +259,17 @@ async def project_ai_ask(project_id: str, message: str = Form(...), sender: str 
     """项目 AI 接收消息并回复"""
     from fastapi.responses import JSONResponse
     from app.services.project_ai import project_chat
-    result = await project_chat(project_id, message, sender, model)
-    return JSONResponse(result)
+    try:
+        result = await project_chat(project_id, message, sender, model)
+        return JSONResponse(result)
+    except Exception as e:
+        # 兜底：任何异常都返回合法 JSON，避免前端 r.json() 失败
+        import logging, traceback
+        logging.getLogger(__name__).exception("project_ai_ask failed")
+        return JSONResponse({
+            "reply": f"❌ 项目 AI 内部出错：{type(e).__name__}: {e}\n（已自动记录，可重试或换个说法）",
+            "action": "chat", "cost": 0, "model": "error",
+        })
 
 
 @router.post("/projects/{project_id}/ai-clear")

@@ -553,13 +553,44 @@ function switchView(name) {
     }
     function addAiMsg(text, time){
         document.getElementById('projai-empty') && document.getElementById('projai-empty').remove();
+        var msgId = 'pm-' + Date.now() + '-' + Math.random().toString(36).slice(2,7);
         box.insertAdjacentHTML('beforeend',
             '<div class="flex justify-start"><div class="max-w-[85%] w-full">'
             + '<div class="text-xs font-semibold text-purple-600 mb-1">💬 项目 AI</div>'
-            + '<div class="bg-gray-100 text-gray-800 rounded-lg rounded-bl-none px-4 py-3"><div class="text-sm leading-relaxed" style="white-space:pre-wrap">' + esc(text) + '</div></div>'
-            + '<div class="text-xs text-gray-400 mt-1">' + (time||nowHM()) + '</div></div></div>');
+            + '<div class="bg-gray-100 text-gray-800 rounded-lg rounded-bl-none px-4 py-3"><div id="' + msgId + '" class="text-sm leading-relaxed" style="white-space:pre-wrap">' + esc(text) + '</div></div>'
+            + '<div class="flex items-center justify-between mt-1">'
+            + '<span class="text-xs text-gray-400">' + (time||nowHM()) + '</span>'
+            + '<button onclick="copyMsg(\'' + msgId + '\', this)" class="text-xs text-gray-400 hover:text-purple-600 transition" title="复制内容">📋 复制</button>'
+            + '</div>'
+            + '</div></div>');
         box.scrollTop = box.scrollHeight;
     }
+
+    // 复制工具函数（全局）
+    window.copyMsg = window.copyMsg || function(elemId, btn){
+        var el = document.getElementById(elemId);
+        if (!el) return;
+        var text = el.innerText || el.textContent || '';
+        function showCopied(){
+            var old = btn.innerHTML;
+            btn.innerHTML = '✅ 已复制';
+            btn.classList.add('text-green-600');
+            setTimeout(function(){ btn.innerHTML = old; btn.classList.remove('text-green-600'); }, 1500);
+        }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(showCopied, function(){
+                window.prompt('复制此内容：', text);
+            });
+        } else {
+            // 兼容回退
+            var ta = document.createElement('textarea');
+            ta.value = text;
+            document.body.appendChild(ta);
+            ta.select();
+            try { document.execCommand('copy'); showCopied(); } catch(e) { window.prompt('复制此内容：', text); }
+            document.body.removeChild(ta);
+        }
+    };
     function addThinking(){
         box.insertAdjacentHTML('beforeend',
             '<div class="flex justify-start" id="projai-thinking"><div><div class="bg-gray-100 text-gray-500 rounded-lg px-4 py-3 text-sm">正在思考…</div></div></div>');

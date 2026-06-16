@@ -9,13 +9,21 @@ router = APIRouter()
 @router.post("/chat/ask")
 async def chat_ask(message: str = Form(...), sender: str = Form("Gaga"), model: str = Form("auto")):
     """AJAX 发送：返回 AI 回复 JSON，前端无刷新更新对话"""
-    result = await master_chat(message, sender, model)
-    return JSONResponse({
-        "reply": result["reply"],
-        "action": result.get("action", "chat"),
-        "model": result.get("model", ""),
-        "cost": result.get("cost", 0),
-    })
+    try:
+        result = await master_chat(message, sender, model)
+        return JSONResponse({
+            "reply": result["reply"],
+            "action": result.get("action", "chat"),
+            "model": result.get("model", ""),
+            "cost": result.get("cost", 0),
+        })
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("chat_ask failed")
+        return JSONResponse({
+            "reply": f"❌ 总 AI 内部出错：{type(e).__name__}: {e}\n（已记录，可重试）",
+            "action": "chat", "cost": 0, "model": "error",
+        })
 
 
 @router.get("/chat", response_class=HTMLResponse)

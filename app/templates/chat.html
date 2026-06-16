@@ -47,9 +47,12 @@
                     <span class="text-sm font-semibold text-purple-600">总 AI</span>
                 </div>
                 <div class="bg-gray-100 text-gray-800 rounded-lg rounded-bl-none px-5 py-4">
-                    <div class="text-base leading-relaxed" style="white-space:pre-wrap">{{ msg.content }}</div>
+                    <div id="hm-{{ loop.index }}" class="text-base leading-relaxed" style="white-space:pre-wrap">{{ msg.content }}</div>
                 </div>
-                <div class="text-sm text-gray-400 mt-2">{{ msg.created_at[11:16] if msg.created_at else '' }}</div>
+                <div class="flex items-center justify-between mt-2">
+                    <span class="text-sm text-gray-400">{{ msg.created_at[11:16] if msg.created_at else '' }}</span>
+                    <button onclick="copyMsg('hm-{{ loop.index }}', this)" class="text-xs text-gray-400 hover:text-purple-600 transition" title="复制内容">📋 复制</button>
+                </div>
             </div>
         </div>
         {% endif %}
@@ -134,14 +137,44 @@
     }
 
     function addAiMsg(text) {
+        var msgId = 'mm-' + Date.now() + '-' + Math.random().toString(36).slice(2,7);
         box.insertAdjacentHTML('beforeend',
             '<div class="flex justify-start"><div class="max-w-2xl">'
             + '<div class="flex items-center gap-2 mb-2"><span class="text-sm font-semibold text-purple-600">总 AI</span></div>'
             + '<div class="bg-gray-100 text-gray-800 rounded-lg rounded-bl-none px-5 py-4">'
-            + '<div class="text-base leading-relaxed" style="white-space:pre-wrap">' + esc(text) + '</div></div>'
-            + '<div class="text-sm text-gray-400 mt-2">' + nowHM() + '</div></div></div>');
+            + '<div id="' + msgId + '" class="text-base leading-relaxed" style="white-space:pre-wrap">' + esc(text) + '</div></div>'
+            + '<div class="flex items-center justify-between mt-2">'
+            + '<span class="text-sm text-gray-400">' + nowHM() + '</span>'
+            + '<button onclick="copyMsg(\'' + msgId + '\', this)" class="text-xs text-gray-400 hover:text-purple-600 transition" title="复制内容">📋 复制</button>'
+            + '</div>'
+            + '</div></div>');
         box.scrollTop = box.scrollHeight;
     }
+
+    // 复制工具函数
+    window.copyMsg = function(elemId, btn){
+        var el = document.getElementById(elemId);
+        if (!el) return;
+        var text = el.innerText || el.textContent || '';
+        function showCopied(){
+            var old = btn.innerHTML;
+            btn.innerHTML = '✅ 已复制';
+            btn.classList.add('text-green-600');
+            setTimeout(function(){ btn.innerHTML = old; btn.classList.remove('text-green-600'); }, 1500);
+        }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(showCopied, function(){
+                window.prompt('复制此内容：', text);
+            });
+        } else {
+            var ta = document.createElement('textarea');
+            ta.value = text;
+            document.body.appendChild(ta);
+            ta.select();
+            try { document.execCommand('copy'); showCopied(); } catch(e) { window.prompt('复制此内容：', text); }
+            document.body.removeChild(ta);
+        }
+    };
 
     function send() {
         if (busy) return;
