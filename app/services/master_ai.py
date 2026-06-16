@@ -32,6 +32,8 @@ MASTER_SYSTEM = """你现在的角色是**总 AI（项目总监）**。董事会
 可用动作：
 - "chat": 纯对话/追问/汇报，不做任何改动。params: {}
 - "do_now": 当场动手做一件具体的事（联网抓网页、跑代码算数据、查资料、生成文件等）。你有真实工具，能联网能跑 Python。董事会让你"抓取/查一下/算一下/整理"这类即时小活时用这个，直接做完返回结果，不必为这点小事建项目。params: {"task": "要做的事的完整描述", "project": "可选，归属哪个项目"}
+- "start_auto": 启动某个项目的自动执行（让多个 worker 并行干所有待办 AI 任务）。董事会说"开工/启动/跑起来/动手"时用。params: {"project": "项目编号或名称"}
+- "stop_auto": 停止某个项目的自动执行。params: {"project": "项目编号或名称"}
 - "create_project": 正式创建项目（必须先聊清目标/预算/时间/授权等级，并得到董事会确认后才用）。创建时会自动按 goal 拆解出任务，不要再单独 decompose。params: {"name": "项目名", "description": "完整的项目框架描述", "goal": "用于拆解任务的核心目标", "owner": "负责人", "ai_budget": AI费用预算美元数字, "automation_level": "manual 或 auto"}
 - "decompose": 给项目拆解任务。params: {"project": "项目编号如P003或项目名", "goal": "目标描述"}
 - "execute_tasks": 批量执行某项目的待办AI任务。params: {"project": "项目编号或名称"}
@@ -254,6 +256,10 @@ async def master_chat(message: str, sender: str, model: str = "auto") -> dict:
                 action_result = await _action_decision(params)
             elif action == "create_note":
                 action_result = await _action_create_note(params)
+            elif action == "start_auto":
+                action_result = await _action_start_auto(params)
+            elif action == "stop_auto":
+                action_result = await _action_stop_auto(params)
             else:
                 action_result = f"❌ 未识别的动作: {action}"
         except Exception as e:
@@ -361,7 +367,42 @@ async def _action_create_project(params: dict) -> str:
         except Exception as e:
             task_note = f"（任务拆解失败: {e}，可稍后手动拆解）"
 
-    return f"已创建项目 [{code}]「{name}」{task_note}，可在项目页查看"
+    # 如果授权等级是全自动，立项后直接启动，不让董事会再点一次按钮
+    auto_note = ""
+    if automation_level == "auto":
+        from app.services.auto_runner import start_auto
+        if start_auto(pid):
+            auto_note = "，已按授权立刻启动自动执行（worker 开始并行干活）"
+
+    return f"已创建项目 [{code}]「{name}」{task_note}{auto_note}，可在项目页查看"
+
+
+async def _action_start_auto(params: dict) -> str:
+    from app.services.auto_runner import start_auto, is_running
+    project_id = await _resolve_project(params.get("project") or "")
+    if not project_id:
+        return "❌ 找不到指定项目"
+    db = await get_db()
+    try:
+        cursor = await db.execute("SELECT code, name FROM projects WHERE id = ?", (project_id,))
+        row = await cursor.fetchone()
+        code, name = row["code"], row["name"]
+    finally:
+        await db.close()
+    if is_running(project_id):
+        return f"项目 [{code}]「{name}」已经在自动执行中"
+    if start_auto(project_id):
+        return f"✅ 已启动 [{code}]「{name}」的自动执行，worker 开始并行干活，可在项目作战室看实时状态"
+    return f"❌ 启动 [{code}] 失败"
+
+
+async def _action_stop_auto(params: dict) -> str:
+    from app.services.auto_runner import stop_auto
+    project_id = await _resolve_project(params.get("project") or "")
+    if not project_id:
+        return "❌ 找不到指定项目"
+    stop_auto(project_id)
+    return f"✅ 已发送停止信号，当前正在跑的任务会跑完后停止"
 
 
 async def _action_decompose(params: dict) -> str:
