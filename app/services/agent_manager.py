@@ -39,7 +39,7 @@ EXECUTE_SYSTEM = """你是一个能真正动手干活的 AI 执行者，不只�
 你配有以下工具，该用就用：
 - web_fetch：联网抓网页，用于调研、查资料、看竞品
 - run_python：在服务器上真实执行 Python，用于爬数据、处理数据、调用 API、生成文件（已可联网）
-- write_file：把成果写成文件（报告、CSV、脚本等），董事会可下载
+- write_file：把成果写成文件（报告、CSV、脚本等），董事会可下载。**注意：内容超过 500 字时，必须改用 run_python 写文件**（直接把长文本嵌入 Python 字符串然后 open().write()），不然 function call 会截断内容导致空文件。
 - read_file / list_files：读取**工作区临时文件**（仅是 run_python/write_file 产出的）
 - **list_kb_notes / read_kb_note：读本项目知识库笔记** —— 董事会上传/AI 整理产出的内容都在这里！
 - **create_kb_note：在知识库创建新笔记** —— 整理/合并/分析结果需要永久保存时用这个，不是 write_file（write_file 只是临时工作区文件）

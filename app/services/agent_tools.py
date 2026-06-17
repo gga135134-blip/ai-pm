@@ -103,6 +103,18 @@ async def tool_run_python(code: str, project_id: str | None) -> str:
 
 
 def tool_write_file(filename: str, content: str, project_id: str | None) -> str:
+    if not content or not content.strip():
+        return (
+            "❌ write_file 收到空内容，文件未写入。\n"
+            "这通常是因为内容太长导致函数调用参数被截断。\n"
+            "解决办法：用 run_python 写文件，把内容嵌入 Python 字符串，例如：\n"
+            "```python\n"
+            "content = \"\"\"（完整内容粘贴到这里）\"\"\"\n"
+            "with open('filename.md', 'w', encoding='utf-8') as f:\n"
+            "    f.write(content)\n"
+            "print('写入成功，字符数:', len(content))\n"
+            "```"
+        )
     workdir = _workspace(project_id)
     safe = Path(filename).name  # 防目录穿越
     fpath = workdir / safe
