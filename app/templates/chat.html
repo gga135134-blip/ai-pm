@@ -196,7 +196,13 @@
         fd.append('model', document.getElementById('chat-model').value);
 
         fetch('/chat/ask', {method: 'POST', body: fd})
-            .then(function(r) { return r.json(); })
+            .then(function(r) {
+                return r.text().then(function(txt){
+                    if (!txt) throw new Error('服务器返回空响应（HTTP ' + r.status + '）—— 可能是服务重启中、agent 超时被代理切断，或后端崩溃。稍等几秒重试。');
+                    try { return JSON.parse(txt); }
+                    catch(e){ throw new Error('响应不是合法 JSON（HTTP ' + r.status + '）：' + txt.substring(0, 300)); }
+                });
+            })
             .then(function(data) {
                 var t = document.getElementById('thinking-bubble');
                 if (t) t.remove();
@@ -205,7 +211,7 @@
             .catch(function(err) {
                 var t = document.getElementById('thinking-bubble');
                 if (t) t.remove();
-                addAiMsg('[出错了] ' + err);
+                addAiMsg('[出错了] ' + (err && err.message ? err.message : err));
             })
             .finally(function() {
                 busy = false;
