@@ -93,7 +93,7 @@ def estimate_cost(prompt: str, model: str = "auto", task_type: str = "") -> dict
 MAX_PROMPT_CHARS = 300_000
 
 
-async def ask_ai(prompt: str, model: str = "auto", task_type: str = "", system_prompt: str = "") -> dict:
+async def ask_ai(prompt: str, model: str = "auto", task_type: str = "", system_prompt: str = "", json_mode: bool = False) -> dict:
     if len(prompt) > MAX_PROMPT_CHARS:
         est_tokens = len(prompt) // 3
         return {
@@ -107,7 +107,7 @@ async def ask_ai(prompt: str, model: str = "auto", task_type: str = "", system_p
     last_error = None
     for attempt_model in chain:
         try:
-            result = await _call_model(attempt_model, prompt, system_prompt, config)
+            result = await _call_model(attempt_model, prompt, system_prompt, config, json_mode=json_mode)
             if result.get("response", "").startswith("[错误]"):
                 last_error = result
                 log.warning("Model %s unavailable, trying fallback", attempt_model)
@@ -217,18 +217,18 @@ async def _call_openai_vision(prompt: str, images: list[dict], system_prompt: st
     return {"response": text, "model": "openai(识图)", "tokens": usage.total_tokens, "cost": round(cost, 6)}
 
 
-async def _call_model(model: str, prompt: str, system_prompt: str, config: dict) -> dict:
+async def _call_model(model: str, prompt: str, system_prompt: str, config: dict, json_mode: bool = False) -> dict:
     if model == "claude":
-        return await _call_claude(prompt, system_prompt, config)
+        return await _call_claude(prompt, system_prompt, config)  # Claude 不支持 response_format，靠 prompt 控制
     elif model == "deepseek":
-        return await _call_deepseek(prompt, system_prompt, config)
+        return await _call_deepseek(prompt, system_prompt, config, json_mode=json_mode)
     elif model == "qwen":
-        return await _call_qwen(prompt, system_prompt, config)
+        return await _call_qwen(prompt, system_prompt, config, json_mode=json_mode)
     else:
-        return await _call_openai(prompt, system_prompt, config)
+        return await _call_openai(prompt, system_prompt, config, json_mode=json_mode)
 
 
-async def _call_qwen(prompt: str, system_prompt: str, config: dict) -> dict:
+async def _call_qwen(prompt: str, system_prompt: str, config: dict, json_mode: bool = False) -> dict:
     from openai import AsyncOpenAI
 
     api_key = config.get("qwen_api_key", "")
@@ -241,7 +241,10 @@ async def _call_qwen(prompt: str, system_prompt: str, config: dict) -> dict:
         messages.append({"role": "system", "content": system_prompt})
     messages.append({"role": "user", "content": prompt})
 
-    resp = await client.chat.completions.create(model="qwen-plus", messages=messages, max_tokens=4096)
+    kwargs = dict(model="qwen-plus", messages=messages, max_tokens=4096)
+    if json_mode:
+        kwargs["response_format"] = {"type": "json_object"}
+    resp = await client.chat.completions.create(**kwargs)
     text = resp.choices[0].message.content
     usage = resp.usage
     prices = PRICE_TABLE["qwen"]
@@ -271,7 +274,7 @@ async def _call_claude(prompt: str, system_prompt: str, config: dict) -> dict:
     return {"response": text, "model": "claude", "tokens": inp + out, "cost": round(cost, 6)}
 
 
-async def _call_openai(prompt: str, system_prompt: str, config: dict) -> dict:
+async def _call_openai(prompt: str, system_prompt: str, config: dict, json_mode: bool = False) -> dict:
     from openai import AsyncOpenAI
 
     api_key = config.get("openai_api_key", "")
@@ -284,7 +287,10 @@ async def _call_openai(prompt: str, system_prompt: str, config: dict) -> dict:
         messages.append({"role": "system", "content": system_prompt})
     messages.append({"role": "user", "content": prompt})
 
-    resp = await client.chat.completions.create(model="gpt-4o", messages=messages, max_tokens=4096)
+    kwargs = dict(model="gpt-4o", messages=messages, max_tokens=4096)
+    if json_mode:
+        kwargs["response_format"] = {"type": "json_object"}
+    resp = await client.chat.completions.create(**kwargs)
     text = resp.choices[0].message.content
     usage = resp.usage
     prices = PRICE_TABLE["openai"]
@@ -293,7 +299,7 @@ async def _call_openai(prompt: str, system_prompt: str, config: dict) -> dict:
     return {"response": text, "model": "openai", "tokens": usage.total_tokens, "cost": round(cost, 6)}
 
 
-async def _call_deepseek(prompt: str, system_prompt: str, config: dict) -> dict:
+async def _call_deepseek(prompt: str, system_prompt: str, config: dict, json_mode: bool = False) -> dict:
     from openai import AsyncOpenAI
 
     api_key = config.get("deepseek_api_key", "")
@@ -306,7 +312,10 @@ async def _call_deepseek(prompt: str, system_prompt: str, config: dict) -> dict:
         messages.append({"role": "system", "content": system_prompt})
     messages.append({"role": "user", "content": prompt})
 
-    resp = await client.chat.completions.create(model="deepseek-chat", messages=messages, max_tokens=4096)
+    kwargs = dict(model="deepseek-chat", messages=messages, max_tokens=4096)
+    if json_mode:
+        kwargs["response_format"] = {"type": "json_object"}
+    resp = await client.chat.completions.create(**kwargs)
     text = resp.choices[0].message.content
     usage = resp.usage
     prices = PRICE_TABLE["deepseek"]

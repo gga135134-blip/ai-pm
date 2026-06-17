@@ -191,7 +191,7 @@ async def project_chat(project_id: str, message: str, sender: str, model: str = 
 请结合上下文分析意图并决定行动。"""
 
     system_prompt = PROJECT_AI_SYSTEM.format(code=code, name=name)
-    result = await ask_ai(prompt=prompt, model=model, task_type="analysis", system_prompt=system_prompt)
+    result = await ask_ai(prompt=prompt, model=model, task_type="analysis", system_prompt=system_prompt, json_mode=True)
 
     from app.services.agent_tools import _sanitize_output
     parsed = _extract_action_json(_sanitize_output(result["response"]))
