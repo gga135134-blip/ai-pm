@@ -175,6 +175,43 @@ async def _heal_stuck_running(project_id: str):
         await db.close()
 
 
+async def heal_stuck_running_all(threshold_minutes: int = 30):
+    """定期自愈：把全部项目中卡在 running 超过 threshold_minutes 分钟且无活跃 worker 的任务重置回 pending。"""
+    from app.services.worker_status import get_project_workers
+    from datetime import timedelta
+    cutoff = (datetime.now() - timedelta(minutes=threshold_minutes)).isoformat()
+    db = await get_db()
+    try:
+        cursor = await db.execute("SELECT id FROM projects")
+        project_ids = [r["id"] for r in await cursor.fetchall()]
+    finally:
+        await db.close()
+
+    total = 0
+    for project_id in project_ids:
+        active_task_ids = {w.get("task_id") for w in get_project_workers(project_id)}
+        now = datetime.now().isoformat()
+        db = await get_db()
+        try:
+            cursor = await db.execute(
+                "SELECT id, title FROM tasks WHERE project_id = ? AND status = 'running' AND updated_at < ?",
+                (project_id, cutoff),
+            )
+            stuck = [(r["id"], r["title"]) for r in await cursor.fetchall() if r["id"] not in active_task_ids]
+            for tid, title in stuck:
+                await db.execute(
+                    "UPDATE tasks SET status = 'pending', updated_at = ? WHERE id = ?",
+                    (now, tid),
+                )
+                log.info("Periodic heal: task %s (%s) stuck-running→pending", tid, title)
+            if stuck:
+                await db.commit()
+                total += len(stuck)
+        finally:
+            await db.close()
+    return total
+
+
 async def run_project_auto(project_id: str):
     """并行编排：最多 N 个 worker agent 同时干活，完成一个补一个。
     总 AI 角色由 auto_runner 扮演——派工、限预算、通知董事会。"""

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import logging.handlers
 from fastapi import FastAPI
@@ -39,3 +40,19 @@ async def startup():
     )
     fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
     logging.getLogger().addHandler(fh)
+    asyncio.create_task(_periodic_heal_loop())
+
+
+async def _periodic_heal_loop():
+    """每 10 分钟检查一次全项目，把卡在 running 超过 30 分钟且无活跃 worker 的任务重置为 pending。"""
+    from app.services.auto_runner import heal_stuck_running_all
+    _log = logging.getLogger(__name__)
+    await asyncio.sleep(60)  # 等应用完全启动后再开始
+    while True:
+        try:
+            healed = await heal_stuck_running_all(threshold_minutes=30)
+            if healed:
+                _log.info("Periodic heal: reset %d stuck-running task(s) to pending", healed)
+        except Exception:
+            _log.exception("Periodic heal loop error")
+        await asyncio.sleep(600)  # 10 分钟

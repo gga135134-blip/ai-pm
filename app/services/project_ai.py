@@ -271,6 +271,8 @@ async def _action_do_now_in_project(project_id: str, params: dict, history: str)
         full_task = f"对话背景：\n{history}\n\n──────\n" + full_task
 
     result = await run_agent_loop(full_task, system=with_constitution(EXECUTE_SYSTEM), project_id=project_id)
+    # C: do_now 完成后把本项目无活跃 worker 的 running 任务移到 reviewing
+    await _cleanup_orphan_running_tasks(project_id)
     text = result["response"]
     steps = result.get("steps", [])
     if steps:
@@ -280,6 +282,30 @@ async def _action_do_now_in_project(project_id: str, params: dict, history: str)
         text += "\n".join(lines)
     text += f"\n\n（本次执行花费 ${result['cost']}）"
     return text
+
+
+async def _cleanup_orphan_running_tasks(project_id: str):
+    """do_now 执行完后，把本项目中无活跃 worker 的 running 任务移到 reviewing。"""
+    from app.services.worker_status import get_project_workers
+    active_task_ids = {w.get("task_id") for w in get_project_workers(project_id)}
+    now = datetime.now().isoformat()
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            "SELECT id, title FROM tasks WHERE project_id = ? AND status = 'running'",
+            (project_id,),
+        )
+        orphans = [(r["id"], r["title"]) for r in await cursor.fetchall() if r["id"] not in active_task_ids]
+        for tid, title in orphans:
+            await db.execute(
+                "UPDATE tasks SET status = 'reviewing', updated_at = ? WHERE id = ?",
+                (now, tid),
+            )
+            log.info("do_now cleanup: task %s (%s) running→reviewing", tid, title)
+        if orphans:
+            await db.commit()
+    finally:
+        await db.close()
 
 
 async def _action_create_task(project_id: str, params: dict) -> str:
