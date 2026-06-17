@@ -167,7 +167,7 @@ async def tool_list_kb_notes(project_id: str | None) -> str:
     lines = [
         f"本项目知识库共 {len(notes)} 篇笔记（按更新时间倒序；要读全文用 read_kb_note）：",
         "格式：[更新日期] ⭐核心档 id=前8位 | [源类型] 标题 #tags",
-        "源类型里"用户上传"/"用户原料"都是董事会提供的内容；list_kb_notes 的结果 = 用户说的"项目资料库"，没有第二份。",
+        "源类型里「用户上传」「用户原料」都是董事会提供的内容；list_kb_notes 的结果 = 用户说的「项目资料库」，没有第二份。",
     ]
     for n in notes:
         star = "⭐" if n["is_core"] else "  "
