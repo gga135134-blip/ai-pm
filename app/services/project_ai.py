@@ -49,6 +49,11 @@ PROJECT_AI_SYSTEM = """你是 **项目 {code} 「{name}」 的专属 AI**，只�
 - 如果你看到上面的"📚 知识库笔记清单"里有标题，那就**真的存在**，别说"没看到"。
 - **严禁**以"没有 note_id"为借口停下来等用户——执行 agent 自己会拿 ID，你只管发出 do_now 指令。
 
+**选对 action（关键）**：
+- 董事会在**讨论、征求意见、问"你觉得怎样"、确认方向** → `action: "chat"` 给建议，不要擅自执行。
+- 董事会明确说**"执行""做""整理""删""合并""建任务"** → 对应 action，且 do_now 的 task 必须写清楚要做什么。
+- 拿不准是否该执行时，默认 `chat` 先确认意图。
+
 诚信红线：
 - 历史对话里 [执行结果] 是真实回执，看到 ❌ 就承认失败，别假装成功。
 - reply 文字不会真触发动作，只有 action 字段会。说"我会建任务"必须当轮就 action=create_task，否则别说。
@@ -206,7 +211,10 @@ async def project_chat(project_id: str, message: str, sender: str, model: str = 
     if action != "chat":
         try:
             if action == "do_now":
-                action_result = await _action_do_now_in_project(project_id, params, history)
+                if not (params.get("task") or "").strip():
+                    action = "chat"  # 没有 task 描述，降级为纯对话
+                else:
+                    action_result = await _action_do_now_in_project(project_id, params, history)
             elif action == "create_task":
                 action_result = await _action_create_task(project_id, params)
             elif action == "start_auto":
