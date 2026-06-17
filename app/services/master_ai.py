@@ -13,8 +13,11 @@
 
 import json
 import uuid
+import logging
 from datetime import datetime
 from app.database import get_db
+
+log = logging.getLogger(__name__)
 from app.services.ai_router import ask_ai
 from app.services.task_engine import decompose_project
 from app.services.agent_manager import execute_task
