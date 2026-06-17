@@ -133,14 +133,14 @@ def tool_list_files(project_id: str | None) -> str:
 
 
 async def tool_list_kb_notes(project_id: str | None) -> str:
-    """列出本项目知识库里所有笔记标题（不读内容，节省 tokens）"""
+    """列出本项目知识库里所有笔记标题（含时间戳和源类型，不读内容，节省 tokens）"""
     from app.database import get_db
     if not project_id:
         return "无项目上下文，无法列知识库笔记"
     db = await get_db()
     try:
         cursor = await db.execute(
-            """SELECT id, title, is_core, source_type, tags FROM notes
+            """SELECT id, title, is_core, source_type, tags, created_at, updated_at FROM notes
                WHERE project_id = ? AND deleted_at IS NULL
                ORDER BY is_core DESC, updated_at DESC""",
             (project_id,),
@@ -150,16 +150,32 @@ async def tool_list_kb_notes(project_id: str | None) -> str:
         await db.close()
     if not notes:
         return "本项目知识库暂无笔记"
-    src_map = {"ai_classified": "[AI分类]", "ai_summary": "[AI整理]", "auto_progress": "[进度]",
-               "file_import": "[文件]", "upload": "[上传]", "url_import": "[网页]",
-               "image": "[图片]", "image_article": "[图片整理]", "ai_chat": "[AI问答]",
-               "ai_weekly": "[周报]", "master_ai": "[总AI]"}
-    lines = [f"本项目知识库共 {len(notes)} 篇笔记（要读全文用 read_kb_note 工具）："]
+    # 源类型含义说明：标签后面括号里是这种笔记的真实来源
+    src_map = {
+        "ai_classified": "[聊天分类·用户原料]",  # 董事会粘贴聊天/录音，AI 帮分层归类，原料是董事会的
+        "ai_summary": "[AI整理·用户原料]",      # 董事会原料经 AI 整理产出
+        "auto_progress": "[执行进度]",          # 自动执行 agent 写的进度
+        "file_import": "[文件导入·用户上传]",
+        "upload": "[直接上传·用户上传]",
+        "url_import": "[网页导入·用户上传]",
+        "image": "[图片·用户上传]",
+        "image_article": "[图片整理·用户原料]",
+        "ai_chat": "[AI问答存档]",
+        "ai_weekly": "[周报]",
+        "master_ai": "[总AI对话存档]",
+    }
+    lines = [
+        f"本项目知识库共 {len(notes)} 篇笔记（按更新时间倒序；要读全文用 read_kb_note）：",
+        "格式：[更新日期] ⭐核心档 id=前8位 | [源类型] 标题 #tags",
+        "源类型里"用户上传"/"用户原料"都是董事会提供的内容；list_kb_notes 的结果 = 用户说的"项目资料库"，没有第二份。",
+    ]
     for n in notes:
         star = "⭐" if n["is_core"] else "  "
-        src = src_map.get(n.get("source_type"), "")
-        tags = f" #tags:{n['tags']}" if n.get("tags") else ""
-        lines.append(f"  {star} id={n['id'][:8]} | {src}{n['title']}{tags}")
+        src = src_map.get(n.get("source_type"), f"[{n.get('source_type') or '未知'}]")
+        tags = f" #{n['tags']}" if n.get("tags") else ""
+        # 截取日期部分（YYYY-MM-DD），ISO 时间戳的前 10 位
+        date = (n.get("updated_at") or n.get("created_at") or "")[:10] or "未知日期"
+        lines.append(f"  [{date}] {star} id={n['id'][:8]} | {src} {n['title']}{tags}")
     return "\n".join(lines)
 
 
@@ -266,7 +282,7 @@ TOOL_SCHEMAS = [
         "type": "function",
         "function": {
             "name": "list_kb_notes",
-            "description": "列出本项目知识库的全部笔记标题（带 id 和源类型，⭐ 是核心档）。董事会上传/AI 整理产出的内容都在这里。想看具体内容用 read_kb_note。",
+            "description": "列出本项目知识库的全部笔记标题（带更新日期、id、源类型、tags，⭐ 是核心档）。这是用户说的'项目资料库'的全部内容——董事会上传的资料、用户粘贴 AI 帮分类的聊天记录、AI 整理产出的成果都在这里，没有第二个存储。想读全文用 read_kb_note。",
             "parameters": {"type": "object", "properties": {}},
         },
     },
