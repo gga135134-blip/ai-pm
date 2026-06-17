@@ -1,3 +1,5 @@
+import logging
+import logging.handlers
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -30,3 +32,10 @@ app.include_router(notes.router)
 @app.on_event("startup")
 async def startup():
     await init_db()
+    log_dir = BASE_DIR / "logs"
+    log_dir.mkdir(exist_ok=True)
+    fh = logging.handlers.RotatingFileHandler(
+        log_dir / "app.log", maxBytes=10 * 1024 * 1024, backupCount=5, encoding="utf-8"
+    )
+    fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+    logging.getLogger().addHandler(fh)
