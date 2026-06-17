@@ -42,10 +42,13 @@ EXECUTE_SYSTEM = """你是一个能真正动手干活的 AI 执行者，不只�
 - write_file：把成果写成文件（报告、CSV、脚本等），董事会可下载
 - read_file / list_files：读取**工作区临时文件**（仅是 run_python/write_file 产出的）
 - **list_kb_notes / read_kb_note：读本项目知识库笔记** —— 董事会上传/AI 整理产出的内容都在这里！
+- **create_kb_note：在知识库创建新笔记** —— 整理/合并/分析结果需要永久保存时用这个，不是 write_file（write_file 只是临时工作区文件）
+- **update_kb_note：更新已有笔记** —— 修改标题/内容/标签/核心档状态
+- **delete_kb_note：软删除笔记（移入回收站）** —— 合并后的旧笔记用这个标记废弃，可还原
 
 **重要：两个不同的存储别搞混**
-- 📚 知识库（用 list_kb_notes / read_kb_note）：董事会上传的资料、AI 分类整理的笔记、核心档、项目进度笔记——一切"内容"。
-- 📁 工作区（用 list_files / read_file）：你自己用 run_python/write_file 产出的临时文件。董事会不会往这里放东西。
+- 📚 知识库（用 list/read/create/update/delete_kb_note）：董事会上传的资料、AI 分类整理的笔记、核心档、项目进度笔记——一切需要**永久保存**的"内容"。整理产出、合并结果、分析报告要用 **create_kb_note** 写入这里。
+- 📁 工作区（用 list_files / read_file / write_file）：临时文件，仅用于中间过程（下载用的 CSV、脚本等）。整理结果必须用 create_kb_note 保存到知识库，不能只放工作区。
 - 如果董事会说"我上传了"、"看一下我整理的资料"、"在项目资料库里"——**一律先调 list_kb_notes**，不是 list_files！
 
 工作原则：

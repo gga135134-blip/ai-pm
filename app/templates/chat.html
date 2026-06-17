@@ -119,11 +119,15 @@
         // 第一次发消息时清掉占位提示
         var hint = box.querySelector('.text-center.text-gray-400');
         if (hint) hint.remove();
+        var msgId = 'cm-u-' + Date.now() + '-' + Math.random().toString(36).slice(2,7);
         box.insertAdjacentHTML('beforeend',
             '<div class="flex justify-end"><div class="max-w-2xl">'
             + '<div class="bg-blue-600 text-white rounded-lg rounded-br-none px-5 py-4">'
-            + '<div class="text-base leading-relaxed" style="white-space:pre-wrap">' + esc(text) + '</div></div>'
-            + '<div class="text-sm text-gray-400 mt-2 text-right">' + nowHM() + '</div></div></div>');
+            + '<div id="' + msgId + '" class="text-base leading-relaxed" style="white-space:pre-wrap">' + esc(text) + '</div></div>'
+            + '<div class="flex items-center justify-end gap-2 mt-2">'
+            + '<button onclick="copyMsg(\'' + msgId + '\', this)" class="text-sm text-gray-400 hover:text-blue-600 transition" title="复制内容">📋 复制</button>'
+            + '<span class="text-sm text-gray-400">' + nowHM() + '</span>'
+            + '</div></div></div>');
         box.scrollTop = box.scrollHeight;
     }
 

@@ -179,6 +179,106 @@ async def tool_list_kb_notes(project_id: str | None) -> str:
     return "\n".join(lines)
 
 
+async def tool_create_kb_note(title: str, content: str, project_id: str | None,
+                              folder: str = "", tags: str = "", is_core: bool = False) -> str:
+    """在知识库创建一篇新笔记"""
+    from app.database import get_db
+    import uuid
+    if not project_id:
+        return "无项目上下文，无法创建笔记"
+    if not title or not content:
+        return "title 和 content 不能为空"
+    now = __import__('datetime').datetime.now().isoformat()
+    note_id = str(uuid.uuid4())
+    db = await get_db()
+    try:
+        await db.execute(
+            """INSERT INTO notes (id, title, content, author, project_id, folder, tags, source_type, is_core, created_at, updated_at)
+               VALUES (?, ?, ?, 'agent', ?, ?, ?, 'agent_created', ?, ?, ?)""",
+            (note_id, title, content, project_id, folder or "", tags or "", 1 if is_core else 0, now, now),
+        )
+        await db.commit()
+    finally:
+        await db.close()
+    return f"✅ 已创建笔记「{title}」id={note_id[:8]}"
+
+
+async def tool_update_kb_note(query: str, project_id: str | None,
+                               new_title: str = "", new_content: str = "",
+                               new_tags: str = "", is_core: int = -1) -> str:
+    """更新知识库已有笔记（支持按 id 前缀或标题匹配）。只传要改的字段，其余保持原值。"""
+    from app.database import get_db
+    q = (query or "").strip()
+    if not q:
+        return "请提供笔记 id 或标题"
+    db = await get_db()
+    try:
+        # 查找目标笔记
+        cursor = await db.execute("SELECT id, title FROM notes WHERE id = ? AND deleted_at IS NULL", (q,))
+        row = await cursor.fetchone()
+        if not row:
+            cursor = await db.execute("SELECT id, title FROM notes WHERE id LIKE ? AND deleted_at IS NULL LIMIT 1", (q + "%",))
+            row = await cursor.fetchone()
+        if not row and project_id:
+            cursor = await db.execute(
+                "SELECT id, title FROM notes WHERE project_id = ? AND title LIKE ? AND deleted_at IS NULL ORDER BY is_core DESC LIMIT 1",
+                (project_id, f"%{q}%"),
+            )
+            row = await cursor.fetchone()
+        if not row:
+            return f"没找到笔记: {q}"
+        note_id, old_title = row["id"], row["title"]
+        now = __import__('datetime').datetime.now().isoformat()
+        sets, vals = [], []
+        if new_title:
+            sets.append("title = ?"); vals.append(new_title)
+        if new_content:
+            sets.append("content = ?"); vals.append(new_content)
+        if new_tags:
+            sets.append("tags = ?"); vals.append(new_tags)
+        if is_core >= 0:
+            sets.append("is_core = ?"); vals.append(is_core)
+        if not sets:
+            return "没有传入任何要更新的字段"
+        sets.append("updated_at = ?"); vals.append(now)
+        vals.append(note_id)
+        await db.execute(f"UPDATE notes SET {', '.join(sets)} WHERE id = ?", vals)
+        await db.commit()
+    finally:
+        await db.close()
+    return f"✅ 已更新笔记「{old_title}」(id={note_id[:8]})"
+
+
+async def tool_delete_kb_note(query: str, project_id: str | None) -> str:
+    """软删除知识库笔记（移入回收站，可还原）。支持按 id 前缀或标题匹配。"""
+    from app.database import get_db
+    q = (query or "").strip()
+    if not q:
+        return "请提供笔记 id 或标题"
+    db = await get_db()
+    try:
+        cursor = await db.execute("SELECT id, title FROM notes WHERE id = ? AND deleted_at IS NULL", (q,))
+        row = await cursor.fetchone()
+        if not row:
+            cursor = await db.execute("SELECT id, title FROM notes WHERE id LIKE ? AND deleted_at IS NULL LIMIT 1", (q + "%",))
+            row = await cursor.fetchone()
+        if not row and project_id:
+            cursor = await db.execute(
+                "SELECT id, title FROM notes WHERE project_id = ? AND title LIKE ? AND deleted_at IS NULL ORDER BY is_core DESC LIMIT 1",
+                (project_id, f"%{q}%"),
+            )
+            row = await cursor.fetchone()
+        if not row:
+            return f"没找到笔记: {q}"
+        note_id, title = row["id"], row["title"]
+        now = __import__('datetime').datetime.now().isoformat()
+        await db.execute("UPDATE notes SET deleted_at = ? WHERE id = ?", (now, note_id))
+        await db.commit()
+    finally:
+        await db.close()
+    return f"✅ 已移入回收站「{title}」(id={note_id[:8]})（可在知识库回收站还原）"
+
+
 async def tool_read_kb_note(query: str, project_id: str | None) -> str:
     """读取知识库笔记全文。query 可以是笔记 id 前缀（8位）、id 全文，或笔记标题（模糊匹配）"""
     from app.database import get_db
@@ -298,6 +398,54 @@ TOOL_SCHEMAS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_kb_note",
+            "description": "在本项目知识库创建一篇新笔记。用于整理产出、合并结果、分析报告等需要永久保存的内容。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "笔记标题"},
+                    "content": {"type": "string", "description": "笔记正文（Markdown 格式）"},
+                    "folder": {"type": "string", "description": "文件夹路径，如「资料/产品线」，可不填"},
+                    "tags": {"type": "string", "description": "标签，逗号分隔，如「产品,出海」，可不填"},
+                    "is_core": {"type": "boolean", "description": "是否设为核心档（⭐），默认 false"},
+                },
+                "required": ["title", "content"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_kb_note",
+            "description": "更新知识库已有笔记的标题、内容、标签或核心档状态。只传要改的字段。query 可以是 id 前缀或标题。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "笔记 id 前缀或标题"},
+                    "new_title": {"type": "string", "description": "新标题（不改则不传）"},
+                    "new_content": {"type": "string", "description": "新正文（不改则不传）"},
+                    "new_tags": {"type": "string", "description": "新标签（不改则不传）"},
+                    "is_core": {"type": "integer", "description": "1=设为核心档，0=取消核心档，-1=不改（默认）"},
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_kb_note",
+            "description": "将知识库笔记移入回收站（软删除，可还原）。用于删除已合并/过期的旧笔记。query 可以是 id 前缀或标题。",
+            "parameters": {
+                "type": "object",
+                "properties": {"query": {"type": "string", "description": "笔记 id 前缀或标题"}},
+                "required": ["query"],
+            },
+        },
+    },
 ]
 
 
@@ -317,6 +465,20 @@ async def _dispatch_tool(name: str, args: dict, project_id: str | None) -> str:
             return await tool_list_kb_notes(project_id)
         if name == "read_kb_note":
             return await tool_read_kb_note(args.get("query", ""), project_id)
+        if name == "create_kb_note":
+            return await tool_create_kb_note(
+                args.get("title", ""), args.get("content", ""), project_id,
+                folder=args.get("folder", ""), tags=args.get("tags", ""),
+                is_core=bool(args.get("is_core", False)),
+            )
+        if name == "update_kb_note":
+            return await tool_update_kb_note(
+                args.get("query", ""), project_id,
+                new_title=args.get("new_title", ""), new_content=args.get("new_content", ""),
+                new_tags=args.get("new_tags", ""), is_core=int(args.get("is_core", -1)),
+            )
+        if name == "delete_kb_note":
+            return await tool_delete_kb_note(args.get("query", ""), project_id)
         return f"未知工具: {name}"
     except Exception as e:
         return f"工具 {name} 执行异常: {e}"
