@@ -26,7 +26,9 @@ async def note_list(request: Request, tag: str = "", q: str = "", project_id: st
         if project_id:
             where_parts.append("n.project_id = ?")
             params.append(project_id)
-        if folder:
+        if folder == "__unfiled__":
+            where_parts.append("(n.folder = '' OR n.folder IS NULL)")
+        elif folder:
             # 匹配自身和子文件夹（如 folder=资料 时也命中 资料/竞品）
             where_parts.append("(n.folder = ? OR n.folder LIKE ?)")
             params.extend([folder, f"{folder}/%"])
