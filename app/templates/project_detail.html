@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ project.name }} - AI 项目管理{% endblock %}
 {% block content %}
+<style>@keyframes spin{to{transform:rotate(360deg)}}</style>
 <div class="mb-4 text-sm text-gray-400">
     <a href="/projects" class="hover:text-gray-600">← 项目</a> /
     <span class="text-gray-600">{{ project.code or project.name }} {{ project.name if project.code }}</span>
@@ -539,6 +540,7 @@ function switchView(name) {
     var box, input, sendBtn, form;
     var loaded = false, busy = false;
     var DRAFT_KEY = 'projai_draft_' + projectId;
+    var thinkingTimer = null;
 
     function esc(s){ var d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
     function nowHM(){ var d=new Date(); return ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2); }
@@ -597,8 +599,18 @@ function switchView(name) {
     };
     function addThinking(){
         box.insertAdjacentHTML('beforeend',
-            '<div class="flex justify-start" id="projai-thinking"><div><div class="bg-gray-100 text-gray-500 rounded-lg px-4 py-3 text-sm">正在思考…</div></div></div>');
+            '<div class="flex justify-start" id="projai-thinking"><div>'
+            + '<div class="bg-purple-50 border border-purple-200 text-purple-700 rounded-lg px-4 py-3 text-sm flex items-center gap-2">'
+            + '<span style="display:inline-block;width:14px;height:14px;border:2px solid #a855f7;border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite"></span>'
+            + '⚙️ AI 执行中 <span id="projai-elapsed">0</span> 秒…'
+            + '</div></div></div>');
         box.scrollTop = box.scrollHeight;
+        var start = Date.now();
+        thinkingTimer = setInterval(function(){
+            var el = document.getElementById('projai-elapsed');
+            if (el) el.textContent = Math.floor((Date.now() - start) / 1000);
+            else { clearInterval(thinkingTimer); thinkingTimer = null; }
+        }, 1000);
     }
 
     function loadHistory(){
@@ -646,10 +658,12 @@ function switchView(name) {
             })
             .then(function(data){
                 var t = document.getElementById('projai-thinking'); if (t) t.remove();
+                if (thinkingTimer) { clearInterval(thinkingTimer); thinkingTimer = null; }
                 addAiMsg(data.reply || '(无回复)');
             })
             .catch(function(err){
                 var t = document.getElementById('projai-thinking'); if (t) t.remove();
+                if (thinkingTimer) { clearInterval(thinkingTimer); thinkingTimer = null; }
                 addAiMsg('[出错了] ' + (err && err.message ? err.message : err));
             })
             .finally(function(){
