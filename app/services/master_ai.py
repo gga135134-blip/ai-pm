@@ -194,7 +194,23 @@ def _extract_action_json(text: str) -> dict:
         except json.JSONDecodeError:
             pass
 
+    # JSON 解析失败降级：用字符串定位提取 action 和 reply
+    # 常见失败原因：reply 文本里含未转义的 ASCII 双引号（如 "词语"）
+    import re as _re
+    action_m = _re.search(r'"action"\s*:\s*"(\w+)"', raw)
+    detected_action = action_m.group(1) if action_m else "chat"
+    reply_m = _re.search(r'"reply"\s*:\s*"', raw)
+    if reply_m:
+        rest = raw[reply_m.end():]
+        last_quote = rest.rfind('"')
+        if last_quote > 0:
+            reply_text = rest[:last_quote]
+            reply_text = reply_text.replace('\\n', '\n').replace('\\t', '\t').replace('\\"', '"')
+            log.warning("_extract_action_json: JSON 解析失败，字符串降级提取。action=%s", detected_action)
+            return {"action": detected_action, "params": {}, "reply": reply_text}
+
     # 实在解析不了：当纯聊天，原样返回（绝不做 unicode_escape，会把中文搅成乱码）
+    log.warning("_extract_action_json: 完全解析失败，原样返回。raw[:100]=%s", raw[:100])
     return {"action": "chat", "params": {}, "reply": raw}
 
 

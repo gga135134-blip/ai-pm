@@ -54,7 +54,8 @@ PROJECT_AI_SYSTEM = """你是 **项目 {code} 「{name}」 的专属 AI**，只�
 
 规则：
 - 中文，简洁直接。
-- 只返回 JSON，不要其他文字。"""
+- 只返回 JSON，不要其他文字。
+- reply 文字里引用词语用「」，**不要用 ASCII 双引号 ""**（会破坏 JSON 格式）。"""
 
 
 async def get_project_snapshot(project_id: str) -> str:
@@ -192,7 +193,8 @@ async def project_chat(project_id: str, message: str, sender: str, model: str = 
     system_prompt = PROJECT_AI_SYSTEM.format(code=code, name=name)
     result = await ask_ai(prompt=prompt, model=model, task_type="analysis", system_prompt=system_prompt)
 
-    parsed = _extract_action_json(result["response"])
+    from app.services.agent_tools import _sanitize_output
+    parsed = _extract_action_json(_sanitize_output(result["response"]))
     action = parsed.get("action", "chat")
     params = parsed.get("params", {}) or {}
     reply = parsed.get("reply") or "..."
