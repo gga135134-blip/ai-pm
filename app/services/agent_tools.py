@@ -204,15 +204,20 @@ async def tool_create_kb_note(title: str, content: str, project_id: str | None,
     note_id = str(uuid.uuid4())
     db = await get_db()
     try:
+        # 未指定文件夹时自动归入项目同名文件夹
+        if not folder:
+            cur = await db.execute("SELECT name FROM projects WHERE id = ?", (project_id,))
+            row = await cur.fetchone()
+            folder = row["name"] if row else ""
         await db.execute(
             """INSERT INTO notes (id, title, content, author, project_id, folder, tags, source_type, is_core, created_at, updated_at)
                VALUES (?, ?, ?, 'agent', ?, ?, ?, 'agent_created', ?, ?, ?)""",
-            (note_id, title, content, project_id, folder or "", tags or "", 1 if is_core else 0, now, now),
+            (note_id, title, content, project_id, folder, tags or "", 1 if is_core else 0, now, now),
         )
         await db.commit()
     finally:
         await db.close()
-    return f"✅ 已创建笔记「{title}」id={note_id[:8]}"
+    return f"✅ 已创建笔记「{title}」id={note_id[:8]}，文件夹：{folder or '未分类'}"
 
 
 async def tool_update_kb_note(query: str, project_id: str | None,
