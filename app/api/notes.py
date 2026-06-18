@@ -856,15 +856,23 @@ from fastapi.responses import JSONResponse
 
 @router.post("/notes/ima/test")
 async def ima_test():
-    from app.services.ima_client import test_connection
-    result = await test_connection()
+    try:
+        from app.services.ima_client import test_connection
+        result = await test_connection()
+    except ImportError as e:
+        result = f"❌ 缺少依赖包：{e}（请在服务器运行 pip install httpx）"
+    except Exception as e:
+        result = f"❌ 错误：{e}"
     return JSONResponse({"result": result})
 
 
 @router.post("/notes/ima/sync")
 async def ima_sync():
     """从 IMA 知识库同步内容到本地知识库（去重：已存在 external_id 的更新，否则新建）。"""
-    from app.services.ima_client import list_docs, get_doc_content, _creds
+    try:
+        from app.services.ima_client import list_docs, get_doc_content, _creds
+    except ImportError as e:
+        return JSONResponse({"ok": False, "msg": f"缺少依赖包：{e}（请在服务器运行 pip install httpx）"})
     import json as _json
     from app.config import BASE_DIR as _BD
 

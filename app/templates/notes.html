@@ -33,27 +33,37 @@
     <a href="/notes/weekly" class="flex-shrink-0 bg-orange-500 text-white px-3 py-2 rounded-lg text-sm hover:bg-orange-600 transition">周报</a>
     <a href="/notes/trash" class="flex-shrink-0 text-sm px-3 py-2 border rounded-lg text-gray-600 hover:bg-gray-50 transition">回收站</a>
     <a href="/backups" class="flex-shrink-0 text-sm px-3 py-2 border rounded-lg text-gray-600 hover:bg-gray-50 transition">备份</a>
-    <button id="ima-sync-btn" onclick="imaSync()" class="flex-shrink-0 text-sm px-3 py-2 border border-blue-300 text-blue-600 rounded-lg hover:bg-blue-50 transition">↓ IMA</button>
 </div>
-<div id="ima-msg" class="hidden mb-3 text-sm px-4 py-2 rounded-lg bg-blue-50 text-blue-700"></div>
+
+<!-- IMA 同步卡片 -->
+<div class="bg-blue-50 border border-blue-200 rounded-xl px-5 py-4 mb-4 flex items-center justify-between gap-4">
+    <div>
+        <div class="font-semibold text-blue-800 text-base">🔗 腾讯 IMA 知识库同步</div>
+        <div id="ima-msg" class="text-sm text-blue-600 mt-0.5">点击同步按钮，将 IMA 笔记导入到本地知识库（自动去重）</div>
+    </div>
+    <button id="ima-sync-btn" onclick="imaSync()"
+        class="flex-shrink-0 bg-blue-600 text-white px-5 py-2.5 rounded-lg font-medium hover:bg-blue-700 transition text-sm">
+        ↓ 立即同步
+    </button>
+</div>
 <script>
 async function imaSync() {
     var btn = document.getElementById('ima-sync-btn');
     var msg = document.getElementById('ima-msg');
     btn.textContent = '同步中…'; btn.disabled = true;
-    msg.className = 'mb-3 text-sm px-4 py-2 rounded-lg bg-blue-50 text-blue-700';
     msg.textContent = '正在连接 IMA…';
     try {
-        var r = await fetch('/notes/ima/sync', {method:'POST'});
-        var d = await r.json();
-        msg.textContent = d.msg;
-        msg.className = 'mb-3 text-sm px-4 py-2 rounded-lg ' + (d.ok ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700');
-        if (d.ok) setTimeout(function(){ location.reload(); }, 1500);
+        var r = await fetch('/notes/ima/sync', {method:'POST', credentials:'same-origin'});
+        var text = await r.text();
+        var d = JSON.parse(text);
+        msg.textContent = d.msg || text;
+        btn.style.background = d.ok ? '#16a34a' : '#dc2626';
+        if (d.ok) setTimeout(function(){ location.reload(); }, 2000);
     } catch(e) {
         msg.textContent = '❌ 请求失败：' + e;
-        msg.className = 'mb-3 text-sm px-4 py-2 rounded-lg bg-red-50 text-red-700';
+        btn.style.background = '#dc2626';
     }
-    btn.textContent = '↓ IMA'; btn.disabled = false;
+    btn.textContent = '↓ 立即同步'; btn.disabled = false;
 }
 </script>
 
