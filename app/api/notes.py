@@ -964,9 +964,13 @@ async def ima_add_kb(request: Request):
     import json as _json, re
     body = await request.json()
     raw = body.get("url_or_id", "").strip()
-    # 从 URL 中提取 shareId
-    m = re.search(r'shareId=([0-9a-fA-F]+)', raw)
-    kb_id = m.group(1) if m else raw
+    # 优先尝试纯数字 ID；否则从 URL 中提取 shareId（注：shareId ≠ knowledge_base_id，
+    # 但保留兼容性；正确的做法是直接粘贴 HTML 中的 data-kb-id 数字）
+    if re.fullmatch(r'\d+', raw):
+        kb_id = raw
+    else:
+        m = re.search(r'shareId=([0-9a-fA-F]+)', raw)
+        kb_id = m.group(1) if m else raw
     if not kb_id:
         return JSONResponse({"ok": False, "msg": "请输入有效的链接或 ID"})
     # 验证可用：尝试拉第一页
