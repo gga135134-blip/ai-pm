@@ -3,6 +3,65 @@
 {% block content %}
 <h1 class="text-2xl font-bold text-gray-800 mb-6">设置</h1>
 <div class="max-w-2xl">
+    {% if msg %}
+    <div class="mb-4 bg-blue-50 border border-blue-200 text-blue-700 text-sm rounded-lg px-4 py-3">{{ msg }}</div>
+    {% endif %}
+
+    <!-- 账号管理 -->
+    <div class="bg-white rounded-lg shadow-sm p-6 mb-6 border-l-4 border-green-500">
+        <h2 class="text-lg font-semibold text-gray-700 mb-1">账号管理</h2>
+        <p class="text-sm text-gray-500 mb-4">当前登录：<strong>{{ request.session.get('user') }}</strong>
+            &nbsp;·&nbsp;<a href="/logout" class="text-red-500 hover:underline text-sm">退出登录</a>
+        </p>
+
+        <!-- 现有用户 -->
+        <div class="mb-4">
+            <p class="text-sm font-medium text-gray-600 mb-2">现有用户</p>
+            <div class="flex flex-wrap gap-2">
+                {% for u in users %}
+                <form method="POST" action="/settings/users/delete" onsubmit="return confirm('确认删除用户 {{ u }}？')">
+                    <input type="hidden" name="username" value="{{ u }}">
+                    <span class="inline-flex items-center gap-1 bg-gray-100 text-gray-700 text-sm px-3 py-1 rounded-full">
+                        👤 {{ u }}
+                        {% if u != request.session.get('user') %}
+                        <button type="submit" class="text-red-400 hover:text-red-600 ml-1 font-bold leading-none">×</button>
+                        {% endif %}
+                    </span>
+                </form>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <!-- 添加用户 -->
+            <form method="POST" action="/settings/users/add" class="border rounded-lg p-4">
+                <p class="text-sm font-medium text-gray-700 mb-3">添加新用户</p>
+                <input name="username" placeholder="用户名" required
+                    class="w-full border rounded px-3 py-1.5 text-sm mb-2 focus:ring-2 focus:ring-green-400 outline-none">
+                <input name="password" type="password" placeholder="密码" required
+                    class="w-full border rounded px-3 py-1.5 text-sm mb-2 focus:ring-2 focus:ring-green-400 outline-none">
+                <input name="password2" type="password" placeholder="确认密码" required
+                    class="w-full border rounded px-3 py-1.5 text-sm mb-3 focus:ring-2 focus:ring-green-400 outline-none">
+                <button class="w-full bg-green-600 text-white py-1.5 rounded text-sm hover:bg-green-700 transition">添加</button>
+            </form>
+
+            <!-- 修改密码 -->
+            <form method="POST" action="/settings/users/change-password" class="border rounded-lg p-4">
+                <p class="text-sm font-medium text-gray-700 mb-3">修改密码</p>
+                <select name="username" class="w-full border rounded px-3 py-1.5 text-sm mb-2 focus:ring-2 focus:ring-blue-400 outline-none">
+                    {% for u in users %}<option value="{{ u }}">{{ u }}</option>{% endfor %}
+                </select>
+                <input name="old_password" type="password" placeholder="原密码" required
+                    class="w-full border rounded px-3 py-1.5 text-sm mb-2 focus:ring-2 focus:ring-blue-400 outline-none">
+                <input name="new_password" type="password" placeholder="新密码" required
+                    class="w-full border rounded px-3 py-1.5 text-sm mb-2 focus:ring-2 focus:ring-blue-400 outline-none">
+                <input name="new_password2" type="password" placeholder="确认新密码" required
+                    class="w-full border rounded px-3 py-1.5 text-sm mb-3 focus:ring-2 focus:ring-blue-400 outline-none">
+                <button class="w-full bg-blue-600 text-white py-1.5 rounded text-sm hover:bg-blue-700 transition">修改</button>
+            </form>
+        </div>
+    </div>
+
     {% set test_status = request.query_params.get('notify_test') %}
     {% if test_status == 'ok' %}
     <div class="mb-4 bg-green-50 border border-green-200 text-green-700 text-sm rounded-lg px-4 py-3">

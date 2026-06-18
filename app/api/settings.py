@@ -2,6 +2,7 @@ import json
 from fastapi import APIRouter, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from app.config import BASE_DIR
+from app.api.auth import get_users, hash_password, verify_password
 
 router = APIRouter()
 CONFIG_FILE = BASE_DIR / "data" / "settings.json"
@@ -28,18 +29,26 @@ def load_settings() -> dict:
 
 
 def save_settings(data: dict):
+    # 合并写入，保留 users / session_secret 等不属于本表单的字段
+    existing = {}
+    if CONFIG_FILE.exists():
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            existing = json.load(f)
+    existing.update(data)
     CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+        json.dump(existing, f, ensure_ascii=False, indent=2)
 
 
 @router.get("/settings", response_class=HTMLResponse)
 async def settings_page(request: Request):
     from app.services.constitution import get_constitution
     config = load_settings()
-    config["company_manual"] = get_constitution()  # 没存过则给默认手册
+    config["company_manual"] = get_constitution()
+    users = list(get_users().keys())
+    msg = request.query_params.get("msg", "")
     return request.app.state.templates.TemplateResponse(
-        request, "settings.html", {"request": request, "config": config}
+        request, "settings.html", {"request": request, "config": config, "users": users, "msg": msg}
     )
 
 
@@ -93,6 +102,58 @@ async def settings_save(
     }
     save_settings(data)
     return RedirectResponse("/settings", status_code=303)
+
+
+@router.post("/settings/users/add")
+async def user_add(request: Request, username: str = Form(...), password: str = Form(...), password2: str = Form(...)):
+    if password != password2:
+        return RedirectResponse("/settings?msg=两次密码不一致", status_code=303)
+    if not username.strip():
+        return RedirectResponse("/settings?msg=用户名不能为空", status_code=303)
+    cfg = {}
+    if CONFIG_FILE.exists():
+        with open(CONFIG_FILE, encoding="utf-8") as f:
+            cfg = json.load(f)
+    users = cfg.get("users", {})
+    if username in users:
+        return RedirectResponse(f"/settings?msg=用户 {username} 已存在", status_code=303)
+    users[username] = hash_password(password)
+    cfg["users"] = users
+    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+        json.dump(cfg, f, ensure_ascii=False, indent=2)
+    return RedirectResponse(f"/settings?msg=已添加用户 {username}", status_code=303)
+
+
+@router.post("/settings/users/change-password")
+async def user_change_password(request: Request, username: str = Form(...),
+                               old_password: str = Form(...), new_password: str = Form(...), new_password2: str = Form(...)):
+    if new_password != new_password2:
+        return RedirectResponse("/settings?msg=两次新密码不一致", status_code=303)
+    if not verify_password(old_password, get_users().get(username, "")):
+        return RedirectResponse("/settings?msg=原密码错误", status_code=303)
+    cfg = {}
+    if CONFIG_FILE.exists():
+        with open(CONFIG_FILE, encoding="utf-8") as f:
+            cfg = json.load(f)
+    cfg.setdefault("users", {})[username] = hash_password(new_password)
+    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+        json.dump(cfg, f, ensure_ascii=False, indent=2)
+    return RedirectResponse(f"/settings?msg={username} 密码已更新", status_code=303)
+
+
+@router.post("/settings/users/delete")
+async def user_delete(request: Request, username: str = Form(...)):
+    current_user = request.session.get("user")
+    if username == current_user:
+        return RedirectResponse("/settings?msg=不能删除自己", status_code=303)
+    cfg = {}
+    if CONFIG_FILE.exists():
+        with open(CONFIG_FILE, encoding="utf-8") as f:
+            cfg = json.load(f)
+    cfg.get("users", {}).pop(username, None)
+    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+        json.dump(cfg, f, ensure_ascii=False, indent=2)
+    return RedirectResponse(f"/settings?msg=已删除用户 {username}", status_code=303)
 
 
 @router.post("/settings/test-notify")
