@@ -951,8 +951,7 @@ async def ima_sync():
 
 @router.get("/notes/ima/browse", response_class=HTMLResponse)
 async def ima_browse(request: Request):
-    from app.templates import templates
-    return templates.TemplateResponse("ima_browse.html", {"request": request})
+    return request.app.state.templates.TemplateResponse("ima_browse.html", {"request": request})
 
 
 @router.get("/notes/ima/kbs")
