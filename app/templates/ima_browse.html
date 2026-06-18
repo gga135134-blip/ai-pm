@@ -9,9 +9,16 @@
 
 <div id="main-layout" style="display:flex; gap:24px; min-height:70vh">
     <!-- 左侧：知识库列表 -->
-    <div style="width:200px; flex-shrink:0">
-        <div class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">知识库</div>
-        <div id="kb-list"><div class="text-sm text-gray-400 py-4">加载中…</div></div>
+    <div style="width:210px; flex-shrink:0">
+        <div class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">搜索知识库</div>
+        <div style="display:flex;gap:6px;margin-bottom:12px">
+            <input id="kb-search" type="text" placeholder="输入名称…"
+                style="flex:1;min-width:0;border:1px solid #d1d5db;border-radius:8px;padding:6px 10px;font-size:13px;outline:none"
+                onkeydown="if(event.key==='Enter')searchKBs()">
+            <button onclick="searchKBs()" style="flex-shrink:0;background:#2563eb;color:white;border:none;padding:6px 10px;border-radius:8px;font-size:13px;cursor:pointer">搜</button>
+        </div>
+        <div class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">我的知识库</div>
+        <div id="kb-list"><div class="text-sm text-gray-400 py-2">加载中…</div></div>
     </div>
 
     <!-- 右侧：条目列表 -->
@@ -34,7 +41,6 @@ function esc(s) {
     return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// 加载知识库列表
 async function loadKBs() {
     var el = document.getElementById('kb-list');
     try {
@@ -42,16 +48,10 @@ async function loadKBs() {
         var d = await r.json();
         if (!d.ok) { el.innerHTML = '<div class="text-sm text-red-600">' + esc(d.msg) + '</div>'; return; }
         if (!d.kbs || !d.kbs.length) {
-            el.innerHTML = '<div class="text-sm text-gray-400 py-4">没有找到可访问的知识库。<br>请确认凭证权限。</div>';
+            el.innerHTML = '<div class="text-sm text-gray-400 py-2">无。可用搜索框查找共享库。</div>';
             return;
         }
-        el.innerHTML = d.kbs.map(function(kb) {
-            return '<button onclick="selectKB(\'' + esc(kb.id) + '\',\'' + esc(kb.name) + '\')" id="kb-btn-' + esc(kb.id) + '" '
-                + 'style="width:100%;text-align:left;padding:8px 12px;border-radius:8px;font-size:14px;color:#374151;border:none;background:none;cursor:pointer;margin-bottom:2px" '
-                + 'onmouseover="this.style.background=\'#eff6ff\'" onmouseout="this.style.background=(currentKbId===\'' + esc(kb.id) + '\'?\'#dbeafe\':\'none\')">'
-                + esc(kb.name)
-                + '</button>';
-        }).join('');
+        renderKBList(d.kbs);
     } catch(e) {
         el.innerHTML = '<div class="text-sm text-red-600">加载失败：' + esc(String(e)) + '</div>';
     }
@@ -138,6 +138,35 @@ async function createNote(mediaId, title) {
         alert('请求失败：' + e);
         btn.textContent = orig; btn.disabled = false;
     }
+}
+
+async function searchKBs() {
+    var q = document.getElementById('kb-search').value.trim();
+    if (!q) { loadKBs(); return; }
+    var el = document.getElementById('kb-list');
+    el.innerHTML = '<div class="text-sm text-gray-400 py-2">搜索中…</div>';
+    try {
+        var r = await fetch('/notes/ima/kbs?q=' + encodeURIComponent(q));
+        var d = await r.json();
+        if (!d.ok) { el.innerHTML = '<div class="text-sm text-red-600">' + esc(d.msg) + '</div>'; return; }
+        if (!d.kbs || !d.kbs.length) {
+            el.innerHTML = '<div class="text-sm text-gray-400 py-2">未找到「' + esc(q) + '」</div>';
+            return;
+        }
+        renderKBList(d.kbs);
+    } catch(e) {
+        el.innerHTML = '<div class="text-sm text-red-600">搜索失败：' + esc(String(e)) + '</div>';
+    }
+}
+
+function renderKBList(kbs) {
+    var el = document.getElementById('kb-list');
+    el.innerHTML = kbs.map(function(kb) {
+        return '<button onclick="selectKB(\'' + esc(kb.id) + '\',\'' + esc(kb.name) + '\')" id="kb-btn-' + esc(kb.id) + '" '
+            + 'style="width:100%;text-align:left;padding:8px 12px;border-radius:8px;font-size:14px;color:#374151;border:none;background:none;cursor:pointer;margin-bottom:2px" '
+            + 'onmouseover="this.style.background=\'#eff6ff\'" onmouseout="this.style.background=(currentKbId===\'' + esc(kb.id) + '\'?\'#dbeafe\':\'none\')">'
+            + esc(kb.name) + '</button>';
+    }).join('');
 }
 
 loadKBs();

@@ -957,13 +957,18 @@ async def ima_browse(request: Request):
 
 
 @router.get("/notes/ima/kbs")
-async def ima_kbs():
+async def ima_kbs(q: str = ""):
     try:
-        from app.services.ima_client import list_addable_kbs, _creds
+        from app.services.ima_client import list_addable_kbs, search_kbs, _creds
         client_id, api_key = _creds()
         if not client_id or not api_key:
             return JSONResponse({"ok": False, "msg": "未配置 IMA 凭证"})
-        kbs = await list_addable_kbs()
+        if q:
+            kbs = await search_kbs(q)
+            # search_knowledge_base 返回 id/name/cover_url，统一成 id+name
+            kbs = [{"id": k.get("id",""), "name": k.get("name","")} for k in kbs if k.get("id")]
+        else:
+            kbs = await list_addable_kbs()
         return JSONResponse({"ok": True, "kbs": kbs})
     except Exception as e:
         return JSONResponse({"ok": False, "msg": str(e)})

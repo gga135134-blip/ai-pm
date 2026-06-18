@@ -129,3 +129,13 @@ async def list_kb_items(kb_id: str, cursor: str = "", limit: int = 20) -> dict:
         "cursor": cursor,
         "limit": limit,
     })
+
+
+async def search_kbs(query: str) -> list[dict]:
+    """按关键词搜索知识库，返回 id+name 列表。"""
+    data = await _post("openapi/wiki/v1/search_knowledge_base", {
+        "query": query,
+        "cursor": "",
+        "limit": 20,
+    })
+    return data.get("info_list") or []
