@@ -129,6 +129,7 @@ MIGRATIONS = [
     "ALTER TABLE projects ADD COLUMN ai_budget REAL DEFAULT 0",
     "ALTER TABLE projects ADD COLUMN code TEXT DEFAULT ''",
     "ALTER TABLE notes ADD COLUMN is_core BOOLEAN DEFAULT 0",
+    "ALTER TABLE notes ADD COLUMN external_id TEXT DEFAULT ''",
 ]
 
 

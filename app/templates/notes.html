@@ -33,7 +33,29 @@
     <a href="/notes/weekly" class="flex-shrink-0 bg-orange-500 text-white px-3 py-2 rounded-lg text-sm hover:bg-orange-600 transition">周报</a>
     <a href="/notes/trash" class="flex-shrink-0 text-sm px-3 py-2 border rounded-lg text-gray-600 hover:bg-gray-50 transition">回收站</a>
     <a href="/backups" class="flex-shrink-0 text-sm px-3 py-2 border rounded-lg text-gray-600 hover:bg-gray-50 transition">备份</a>
+    <button id="ima-sync-btn" onclick="imaSync()" class="flex-shrink-0 text-sm px-3 py-2 border border-blue-300 text-blue-600 rounded-lg hover:bg-blue-50 transition">↓ IMA</button>
 </div>
+<div id="ima-msg" class="hidden mb-3 text-sm px-4 py-2 rounded-lg bg-blue-50 text-blue-700"></div>
+<script>
+async function imaSync() {
+    var btn = document.getElementById('ima-sync-btn');
+    var msg = document.getElementById('ima-msg');
+    btn.textContent = '同步中…'; btn.disabled = true;
+    msg.className = 'mb-3 text-sm px-4 py-2 rounded-lg bg-blue-50 text-blue-700';
+    msg.textContent = '正在连接 IMA…';
+    try {
+        var r = await fetch('/notes/ima/sync', {method:'POST'});
+        var d = await r.json();
+        msg.textContent = d.msg;
+        msg.className = 'mb-3 text-sm px-4 py-2 rounded-lg ' + (d.ok ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700');
+        if (d.ok) setTimeout(function(){ location.reload(); }, 1500);
+    } catch(e) {
+        msg.textContent = '❌ 请求失败：' + e;
+        msg.className = 'mb-3 text-sm px-4 py-2 rounded-lg bg-red-50 text-red-700';
+    }
+    btn.textContent = '↓ IMA'; btn.disabled = false;
+}
+</script>
 
 <div class="notes-layout">
     <!-- 侧边栏：标签 + 筛选 -->

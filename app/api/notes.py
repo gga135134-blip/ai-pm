@@ -849,3 +849,95 @@ async def backup_create():
     await create_backup()
     await cleanup_old_backups(keep=10)
     return RedirectResponse("/backups", status_code=303)
+
+
+# ── IMA 同步 ──────────────────────────────────────────────
+from fastapi.responses import JSONResponse
+
+@router.post("/notes/ima/test")
+async def ima_test():
+    from app.services.ima_client import test_connection
+    result = await test_connection()
+    return JSONResponse({"result": result})
+
+
+@router.post("/notes/ima/sync")
+async def ima_sync():
+    """从 IMA 知识库同步内容到本地知识库（去重：已存在 external_id 的更新，否则新建）。"""
+    from app.services.ima_client import list_docs, get_doc_content, _creds
+    import json as _json
+    from app.config import BASE_DIR as _BD
+
+    client_id, api_key = _creds()
+    if not client_id or not api_key:
+        return JSONResponse({"ok": False, "msg": "未配置 IMA 凭证，请先在设置页填写"})
+
+    # 读取要同步的 KB ID 列表（当前先同步笔记模块）
+    cfg_path = _BD / "data" / "settings.json"
+    sync_kb_ids = []
+    if cfg_path.exists():
+        with open(cfg_path, encoding="utf-8") as f:
+            sync_kb_ids = _json.load(f).get("ima_sync_kb_ids", [])
+
+    created = updated = skipped = 0
+    errors = []
+    now = datetime.now().isoformat()
+
+    try:
+        # 分页拉取 IMA 笔记列表
+        offset, limit = 0, 50
+        while True:
+            data = await list_docs(limit=limit, offset=offset)
+            items = data.get("list") or data.get("docs") or []
+            total = data.get("total", 0)
+            if not items:
+                break
+
+            db = await get_db()
+            try:
+                for item in items:
+                    ext_id = str(item.get("note_id") or item.get("id") or "")
+                    if not ext_id:
+                        continue
+                    title = item.get("title") or item.get("name") or "IMA 笔记"
+                    # 检查是否已存在
+                    cur = await db.execute(
+                        "SELECT id FROM notes WHERE external_id = ?", (ext_id,)
+                    )
+                    existing = await cur.fetchone()
+                    # 拉取正文
+                    try:
+                        content = await get_doc_content(ext_id)
+                    except Exception as e:
+                        errors.append(f"{title}: {e}")
+                        skipped += 1
+                        continue
+
+                    if existing:
+                        await db.execute(
+                            "UPDATE notes SET title=?, content=?, updated_at=? WHERE id=?",
+                            (title, content, now, existing["id"]),
+                        )
+                        updated += 1
+                    else:
+                        await db.execute(
+                            """INSERT INTO notes (id,title,content,source_type,folder,external_id,created_at,updated_at)
+                               VALUES (?,?,?,'ima_sync','IMA同步',?,?,?)""",
+                            (str(uuid.uuid4()), title, content, ext_id, now, now),
+                        )
+                        created += 1
+                await db.commit()
+            finally:
+                await db.close()
+
+            offset += limit
+            if offset >= total:
+                break
+
+    except Exception as e:
+        return JSONResponse({"ok": False, "msg": f"同步失败：{e}"})
+
+    msg = f"✅ 同步完成：新建 {created} 篇，更新 {updated} 篇，跳过 {skipped} 篇"
+    if errors:
+        msg += f"（{len(errors)} 条错误：{errors[:3]}）"
+    return JSONResponse({"ok": True, "msg": msg})
