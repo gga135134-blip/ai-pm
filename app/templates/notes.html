@@ -36,32 +36,56 @@
 </div>
 
 <!-- IMA 同步卡片 -->
-<div class="bg-blue-50 border border-blue-200 rounded-xl px-5 py-4 mb-4 flex items-center justify-between gap-4">
-    <div>
-        <div class="font-semibold text-blue-800 text-base">🔗 腾讯 IMA 知识库同步</div>
-        <div id="ima-msg" class="text-sm text-blue-600 mt-0.5">点击同步按钮，将 IMA 笔记导入到本地知识库（自动去重）</div>
+<div class="bg-blue-50 border border-blue-200 rounded-xl px-5 py-4 mb-4">
+    <div class="flex items-center justify-between gap-4">
+        <div style="min-width:0">
+            <div class="font-semibold text-blue-800 text-base">🔗 腾讯 IMA 知识库同步</div>
+            <div id="ima-msg" class="text-sm text-blue-600 mt-0.5">同步后笔记放入「IMA同步」文件夹，不影响现有内容</div>
+        </div>
+        <div class="flex gap-2 flex-shrink-0">
+            <button id="ima-test-btn" onclick="imaTest()"
+                class="border border-blue-400 text-blue-700 px-4 py-2 rounded-lg font-medium hover:bg-blue-100 transition text-sm">
+                测试连接
+            </button>
+            <button id="ima-sync-btn" onclick="imaSync()"
+                class="bg-blue-600 text-white px-5 py-2 rounded-lg font-medium hover:bg-blue-700 transition text-sm">
+                ↓ 立即同步
+            </button>
+        </div>
     </div>
-    <button id="ima-sync-btn" onclick="imaSync()"
-        class="flex-shrink-0 bg-blue-600 text-white px-5 py-2.5 rounded-lg font-medium hover:bg-blue-700 transition text-sm">
-        ↓ 立即同步
-    </button>
 </div>
 <script>
+function _imaMsg(text, color) {
+    var el = document.getElementById('ima-msg');
+    el.textContent = text;
+    el.style.color = color || '';
+}
+async function imaTest() {
+    var btn = document.getElementById('ima-test-btn');
+    btn.textContent = '检测中…'; btn.disabled = true;
+    _imaMsg('正在测试连接…', '#1d4ed8');
+    try {
+        var r = await fetch('/notes/ima/test', {method:'POST', credentials:'same-origin'});
+        var text = await r.text();
+        var d = JSON.parse(text);
+        _imaMsg(d.result || text, d.result && d.result.startsWith('✅') ? '#15803d' : '#b91c1c');
+    } catch(e) {
+        _imaMsg('❌ 请求失败：' + e, '#b91c1c');
+    }
+    btn.textContent = '测试连接'; btn.disabled = false;
+}
 async function imaSync() {
     var btn = document.getElementById('ima-sync-btn');
-    var msg = document.getElementById('ima-msg');
     btn.textContent = '同步中…'; btn.disabled = true;
-    msg.textContent = '正在连接 IMA…';
+    _imaMsg('正在连接 IMA，请稍候…', '#1d4ed8');
     try {
         var r = await fetch('/notes/ima/sync', {method:'POST', credentials:'same-origin'});
         var text = await r.text();
         var d = JSON.parse(text);
-        msg.textContent = d.msg || text;
-        btn.style.background = d.ok ? '#16a34a' : '#dc2626';
-        if (d.ok) setTimeout(function(){ location.reload(); }, 2000);
+        _imaMsg(d.msg || text, d.ok ? '#15803d' : '#b91c1c');
+        if (d.ok) setTimeout(function(){ location.reload(); }, 2500);
     } catch(e) {
-        msg.textContent = '❌ 请求失败：' + e;
-        btn.style.background = '#dc2626';
+        _imaMsg('❌ 请求失败：' + e, '#b91c1c');
     }
     btn.textContent = '↓ 立即同步'; btn.disabled = false;
 }
