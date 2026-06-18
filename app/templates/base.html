@@ -16,7 +16,15 @@
         .status-reviewing { background: #ede9fe; color: #5b21b6; }
         .status-blocked { background: #fee2e2; color: #991b1b; }
         .status-failed { background: #fee2e2; color: #991b1b; }
-        /* 本地 tailwind 裁剪版缺失的颜色类，手动补齐 */
+        /* 移动端响应式（本地 tailwind 裁剪版没有 md: 断点）*/
+    .nav-desktop { display: flex; }
+    .nav-mobile-btn { display: none; }
+    #mob-menu { display: none; }
+    @media (max-width: 767px) {
+        .nav-desktop { display: none !important; }
+        .nav-mobile-btn { display: flex !important; }
+    }
+    /* 本地 tailwind 裁剪版缺失的颜色类，手动补齐 */
         .bg-teal-600 { background-color: #0d9488; }
         .hover\:bg-teal-700:hover { background-color: #0f766e; }
         .focus\:ring-teal-500:focus { box-shadow: 0 0 0 2px rgba(20,184,166,.4); }
@@ -44,7 +52,7 @@
             <a href="/" class="text-xl font-bold text-gray-800">AI-PM</a>
 
             <!-- 桌面端导航 -->
-            <div class="hidden md:flex items-center gap-5 text-sm">
+            <div class="nav-desktop items-center gap-5 text-sm">
                 <a href="/chat" class="text-gray-600 hover:text-gray-900 pb-0.5 {% if path.startswith('/chat') %}border-b-2 border-purple-500 font-medium{% endif %}">AI Chat</a>
                 <a href="/" class="text-gray-600 hover:text-gray-900 pb-0.5 {% if path == '/' %}border-b-2 border-purple-500 font-medium{% endif %}">总览</a>
                 <a href="/projects" class="text-gray-600 hover:text-gray-900 pb-0.5 {% if path.startswith('/projects') %}border-b-2 border-purple-500 font-medium{% endif %}">项目</a>
@@ -54,7 +62,7 @@
             </div>
 
             <!-- 移动端汉堡按钮 -->
-            <button id="mob-btn" class="md:hidden p-2 rounded-lg text-gray-600 hover:bg-gray-100" onclick="document.getElementById('mob-menu').classList.toggle('hidden')">
+            <button id="mob-btn" class="nav-mobile-btn p-2 rounded-lg text-gray-600 hover:bg-gray-100" onclick="var m=document.getElementById('mob-menu');m.style.display=m.style.display==='block'?'none':'block'">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
                 </svg>
