@@ -296,6 +296,66 @@ async def tool_delete_kb_note(query: str, project_id: str | None) -> str:
     return f"✅ 已移入回收站「{title}」(id={note_id[:8]})（可在知识库回收站还原）"
 
 
+async def tool_list_tasks(project_id: str | None) -> str:
+    """列出当前项目的所有任务。"""
+    if not project_id:
+        return "❌ 未指定项目，无法列出任务"
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            "SELECT id, title, status, priority, assignee FROM tasks WHERE project_id = ? AND deleted_at IS NULL ORDER BY priority ASC, created_at ASC",
+            (project_id,),
+        )
+        rows = [dict(r) for r in await cursor.fetchall()]
+    finally:
+        await db.close()
+    if not rows:
+        return "当前项目没有任何任务"
+    lines = [f"共 {len(rows)} 个任务："]
+    for r in rows:
+        lines.append(f"id={r['id'][:8]} [{r['status']}] P{r['priority']} {r['title']} ({r['assignee'] or '未分配'})")
+    return "\n".join(lines)
+
+
+async def tool_update_task_status(query: str, new_status: str, project_id: str | None) -> str:
+    """修改任务状态。query 可以是 id 前缀或任务标题关键词。new_status 可选：pending / running / reviewing / done / blocked。"""
+    valid = {"pending", "running", "reviewing", "done", "blocked"}
+    if new_status not in valid:
+        return f"❌ 无效状态 {new_status!r}，可选：{', '.join(sorted(valid))}"
+    if not project_id:
+        return "❌ 未指定项目"
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            "SELECT id, title, status FROM tasks WHERE project_id = ? AND deleted_at IS NULL",
+            (project_id,),
+        )
+        rows = [dict(r) for r in await cursor.fetchall()]
+    finally:
+        await db.close()
+
+    q = query.strip().lower()
+    matched = [r for r in rows if r["id"].startswith(q) or q in r["title"].lower()]
+    if not matched:
+        return f"❌ 找不到任务：{query}"
+    if len(matched) > 1:
+        opts = "\n".join(f"  id={r['id'][:8]} {r['title']}" for r in matched[:5])
+        return f"❌ 匹配到多个任务，请用更精确的标题或 id 前缀：\n{opts}"
+    task = matched[0]
+    from datetime import datetime
+    now = datetime.now().isoformat()
+    db = await get_db()
+    try:
+        await db.execute(
+            "UPDATE tasks SET status = ?, updated_at = ? WHERE id = ?",
+            (new_status, now, task["id"]),
+        )
+        await db.commit()
+    finally:
+        await db.close()
+    return f"✅ 任务「{task['title']}」状态：{task['status']} → {new_status}"
+
+
 async def tool_read_kb_note(query: str, project_id: str | None) -> str:
     """读取知识库笔记全文。query 可以是笔记 id 前缀（8位）、id 全文，或笔记标题（模糊匹配）"""
     from app.database import get_db
@@ -454,6 +514,29 @@ TOOL_SCHEMAS = [
     {
         "type": "function",
         "function": {
+            "name": "list_tasks",
+            "description": "列出当前项目所有任务（id、标题、状态、优先级、负责人）。需要更新任务状态前先调用此工具获取任务 id。",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_task_status",
+            "description": "修改任务状态。query 传任务标题关键词或 id 前缀（8位），new_status 可选：pending/running/reviewing/done/blocked。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "任务标题关键词或 id 前缀"},
+                    "new_status": {"type": "string", "description": "目标状态：pending / running / reviewing / done / blocked"},
+                },
+                "required": ["query", "new_status"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "delete_kb_note",
             "description": "将知识库笔记移入回收站（软删除，可还原）。用于删除已合并/过期的旧笔记。query 可以是 id 前缀或标题。",
             "parameters": {
@@ -496,6 +579,10 @@ async def _dispatch_tool(name: str, args: dict, project_id: str | None) -> str:
             )
         if name == "delete_kb_note":
             return await tool_delete_kb_note(args.get("query", ""), project_id)
+        if name == "list_tasks":
+            return await tool_list_tasks(project_id)
+        if name == "update_task_status":
+            return await tool_update_task_status(args.get("query", ""), args.get("new_status", ""), project_id)
         return f"未知工具: {name}"
     except Exception as e:
         return f"工具 {name} 执行异常: {e}"

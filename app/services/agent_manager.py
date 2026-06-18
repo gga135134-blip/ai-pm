@@ -45,6 +45,8 @@ EXECUTE_SYSTEM = """你是一个能真正动手干活的 AI 执行者，不只�
 - **create_kb_note：在知识库创建新笔记** —— 整理/合并/分析结果需要永久保存时用这个，不是 write_file（write_file 只是临时工作区文件）
 - **update_kb_note：更新已有笔记** —— 修改标题/内容/标签/核心档状态
 - **delete_kb_note：软删除笔记（移入回收站）** —— 合并后的旧笔记用这个标记废弃，可还原
+- **list_tasks：列出当前项目所有任务**（id、标题、状态、优先级） —— 需要更新任务状态前先调这个拿 id
+- **update_task_status：修改任务状态** —— query 传标题关键词或 id 前缀，new_status 传 pending/running/reviewing/done/blocked
 
 **重要：两个不同的存储别搞混**
 - 📚 知识库（用 list/read/create/update/delete_kb_note）：董事会上传的资料、AI 分类整理的笔记、核心档、项目进度笔记——一切需要**永久保存**的"内容"。整理产出、合并结果、分析报告要用 **create_kb_note** 写入这里。
