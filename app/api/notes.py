@@ -956,6 +956,54 @@ async def ima_browse(request: Request):
     )
 
 
+@router.post("/notes/ima/add-kb")
+async def ima_add_kb(request: Request):
+    """从分享链接或 ID 添加知识库到收藏列表。"""
+    from app.services.ima_client import list_kb_items, _creds
+    from app.config import BASE_DIR as _BD
+    import json as _json, re
+    body = await request.json()
+    raw = body.get("url_or_id", "").strip()
+    # 从 URL 中提取 shareId
+    m = re.search(r'shareId=([0-9a-fA-F]+)', raw)
+    kb_id = m.group(1) if m else raw
+    if not kb_id:
+        return JSONResponse({"ok": False, "msg": "请输入有效的链接或 ID"})
+    # 验证可用：尝试拉第一页
+    try:
+        data = await list_kb_items(kb_id, cursor="", limit=1)
+    except Exception as e:
+        return JSONResponse({"ok": False, "msg": f"无法访问该知识库：{e}"})
+    # 读取自定义名称
+    name = body.get("name", "").strip() or "共享知识库"
+    # 保存到 settings.json
+    cfg = _BD / "data" / "settings.json"
+    settings = {}
+    if cfg.exists():
+        with open(cfg, encoding="utf-8") as f:
+            settings = _json.load(f)
+    saved = settings.get("ima_saved_kbs", [])
+    if not any(k["id"] == kb_id for k in saved):
+        saved.append({"id": kb_id, "name": name})
+        settings["ima_saved_kbs"] = saved
+        with open(cfg, "w", encoding="utf-8") as f:
+            _json.dump(settings, f, ensure_ascii=False, indent=2)
+    return JSONResponse({"ok": True, "kb": {"id": kb_id, "name": name}})
+
+
+@router.get("/notes/ima/saved-kbs")
+async def ima_saved_kbs():
+    from app.config import BASE_DIR as _BD
+    import json as _json
+    cfg = _BD / "data" / "settings.json"
+    if cfg.exists():
+        with open(cfg, encoding="utf-8") as f:
+            saved = _json.load(f).get("ima_saved_kbs", [])
+    else:
+        saved = []
+    return JSONResponse({"ok": True, "kbs": saved})
+
+
 @router.get("/notes/ima/kbs")
 async def ima_kbs(q: str = ""):
     try:
