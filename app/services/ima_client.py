@@ -1,4 +1,4 @@
-"""腾讯 IMA OpenAPI 客户端（知识库 + 笔记）。"""
+"""腾讯 IMA OpenAPI 客户端（笔记模块）。"""
 import json
 import logging
 import httpx
@@ -20,9 +20,9 @@ def _creds() -> tuple[str, str]:
 def _headers() -> dict:
     client_id, api_key = _creds()
     return {
-        "Content-Type": "application/json; charset=utf-8",
-        "X-Ima-Clientid": client_id,
-        "X-Ima-Apikey": api_key,
+        "Content-Type": "application/json",
+        "ima-openapi-clientid": client_id,
+        "ima-openapi-apikey": api_key,
     }
 
 
@@ -32,8 +32,9 @@ async def _post(path: str, body: dict) -> dict:
         resp = await c.post(url, json=body, headers=_headers())
         resp.raise_for_status()
         data = resp.json()
-    if data.get("code") != 0:
-        raise RuntimeError(f"IMA API 错误 [{data.get('code')}]: {data.get('msg')}")
+    code = data.get("code", -1)
+    if code != 0:
+        raise RuntimeError(f"IMA API 错误 [{code}]: {data.get('msg', data)}")
     return data.get("data", {})
 
 
@@ -43,35 +44,45 @@ async def test_connection() -> str:
     if not client_id or not api_key:
         return "❌ 未配置 IMA Client ID 或 API Key"
     try:
-        data = await _post("openapi/list_docs", {"limit": 1})
-        return f"✅ 连接成功（找到笔记 {data.get('total', '?')} 篇）"
+        data = await _post("openapi/note/v1/list_note_folder_by_cursor", {"cursor": "0", "limit": 1})
+        folders = data.get("note_book_folders") or []
+        return f"✅ 连接成功（找到 {len(folders)} 个笔记本）"
     except Exception as e:
         return f"❌ 连接失败：{e}"
 
 
-async def list_knowledge_bases() -> list[dict]:
-    """列出可用知识库。"""
-    data = await _post("openapi/knowledge/list", {"limit": 50})
-    return data.get("list") or data.get("items") or []
+async def list_note_folders() -> list[dict]:
+    """列出所有笔记本。"""
+    folders = []
+    cursor = "0"
+    while True:
+        data = await _post("openapi/note/v1/list_note_folder_by_cursor", {"cursor": cursor, "limit": 50})
+        items = data.get("note_book_folders") or []
+        for item in items:
+            nb = (item.get("folder") or {}).get("basic_info") or {}
+            if nb:
+                folders.append(nb)
+        if data.get("is_end", True):
+            break
+        cursor = data.get("next_cursor", "")
+        if not cursor:
+            break
+    return folders
 
 
-async def list_kb_items(kb_id: str, limit: int = 100, offset: int = 0) -> dict:
-    """列出某个知识库里的条目。"""
-    data = await _post("openapi/knowledge/list_media", {
-        "knowledge_id": kb_id,
+async def list_notes_in_folder(folder_id: str = "", limit: int = 50, cursor: str = "") -> dict:
+    """列出某笔记本下的笔记（单页）。"""
+    return await _post("openapi/note/v1/list_note_by_folder_id", {
+        "folder_id": folder_id,
+        "cursor": cursor,
         "limit": limit,
-        "offset": offset,
     })
-    return data
 
 
-async def get_doc_content(note_id: str) -> str:
-    """读取一篇笔记的正文（Markdown）。"""
-    data = await _post("openapi/get_doc_content", {"note_id": note_id})
-    return data.get("content") or data.get("markdown") or ""
-
-
-async def list_docs(limit: int = 100, offset: int = 0) -> dict:
-    """列出笔记（notes 模块）。"""
-    data = await _post("openapi/list_docs", {"limit": limit, "offset": offset})
-    return data
+async def get_doc_content(doc_id: str) -> str:
+    """读取一篇笔记的纯文本内容。"""
+    data = await _post("openapi/note/v1/get_doc_content", {
+        "doc_id": doc_id,
+        "target_content_format": 0,  # 0=纯文本
+    })
+    return data.get("content") or ""

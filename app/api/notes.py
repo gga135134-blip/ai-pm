@@ -868,51 +868,42 @@ async def ima_test():
 
 @router.post("/notes/ima/sync")
 async def ima_sync():
-    """从 IMA 知识库同步内容到本地知识库（去重：已存在 external_id 的更新，否则新建）。"""
+    """从 IMA 笔记同步到本地知识库（游标翻页，external_id 去重）。"""
     try:
-        from app.services.ima_client import list_docs, get_doc_content, _creds
+        from app.services.ima_client import list_notes_in_folder, get_doc_content, _creds
     except ImportError as e:
         return JSONResponse({"ok": False, "msg": f"缺少依赖包：{e}（请在服务器运行 pip install httpx）"})
-    import json as _json
-    from app.config import BASE_DIR as _BD
 
     client_id, api_key = _creds()
     if not client_id or not api_key:
         return JSONResponse({"ok": False, "msg": "未配置 IMA 凭证，请先在设置页填写"})
-
-    # 读取要同步的 KB ID 列表（当前先同步笔记模块）
-    cfg_path = _BD / "data" / "settings.json"
-    sync_kb_ids = []
-    if cfg_path.exists():
-        with open(cfg_path, encoding="utf-8") as f:
-            sync_kb_ids = _json.load(f).get("ima_sync_kb_ids", [])
 
     created = updated = skipped = 0
     errors = []
     now = datetime.now().isoformat()
 
     try:
-        # 分页拉取 IMA 笔记列表
-        offset, limit = 0, 50
+        # 游标翻页拉取全部笔记（folder_id="" = 全部笔记根目录）
+        cursor = ""
         while True:
-            data = await list_docs(limit=limit, offset=offset)
-            items = data.get("list") or data.get("docs") or []
-            total = data.get("total", 0)
+            data = await list_notes_in_folder(folder_id="", limit=50, cursor=cursor)
+            items = data.get("note_book_list") or []
             if not items:
                 break
 
             db = await get_db()
             try:
                 for item in items:
-                    ext_id = str(item.get("note_id") or item.get("id") or "")
+                    info = (item.get("basic_info") or {})
+                    ext_id = info.get("docid") or ""
                     if not ext_id:
                         continue
-                    title = item.get("title") or item.get("name") or "IMA 笔记"
+                    title = info.get("title") or "IMA 笔记"
                     # 检查是否已存在
-                    cur = await db.execute(
+                    cur2 = await db.execute(
                         "SELECT id FROM notes WHERE external_id = ?", (ext_id,)
                     )
-                    existing = await cur.fetchone()
+                    existing = await cur2.fetchone()
                     # 拉取正文
                     try:
                         content = await get_doc_content(ext_id)
@@ -938,8 +929,10 @@ async def ima_sync():
             finally:
                 await db.close()
 
-            offset += limit
-            if offset >= total:
+            if data.get("is_end", True):
+                break
+            cursor = data.get("next_cursor", "")
+            if not cursor:
                 break
 
     except Exception as e:
