@@ -870,7 +870,7 @@ async def ima_test():
 async def ima_sync():
     """从 IMA 笔记同步到本地知识库（游标翻页，external_id 去重）。"""
     try:
-        from app.services.ima_client import list_notes_in_folder, get_doc_content, _creds
+        from app.services.ima_client import list_notes_in_folder, get_doc_content, _creds, get_all_notes_folder_id
     except ImportError as e:
         return JSONResponse({"ok": False, "msg": f"缺少依赖包：{e}（请在服务器运行 pip install httpx）"})
 
@@ -883,10 +883,13 @@ async def ima_sync():
     now = datetime.now().isoformat()
 
     try:
-        # 游标翻页拉取全部笔记（folder_id="" = 全部笔记根目录）
+        # 先拿「全部笔记」文件夹的真实 folder_id（folder_type=1）
+        all_notes_folder_id = await get_all_notes_folder_id()
+
+        # 游标翻页拉取全部笔记
         cursor = ""
         while True:
-            data = await list_notes_in_folder(folder_id="", limit=20, cursor=cursor)
+            data = await list_notes_in_folder(folder_id=all_notes_folder_id, limit=20, cursor=cursor)
             items = data.get("note_book_list") or []
             if not items:
                 break

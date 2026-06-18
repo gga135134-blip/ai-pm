@@ -52,11 +52,11 @@ async def test_connection() -> str:
 
 
 async def list_note_folders() -> list[dict]:
-    """列出所有笔记本。"""
+    """列出所有笔记本，返回 basic_info 列表。"""
     folders = []
     cursor = "0"
     while True:
-        data = await _post("openapi/note/v1/list_note_folder_by_cursor", {"cursor": cursor, "limit": 50})
+        data = await _post("openapi/note/v1/list_note_folder_by_cursor", {"cursor": cursor, "limit": 20})
         items = data.get("note_book_folders") or []
         for item in items:
             nb = (item.get("folder") or {}).get("basic_info") or {}
@@ -68,6 +68,16 @@ async def list_note_folders() -> list[dict]:
         if not cursor:
             break
     return folders
+
+
+async def get_all_notes_folder_id() -> str:
+    """返回「全部笔记」文件夹的 folder_id（folder_type=1）。"""
+    folders = await list_note_folders()
+    for f in folders:
+        if f.get("folder_type") == 1:
+            return f.get("folder_id", "")
+    # 没找到时返回空，调用方用空字符串兜底
+    return ""
 
 
 async def list_notes_in_folder(folder_id: str = "", limit: int = 20, cursor: str = "") -> dict:
