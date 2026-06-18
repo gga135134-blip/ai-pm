@@ -1,26 +1,47 @@
 {% extends "base.html" %}
 {% block title %}知识库 - AI 项目管理{% endblock %}
 {% block content %}
-<div class="flex items-center justify-between mb-4">
-    <h1 class="text-2xl font-bold text-gray-800">知识库</h1>
-    <div class="flex gap-2">
-        <a href="/notes/new{% if current_folder %}?folder={{ current_folder }}{% endif %}" class="bg-blue-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-blue-700 transition">+ 新建</a>
-        <a href="/notes/import" class="bg-green-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-green-700 transition">导入</a>
-        <a href="/notes/chat" class="bg-teal-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-teal-700 transition">AI 助手</a>
-        <a href="/notes/classify" class="bg-purple-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-purple-700 transition">AI 分类</a>
-        <form method="POST" action="/notes/summarize" class="inline">
-            <input type="hidden" name="tag" value="{{ current_tag }}">
-            <button class="bg-indigo-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-indigo-700 transition">AI 整理</button>
-        </form>
-        <a href="/notes/weekly" class="bg-orange-500 text-white px-3 py-2 rounded-lg text-sm hover:bg-orange-600 transition">周报</a>
-        <a href="/notes/trash" class="text-sm px-3 py-2 border rounded-lg text-gray-600 hover:bg-gray-50 transition">回收站</a>
-        <a href="/backups" class="text-sm px-3 py-2 border rounded-lg text-gray-600 hover:bg-gray-50 transition">备份</a>
-    </div>
+<style>
+.notes-actions { display:flex; gap:8px; overflow-x:auto; padding-bottom:4px; -webkit-overflow-scrolling:touch; }
+.notes-actions::-webkit-scrollbar { height:3px; }
+.notes-layout { display:flex; gap:24px; }
+.notes-sidebar { width:192px; flex-shrink:0; }
+.notes-sidebar-toggle { display:none; }
+@media (max-width:767px) {
+    .notes-layout { flex-direction:column; gap:0; }
+    .notes-sidebar { width:100%; margin-bottom:12px; }
+    .notes-sidebar-toggle { display:flex; align-items:center; justify-content:space-between;
+        padding:10px 12px; background:#f9fafb; border:1px solid #e5e7eb; border-radius:8px;
+        font-size:14px; font-weight:500; color:#374151; cursor:pointer; margin-bottom:8px; }
+    .notes-sidebar-inner { display:none; }
+    .notes-sidebar-inner.open { display:block; }
+}
+</style>
+
+<div class="flex items-center justify-between mb-3">
+    <h1 class="text-xl font-bold text-gray-800">知识库</h1>
+</div>
+<div class="notes-actions mb-4">
+    <a href="/notes/new{% if current_folder %}?folder={{ current_folder }}{% endif %}" class="flex-shrink-0 bg-blue-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-blue-700 transition">+ 新建</a>
+    <a href="/notes/import" class="flex-shrink-0 bg-green-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-green-700 transition">导入</a>
+    <a href="/notes/chat" class="flex-shrink-0 bg-teal-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-teal-700 transition">AI 助手</a>
+    <a href="/notes/classify" class="flex-shrink-0 bg-purple-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-purple-700 transition">AI 分类</a>
+    <form method="POST" action="/notes/summarize" class="inline flex-shrink-0">
+        <input type="hidden" name="tag" value="{{ current_tag }}">
+        <button class="bg-indigo-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-indigo-700 transition">AI 整理</button>
+    </form>
+    <a href="/notes/weekly" class="flex-shrink-0 bg-orange-500 text-white px-3 py-2 rounded-lg text-sm hover:bg-orange-600 transition">周报</a>
+    <a href="/notes/trash" class="flex-shrink-0 text-sm px-3 py-2 border rounded-lg text-gray-600 hover:bg-gray-50 transition">回收站</a>
+    <a href="/backups" class="flex-shrink-0 text-sm px-3 py-2 border rounded-lg text-gray-600 hover:bg-gray-50 transition">备份</a>
 </div>
 
-<div class="flex gap-6">
+<div class="notes-layout">
     <!-- 侧边栏：标签 + 筛选 -->
-    <div class="w-48 flex-shrink-0">
+    <div class="notes-sidebar">
+        <div class="notes-sidebar-toggle" onclick="var el=document.getElementById('nb-sidebar');el.classList.toggle('open');this.querySelector('.nb-arrow').textContent=el.classList.contains('open')?'▲':'▼'">
+            <span>📁 文件夹 / 搜索</span><span class="nb-arrow">▼</span>
+        </div>
+        <div id="nb-sidebar" class="notes-sidebar-inner">
         <!-- 搜索 -->
         <form method="GET" action="/notes" class="mb-4">
             <input type="text" name="q" value="{{ current_q }}" placeholder="搜索笔记..."
@@ -132,7 +153,8 @@
             btn.textContent = collapsed ? '收起' : '展开全部 (' + total + ' 个)';
         }
         </script>
-    </div>
+        </div><!-- /notes-sidebar-inner -->
+    </div><!-- /notes-sidebar -->
 
     <!-- 笔记列表 -->
     <div class="flex-1">
