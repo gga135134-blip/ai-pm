@@ -886,7 +886,7 @@ async def ima_sync():
         # 游标翻页拉取全部笔记（folder_id="" = 全部笔记根目录）
         cursor = ""
         while True:
-            data = await list_notes_in_folder(folder_id="", limit=50, cursor=cursor)
+            data = await list_notes_in_folder(folder_id="", limit=20, cursor=cursor)
             items = data.get("note_book_list") or []
             if not items:
                 break

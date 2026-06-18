@@ -70,7 +70,7 @@ async def list_note_folders() -> list[dict]:
     return folders
 
 
-async def list_notes_in_folder(folder_id: str = "", limit: int = 50, cursor: str = "") -> dict:
+async def list_notes_in_folder(folder_id: str = "", limit: int = 20, cursor: str = "") -> dict:
     """列出某笔记本下的笔记（单页）。"""
     return await _post("openapi/note/v1/list_note_by_folder_id", {
         "folder_id": folder_id,
