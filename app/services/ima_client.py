@@ -1,4 +1,4 @@
-"""腾讯 IMA OpenAPI 客户端（笔记模块）。"""
+"""腾讯 IMA OpenAPI 客户端（笔记 + 知识库模块）。"""
 import json
 import logging
 import httpx
@@ -32,11 +32,15 @@ async def _post(path: str, body: dict) -> dict:
         resp = await c.post(url, json=body, headers=_headers())
         resp.raise_for_status()
         data = resp.json()
-    code = data.get("code", -1)
+    # 笔记 API 用 "code"，知识库 API 用 "retcode"
+    code = data.get("retcode") if "retcode" in data else data.get("code", -1)
     if code != 0:
-        raise RuntimeError(f"IMA API 错误 [{code}]: {data.get('msg', data)}")
+        msg = data.get("errmsg") or data.get("msg") or str(data)
+        raise RuntimeError(f"IMA API 错误 [{code}]: {msg}")
     return data.get("data", {})
 
+
+# ── 笔记模块 ──────────────────────────────────────────────
 
 async def test_connection() -> str:
     """测试凭证是否有效，返回描述字符串。"""
@@ -76,7 +80,6 @@ async def get_all_notes_folder_id() -> str:
     for f in folders:
         if f.get("folder_type") == 1:
             return f.get("folder_id", "")
-    # 没找到时返回空，调用方用空字符串兜底
     return ""
 
 
@@ -93,6 +96,36 @@ async def get_doc_content(doc_id: str) -> str:
     """读取一篇笔记的纯文本内容。"""
     data = await _post("openapi/note/v1/get_doc_content", {
         "doc_id": doc_id,
-        "target_content_format": 0,  # 0=纯文本
+        "target_content_format": 0,
     })
     return data.get("content") or ""
+
+
+# ── 知识库模块 ────────────────────────────────────────────
+
+async def list_addable_kbs() -> list[dict]:
+    """列出用户有权限操作的知识库（id + name）。"""
+    kbs = []
+    cursor = ""
+    while True:
+        data = await _post("openapi/wiki/v1/get_addable_knowledge_base_list", {
+            "cursor": cursor,
+            "limit": 20,
+        })
+        items = data.get("addable_knowledge_base_list") or []
+        kbs.extend(items)
+        if data.get("is_end", True):
+            break
+        cursor = data.get("next_cursor", "")
+        if not cursor:
+            break
+    return kbs
+
+
+async def list_kb_items(kb_id: str, cursor: str = "", limit: int = 20) -> dict:
+    """列出知识库中的条目（单页，游标翻页）。"""
+    return await _post("openapi/wiki/v1/get_knowledge_list", {
+        "knowledge_base_id": kb_id,
+        "cursor": cursor,
+        "limit": limit,
+    })

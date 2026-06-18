@@ -945,3 +945,64 @@ async def ima_sync():
     if errors:
         msg += f"（{len(errors)} 条错误：{errors[:3]}）"
     return JSONResponse({"ok": True, "msg": msg})
+
+
+# ── IMA 知识库浏览 ────────────────────────────────────────
+
+@router.get("/notes/ima/browse", response_class=HTMLResponse)
+async def ima_browse(request: Request):
+    from app.templates import templates
+    return templates.TemplateResponse("ima_browse.html", {"request": request})
+
+
+@router.get("/notes/ima/kbs")
+async def ima_kbs():
+    try:
+        from app.services.ima_client import list_addable_kbs, _creds
+        client_id, api_key = _creds()
+        if not client_id or not api_key:
+            return JSONResponse({"ok": False, "msg": "未配置 IMA 凭证"})
+        kbs = await list_addable_kbs()
+        return JSONResponse({"ok": True, "kbs": kbs})
+    except Exception as e:
+        return JSONResponse({"ok": False, "msg": str(e)})
+
+
+@router.get("/notes/ima/kb-items")
+async def ima_kb_items(kb_id: str = "", cursor: str = ""):
+    try:
+        from app.services.ima_client import list_kb_items
+        if not kb_id:
+            return JSONResponse({"ok": False, "msg": "缺少 kb_id"})
+        data = await list_kb_items(kb_id, cursor=cursor, limit=20)
+        items = data.get("knowledge_list") or []
+        return JSONResponse({
+            "ok": True,
+            "items": items,
+            "is_end": data.get("is_end", True),
+            "next_cursor": data.get("next_cursor", ""),
+        })
+    except Exception as e:
+        return JSONResponse({"ok": False, "msg": str(e)})
+
+
+@router.post("/notes/ima/create-from-kb")
+async def ima_create_from_kb(request: Request):
+    body = await request.json()
+    media_id = body.get("media_id", "")
+    title = body.get("title", "IMA 笔记")
+    kb_name = body.get("kb_name", "")
+    now = datetime.now().isoformat()
+    content = f"> 来源：{kb_name}（IMA 知识库）\n> media_id: {media_id}\n> 导入时间：{now[:10]}\n\n"
+    note_id = str(uuid.uuid4())
+    db = await get_db()
+    try:
+        await db.execute(
+            """INSERT INTO notes (id,title,content,source_type,folder,external_id,created_at,updated_at)
+               VALUES (?,?,?,'ima_kb','IMA知识库',?,?,?)""",
+            (note_id, title, content, f"kb:{media_id}", now, now),
+        )
+        await db.commit()
+    finally:
+        await db.close()
+    return JSONResponse({"ok": True, "note_id": note_id})

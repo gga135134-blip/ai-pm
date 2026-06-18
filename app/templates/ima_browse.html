@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% block title %}IMA 知识库浏览 - AI 项目管理{% endblock %}
+{% block content %}
+
+<div class="flex items-center gap-3 mb-6">
+    <a href="/notes" class="text-sm text-gray-500 hover:text-gray-700">← 返回知识库</a>
+    <h1 class="text-2xl font-bold text-gray-800">IMA 共享知识库</h1>
+</div>
+
+<div id="main-layout" style="display:flex; gap:24px; min-height:70vh">
+    <!-- 左侧：知识库列表 -->
+    <div style="width:200px; flex-shrink:0">
+        <div class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">知识库</div>
+        <div id="kb-list"><div class="text-sm text-gray-400 py-4">加载中…</div></div>
+    </div>
+
+    <!-- 右侧：条目列表 -->
+    <div style="flex:1; min-width:0">
+        <div class="flex items-center justify-between mb-4">
+            <div id="kb-title" class="text-lg font-semibold text-gray-600">← 选择左侧知识库</div>
+            <div id="kb-count" class="text-sm text-gray-400"></div>
+        </div>
+        <div id="items-area"></div>
+        <div id="load-more-area" class="mt-4 text-center"></div>
+    </div>
+</div>
+
+<script>
+var currentKbId = '';
+var currentKbName = '';
+var nextCursor = '';
+
+function esc(s) {
+    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// 加载知识库列表
+async function loadKBs() {
+    var el = document.getElementById('kb-list');
+    try {
+        var r = await fetch('/notes/ima/kbs');
+        var d = await r.json();
+        if (!d.ok) { el.innerHTML = '<div class="text-sm text-red-600">' + esc(d.msg) + '</div>'; return; }
+        if (!d.kbs || !d.kbs.length) {
+            el.innerHTML = '<div class="text-sm text-gray-400 py-4">没有找到可访问的知识库。<br>请确认凭证权限。</div>';
+            return;
+        }
+        el.innerHTML = d.kbs.map(function(kb) {
+            return '<button onclick="selectKB(\'' + esc(kb.id) + '\',\'' + esc(kb.name) + '\')" id="kb-btn-' + esc(kb.id) + '" '
+                + 'style="width:100%;text-align:left;padding:8px 12px;border-radius:8px;font-size:14px;color:#374151;border:none;background:none;cursor:pointer;margin-bottom:2px" '
+                + 'onmouseover="this.style.background=\'#eff6ff\'" onmouseout="this.style.background=(currentKbId===\'' + esc(kb.id) + '\'?\'#dbeafe\':\'none\')">'
+                + esc(kb.name)
+                + '</button>';
+        }).join('');
+    } catch(e) {
+        el.innerHTML = '<div class="text-sm text-red-600">加载失败：' + esc(String(e)) + '</div>';
+    }
+}
+
+function selectKB(kbId, kbName) {
+    // 高亮选中
+    if (currentKbId) {
+        var old = document.getElementById('kb-btn-' + currentKbId);
+        if (old) old.style.background = 'none';
+    }
+    currentKbId = kbId;
+    currentKbName = kbName;
+    nextCursor = '';
+    var btn = document.getElementById('kb-btn-' + kbId);
+    if (btn) btn.style.background = '#dbeafe';
+
+    document.getElementById('kb-title').textContent = kbName;
+    document.getElementById('kb-count').textContent = '';
+    document.getElementById('items-area').innerHTML = '<div class="text-sm text-gray-400 py-4">加载中…</div>';
+    document.getElementById('load-more-area').innerHTML = '';
+    loadItems(false);
+}
+
+async function loadItems(append) {
+    var area = document.getElementById('items-area');
+    var moreArea = document.getElementById('load-more-area');
+    moreArea.innerHTML = '';
+    try {
+        var url = '/notes/ima/kb-items?kb_id=' + encodeURIComponent(currentKbId);
+        if (nextCursor) url += '&cursor=' + encodeURIComponent(nextCursor);
+        var r = await fetch(url);
+        var d = await r.json();
+        if (!d.ok) {
+            area.innerHTML = '<div class="text-sm text-red-600">' + esc(d.msg) + '</div>';
+            return;
+        }
+        if (!append) area.innerHTML = '';
+        if (!d.items || !d.items.length) {
+            if (!append) area.innerHTML = '<div class="text-sm text-gray-400 py-8 text-center">该知识库暂无内容</div>';
+            return;
+        }
+        var html = d.items.map(function(item) {
+            return '<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:white;border:1px solid #e5e7eb;border-radius:10px;margin-bottom:8px">'
+                + '<div style="min-width:0;flex:1">'
+                + '<div style="font-size:14px;color:#1f2937;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(item.title || '（无标题）') + '</div>'
+                + '</div>'
+                + '<button onclick="createNote(\'' + esc(item.media_id) + '\',\'' + esc(item.title || '无标题') + '\')" '
+                + 'style="flex-shrink:0;margin-left:12px;background:#2563eb;color:white;border:none;padding:6px 14px;border-radius:8px;font-size:13px;cursor:pointer;white-space:nowrap" '
+                + 'onmouseover="this.style.background=\'#1d4ed8\'" onmouseout="this.style.background=\'#2563eb\'">'
+                + '→ 新建笔记</button>'
+                + '</div>';
+        }).join('');
+        area.insertAdjacentHTML('beforeend', html);
+        nextCursor = d.next_cursor || '';
+        if (!d.is_end && nextCursor) {
+            moreArea.innerHTML = '<button onclick="loadItems(true)" '
+                + 'style="background:none;border:1px solid #d1d5db;padding:8px 24px;border-radius:8px;font-size:14px;color:#6b7280;cursor:pointer">'
+                + '加载更多</button>';
+        }
+    } catch(e) {
+        area.innerHTML = '<div class="text-sm text-red-600">加载失败：' + esc(String(e)) + '</div>';
+    }
+}
+
+async function createNote(mediaId, title) {
+    var btn = event.target;
+    var orig = btn.textContent;
+    btn.textContent = '创建中…'; btn.disabled = true;
+    try {
+        var r = await fetch('/notes/ima/create-from-kb', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({media_id: mediaId, title: title, kb_name: currentKbName})
+        });
+        var d = await r.json();
+        if (d.ok && d.note_id) {
+            window.location.href = '/notes/' + d.note_id + '/edit';
+        } else {
+            alert('创建失败：' + (d.msg || '未知错误'));
+            btn.textContent = orig; btn.disabled = false;
+        }
+    } catch(e) {
+        alert('请求失败：' + e);
+        btn.textContent = orig; btn.disabled = false;
+    }
+}
+
+loadKBs();
+</script>
+
+{% endblock %}
