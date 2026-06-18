@@ -1044,6 +1044,23 @@ async def ima_kb_items(kb_id: str = "", cursor: str = ""):
         return JSONResponse({"ok": False, "msg": str(e)})
 
 
+@router.get("/notes/ima/kb-raw")
+async def ima_kb_raw(kb_id: str = ""):
+    """调试端点：返回 get_knowledge_list 的原始 data 字段，用于确认字段名。"""
+    from app.services.ima_client import _post
+    if not kb_id:
+        return JSONResponse({"ok": False, "msg": "缺少 kb_id"})
+    try:
+        data = await _post("openapi/wiki/v1/get_knowledge_list", {
+            "knowledge_base_id": kb_id,
+            "cursor": "",
+            "limit": 5,
+        })
+        return JSONResponse({"ok": True, "raw": data})
+    except Exception as e:
+        return JSONResponse({"ok": False, "msg": str(e)})
+
+
 @router.post("/notes/ima/create-from-kb")
 async def ima_create_from_kb(request: Request):
     body = await request.json()
