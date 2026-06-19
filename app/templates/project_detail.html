@@ -78,7 +78,7 @@
         <div class="flex-1">
             <label class="block text-xs text-gray-500 mb-1">AI 自动拆解任务</label>
             <input type="text" name="goal" required placeholder="输入项目目标，AI 自动拆解为子任务..." value="{{ project.description }}"
-                class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none">
+                class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-violet-500 focus:border-purple-500 outline-none">
         </div>
         <div class="w-32">
             <label class="block text-xs text-gray-500 mb-1">模型</label>
@@ -89,7 +89,7 @@
                 <option value="deepseek">DeepSeek</option>
             </select>
         </div>
-        <button type="submit" class="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-purple-700 transition" style="white-space:nowrap">AI 拆解</button>
+        <button type="submit" class="bg-violet-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-violet-700 transition" style="white-space:nowrap">AI 拆解</button>
     </form>
 </div>
 
@@ -184,7 +184,7 @@ function switchView(name) {
                 <div class="mt-2 flex gap-1">
                     {% if t.assignee == 'ai' %}
                     <form method="POST" action="/tasks/{{ t.id }}/execute" class="inline">
-                        <button class="text-xs px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded hover:bg-indigo-100">AI 执行</button>
+                        <button class="text-xs px-2 py-0.5 bg-violet-50 text-violet-600 rounded hover:bg-violet-100">AI 执行</button>
                     </form>
                     {% endif %}
                     <form method="POST" action="/tasks/{{ t.id }}/status" class="inline">
@@ -203,7 +203,7 @@ function switchView(name) {
                 <div class="mt-2 flex gap-1">
                     {% if t.assignee == 'ai' %}
                     <form method="POST" action="/tasks/{{ t.id }}/execute" class="inline">
-                        <button class="text-xs px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded hover:bg-indigo-100">重新执行</button>
+                        <button class="text-xs px-2 py-0.5 bg-violet-50 text-violet-600 rounded hover:bg-violet-100">重新执行</button>
                     </form>
                     {% endif %}
                     <form method="POST" action="/tasks/{{ t.id }}/status" class="inline">
@@ -292,7 +292,7 @@ function switchView(name) {
                         <option value="deepseek">DeepSeek (省钱)</option>
                         <option value="claude">Claude</option>
                     </select>
-                    <button type="submit" class="flex-1 bg-purple-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-purple-700 transition">AI 分类入库</button>
+                    <button type="submit" class="flex-1 bg-violet-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-violet-700 transition">AI 分类入库</button>
                 </div>
             </form>
         </div>
@@ -308,11 +308,11 @@ function switchView(name) {
                 <div class="flex items-center gap-2">
                     {% if n.is_core %}<span class="text-amber-500" title="项目核心档（AI 任务必读）">⭐</span>{% endif %}
                     {% if n.source_type == 'ai_classified' %}
-                    <span class="text-xs bg-purple-100 text-purple-600 px-2 py-0.5 rounded">AI分类</span>
+                    <span class="text-xs bg-violet-100 text-violet-600 px-2 py-0.5 rounded">AI分类</span>
                     {% elif n.source_type == 'file_import' or n.source_type == 'upload' %}
                     <span class="text-xs bg-green-100 text-green-600 px-2 py-0.5 rounded">文件</span>
                     {% elif n.source_type == 'master_ai' %}
-                    <span class="text-xs bg-indigo-100 text-indigo-600 px-2 py-0.5 rounded">总AI</span>
+                    <span class="text-xs bg-violet-100 text-violet-600 px-2 py-0.5 rounded">总AI</span>
                     {% elif n.source_type == 'auto_progress' %}
                     <span class="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded">进度</span>
                     {% else %}
@@ -425,7 +425,7 @@ function switchView(name) {
             <details class="border rounded-lg p-3">
                 <summary class="cursor-pointer text-sm text-gray-800 flex items-center justify-between">
                     <span>
-                        <span class="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded mr-2">{{ r.model }}</span>
+                        <span class="text-xs bg-violet-100 text-violet-700 px-2 py-0.5 rounded mr-2">{{ r.model }}</span>
                         {{ r.task_title or '(无标题)' }}
                     </span>
                     <span class="text-xs text-gray-400">${{ '%.4f' % r.cost }} · {{ r.created_at[:16] if r.created_at }}</span>
@@ -526,8 +526,8 @@ function switchView(name) {
                 <option value="An">An</option>
             </select>
             <textarea id="projai-input" required rows="2" placeholder="跟项目 AI 说点什么...（Enter 发送, Shift+Enter 换行）"
-                class="flex-1 border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500 resize-none"></textarea>
-            <button type="submit" id="projai-send" class="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-purple-700 transition self-stretch">发送</button>
+                class="flex-1 border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-violet-500 resize-none"></textarea>
+            <button type="submit" id="projai-send" class="bg-violet-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-violet-700 transition self-stretch">发送</button>
         </form>
     </div>
 </div>
@@ -598,8 +598,8 @@ function switchView(name) {
     function addThinking(){
         box.insertAdjacentHTML('beforeend',
             '<div class="flex justify-start" id="projai-thinking"><div>'
-            + '<div class="bg-purple-50 border border-purple-200 text-purple-700 rounded-lg px-4 py-3 text-sm flex items-center gap-2">'
-            + '<span style="display:inline-block;width:14px;height:14px;border:2px solid #a855f7;border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite"></span>'
+            + '<div class="bg-violet-50 border border-violet-200 text-violet-700 rounded-lg px-4 py-3 text-sm flex items-center gap-2">'
+            + '<span style="display:inline-block;width:14px;height:14px;border:2px solid #8b5cf6;border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite"></span>'
             + '⚙️ AI 执行中 <span id="projai-elapsed">0</span> 秒…'
             + '</div></div></div>');
         box.scrollTop = box.scrollHeight;
@@ -701,9 +701,9 @@ function switchView(name) {
     {% if project_decisions %}
     <div class="space-y-4">
         {% for d in project_decisions %}
-        <div class="border-l-4 {% if d.made_by == 'AI' %}border-purple-400{% else %}border-blue-400{% endif %} pl-4 py-2">
+        <div class="border-l-4 {% if d.made_by == 'AI' %}border-violet-400{% else %}border-blue-400{% endif %} pl-4 py-2">
             <div class="flex items-center gap-2 mb-1">
-                <span class="text-xs px-2 py-0.5 rounded {% if d.made_by == 'AI' %}bg-purple-100 text-purple-600{% else %}bg-blue-100 text-blue-600{% endif %}">
+                <span class="text-xs px-2 py-0.5 rounded {% if d.made_by == 'AI' %}bg-violet-100 text-violet-600{% else %}bg-blue-100 text-blue-600{% endif %}">
                     {{ d.made_by or '未知' }}
                 </span>
                 <h4 class="font-medium text-gray-800 text-sm">{{ d.title }}</h4>

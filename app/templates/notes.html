@@ -24,13 +24,13 @@
 <div class="notes-actions mb-4">
     <a href="/notes/new{% if current_folder %}?folder={{ current_folder }}{% endif %}" class="flex-shrink-0 bg-blue-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-blue-700 transition">+ 新建</a>
     <a href="/notes/import" class="flex-shrink-0 bg-green-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-green-700 transition">导入</a>
-    <a href="/notes/chat" class="flex-shrink-0 bg-teal-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-teal-700 transition">AI 助手</a>
-    <a href="/notes/classify" class="flex-shrink-0 bg-purple-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-purple-700 transition">AI 分类</a>
+    <a href="/notes/chat" class="flex-shrink-0 bg-violet-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-violet-700 transition">AI 助手</a>
+    <a href="/notes/classify" class="flex-shrink-0 bg-violet-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-violet-700 transition">AI 分类</a>
     <form method="POST" action="/notes/summarize" class="inline flex-shrink-0">
         <input type="hidden" name="tag" value="{{ current_tag }}">
-        <button class="bg-indigo-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-indigo-700 transition">AI 整理</button>
+        <button class="bg-violet-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-violet-700 transition">AI 整理</button>
     </form>
-    <a href="/notes/weekly" class="flex-shrink-0 bg-orange-500 text-white px-3 py-2 rounded-lg text-sm hover:bg-orange-600 transition">周报</a>
+    <a href="/notes/weekly" class="flex-shrink-0 text-sm px-3 py-2 border rounded-lg text-gray-600 hover:bg-gray-50 transition">周报</a>
     <a href="/notes/trash" class="flex-shrink-0 text-sm px-3 py-2 border rounded-lg text-gray-600 hover:bg-gray-50 transition">回收站</a>
     <a href="/backups" class="flex-shrink-0 text-sm px-3 py-2 border rounded-lg text-gray-600 hover:bg-gray-50 transition">备份</a>
 </div>
@@ -289,7 +289,7 @@ async function imaSync() {
                         <button onclick="moveNote('{{ n.id }}')" title="移动到文件夹"
                             class="text-xs text-gray-400 hover:text-blue-600 px-1.5 py-0.5 rounded hover:bg-blue-50 transition">移动</button>
                         <button onclick="copyLink('{{ n.id }}', this)" title="复制链接"
-                            class="text-xs text-gray-400 hover:text-teal-600 px-1.5 py-0.5 rounded hover:bg-teal-50 transition">链接</button>
+                            class="text-xs text-gray-400 hover:text-violet-600 px-1.5 py-0.5 rounded hover:bg-violet-50 transition">链接</button>
                         <button onclick="deleteNote('{{ n.id }}', this)" data-title="{{ n.title }}" title="删除"
                             class="text-xs text-gray-400 hover:text-red-600 px-1.5 py-0.5 rounded hover:bg-red-50 transition">删除</button>
                     </div>

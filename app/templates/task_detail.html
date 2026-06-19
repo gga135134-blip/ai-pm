@@ -50,7 +50,7 @@
                 <div class="border rounded-lg p-4">
                     <div class="flex items-center justify-between mb-2">
                         <div class="flex items-center gap-2">
-                            <span class="text-xs font-medium px-2 py-0.5 bg-purple-100 text-purple-700 rounded">{{ run.model }}</span>
+                            <span class="text-xs font-medium px-2 py-0.5 bg-violet-100 text-violet-700 rounded">{{ run.model }}</span>
                             <span class="text-xs px-2 py-0.5 rounded status-{{ run.status }}">{{ run.status }}</span>
                         </div>
                         <div class="text-xs text-gray-400">
@@ -142,7 +142,7 @@
             <h3 class="text-sm font-semibold text-gray-700 mb-3">AI 操作</h3>
             {% if task.status in ['pending', 'blocked'] and task.assignee == 'ai' %}
             <form method="POST" action="/tasks/{{ task.id }}/execute">
-                <button class="w-full text-sm px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">
+                <button class="w-full text-sm px-3 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition">
                     {{ 'AI 重新执行' if task.status == 'blocked' else 'AI 执行任务' }}
                 </button>
             </form>
@@ -173,7 +173,7 @@
             {% else %}
             <form method="POST" action="/tasks/{{ task.id }}/handoff">
                 <input type="hidden" name="to" value="ai">
-                <button class="w-full text-sm px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition">
+                <button class="w-full text-sm px-3 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition">
                     交给 AI (人工 → AI)
                 </button>
             </form>
@@ -203,7 +203,7 @@
             </form>
             <form method="POST" action="/tasks/{{ task.id }}/status">
                 <input type="hidden" name="status" value="running">
-                <button class="w-full text-sm px-3 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition">打回重做</button>
+                <button class="w-full text-sm px-3 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition">打回重做</button>
             </form>
             {% endif %}
             {% if task.status in ['blocked', 'failed'] %}

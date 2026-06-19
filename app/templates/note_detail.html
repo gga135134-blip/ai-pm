@@ -19,7 +19,7 @@
                 <div class="flex gap-2">
                     {% if note.image_path %}
                     <form method="POST" action="/notes/{{ note.id }}/analyze-images" onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').textContent='分析中…'">
-                        <button class="text-sm px-3 py-1 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition">AI 分析图片</button>
+                        <button class="text-sm px-3 py-1 bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition">AI 分析图片</button>
                     </form>
                     {% endif %}
                     {% if note.project_id %}
