@@ -1,233 +1,215 @@
 {% extends "base.html" %}
 {% block title %}{{ project.name }} - AI 项目管理{% endblock %}
 {% block content %}
-<style>@keyframes spin{to{transform:rotate(360deg)}}</style>
-<div class="mb-4 text-sm text-gray-400">
+<style>
+@keyframes spin{to{transform:rotate(360deg)}}
+.proj-tabs{display:flex;gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px}
+.proj-tabs::-webkit-scrollbar{height:3px}
+.proj-tabs button{flex-shrink:0;white-space:nowrap}
+.kanban-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.kanban-cols{display:grid;grid-template-columns:repeat(6,220px);gap:12px}
+@media(min-width:1440px){.kanban-cols{grid-template-columns:repeat(6,1fr)}}
+.ddmenu{display:none;position:absolute;right:0;top:calc(100% + 4px);z-index:50;background:#fff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);min-width:160px;overflow:hidden}
+.ddmenu.open{display:block}
+#ai-ctrl-panel{display:none}
+#ai-ctrl-panel.open{display:block}
+.fab-root{position:fixed;bottom:80px;right:16px;z-index:40}
+#manual-overlay{display:none;position:fixed;bottom:148px;right:16px;z-index:41;width:min(360px,calc(100vw - 32px))}
+.rec-tab{padding:6px 14px;border-radius:6px;font-size:13px;cursor:pointer;color:#6b7280}
+.rec-tab.active{background:#dbeafe;color:#1d4ed8;font-weight:500}
+@media(max-width:767px){
+  .proj-header-row{flex-wrap:wrap}
+  .fab-root{bottom:80px}
+}
+</style>
+
+<!-- Breadcrumb -->
+<div class="mb-3 text-sm text-gray-400">
     <a href="/projects" class="hover:text-gray-600">← 项目</a> /
-    <span class="text-gray-600">{{ project.code or project.name }} {{ project.name if project.code }}</span>
-</div>
-<div class="mb-6">
-    <div class="flex flex-wrap items-center gap-2 mb-1">
-        {% if project.code %}<span class="text-sm font-mono bg-gray-800 text-white px-2 py-1 rounded">{{ project.code }}</span>{% endif %}
-        <h1 class="text-xl md:text-2xl font-bold text-gray-800">{{ project.name }}</h1>
-        <span class="text-xs px-2 py-1 rounded status-{{ project.status }}">{{ project.status }}</span>
-        <span class="text-xs {% if core_count %}text-amber-700 bg-amber-50 px-2 py-0.5 rounded{% else %}text-gray-400{% endif %}">
-            ⭐ 核心档: {{ core_count }} 篇
-        </span>
-        <span class="text-xs text-purple-600 font-medium">AI 费用: ${{ project_cost }}</span>
-        {% if project.budget %}<span class="text-xs text-gray-500">预算: ¥{{ project.budget }}</span>{% endif %}
-        {% if project.revenue %}<span class="text-xs text-green-600 font-medium">收款: ¥{{ project.revenue }}</span>{% endif %}
-    </div>
-    {% if project.description %}
-    <p class="text-sm text-gray-500 mb-2">{{ project.description }}</p>
-    {% endif %}
-    <div class="flex flex-wrap gap-2">
-        <form method="POST" action="/projects/{{ project.id }}/clone">
-            <button class="text-sm px-3 py-1.5 border border-blue-200 text-blue-600 rounded-lg hover:bg-blue-50 transition">复制项目</button>
-        </form>
-        <a href="/projects/{{ project.id }}/edit" class="text-sm px-3 py-1.5 border rounded-lg hover:bg-gray-50 transition">编辑</a>
-        <form method="POST" action="/projects/{{ project.id }}/delete" onsubmit="return confirm('确定删除此项目及所有任务？')">
-            <button class="text-sm px-3 py-1.5 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition">删除</button>
-        </form>
-    </div>
+    <span class="text-gray-600">{{ project.code or project.name }}{% if project.code %} {{ project.name }}{% endif %}</span>
 </div>
 
-<!-- 自动执行面板 -->
-<div class="bg-white rounded-lg shadow-sm p-4 mb-4 border-l-4 {% if auto_running %}border-green-500{% else %}border-gray-300{% endif %}">
-    <div class="flex items-center justify-between gap-4">
-        <div class="flex-1">
-            <div class="flex items-center gap-3">
-                <h3 class="text-sm font-semibold text-gray-700">AI 自动执行</h3>
-                {% if auto_running %}
-                <span class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full animate-pulse">&#9679; 运行中</span>
-                {% else %}
-                <span class="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">已停止</span>
-                {% endif %}
-                <span class="text-xs text-gray-400">模式: {{ '全自动' if project.automation_level == 'auto' else '每步确认' }}</span>
-            </div>
-            {% if project.ai_budget and project.ai_budget > 0 %}
-            {% set pct = ((project_cost / project.ai_budget * 100) | round(0)) | int %}
-            <div class="flex items-center gap-2 mt-2">
-                <div class="flex-1 bg-gray-200 rounded-full h-2 max-w-md">
-                    <div class="h-2 rounded-full {% if pct >= 100 %}bg-red-500{% elif pct >= 80 %}bg-yellow-500{% else %}bg-green-500{% endif %}" style="width: {{ [pct, 100] | min }}%"></div>
+<!-- Layer 1: Header Card -->
+<div class="bg-white rounded-xl shadow-sm p-4 mb-4">
+    <div class="flex flex-wrap items-center justify-between gap-2 proj-header-row">
+        <div class="flex flex-wrap items-center gap-2 min-w-0">
+            {% if project.code %}<span class="text-xs font-mono bg-gray-800 text-white px-2 py-0.5 rounded flex-shrink-0">{{ project.code }}</span>{% endif %}
+            <h1 class="text-lg font-bold text-gray-800">{{ project.name }}</h1>
+            <span class="text-xs px-2 py-0.5 rounded status-{{ project.status }} flex-shrink-0">{{ project.status }}</span>
+        </div>
+        <div class="flex items-center gap-2 flex-shrink-0">
+            <button onclick="document.getElementById('ai-ctrl-panel').classList.toggle('open')"
+                class="text-xs px-2 py-1 rounded-full border flex items-center gap-1 flex-shrink-0 {% if auto_running %}border-green-300 bg-green-50 text-green-700{% else %}border-gray-200 bg-gray-50 text-gray-500{% endif %}">
+                {% if auto_running %}<span class="animate-pulse">🟢</span> 运行中{% else %}⏸️ 已停止{% endif %}
+            </button>
+            <a href="/projects/{{ project.id }}/edit" class="text-sm px-3 py-1.5 border rounded-lg hover:bg-gray-50 transition flex-shrink-0">编辑</a>
+            <div class="relative" id="more-wrap">
+                <button onclick="event.stopPropagation();document.getElementById('more-menu').classList.toggle('open')"
+                    class="text-sm px-3 py-1.5 border rounded-lg hover:bg-gray-50 transition flex-shrink-0">▾ 更多</button>
+                <div class="ddmenu" id="more-menu">
+                    <form method="POST" action="/projects/{{ project.id }}/clone">
+                        <button class="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50">复制项目</button>
+                    </form>
+                    <div class="border-t border-gray-100"></div>
+                    <form method="POST" action="/projects/{{ project.id }}/delete" onsubmit="return confirm('确定删除此项目及所有任务？')">
+                        <button class="w-full text-left px-4 py-3 text-sm text-red-600 hover:bg-red-50">删除项目</button>
+                    </form>
                 </div>
-                <span class="text-xs text-gray-500">${{ project_cost }} / ${{ project.ai_budget }}（{{ pct }}%）</span>
             </div>
-            {% else %}
-            <p class="text-xs text-gray-400 mt-1">未设 AI 预算（编辑项目可设置，到 80% 预警、100% 自动暂停）</p>
-            {% endif %}
-        </div>
-        <div class="flex gap-2 flex-shrink-0">
-            {% if auto_running %}
-            <form method="POST" action="/projects/{{ project.id }}/auto/stop">
-                <button class="text-sm px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition">停止</button>
-            </form>
-            {% else %}
-            <form method="POST" action="/projects/{{ project.id }}/auto/start"
-                  onsubmit="return confirm('启动后 AI 会自动逐个执行所有待处理的 AI 任务（含自动审核），费用受预算护栏控制。确定启动？')">
-                <button class="text-sm px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">&#9654; 启动自动执行</button>
-            </form>
-            {% endif %}
         </div>
     </div>
-</div>
 
-<!-- AI 拆解任务 -->
-<div class="bg-white rounded-lg shadow-sm p-4 mb-4">
-    <form method="POST" action="/projects/{{ project.id }}/decompose" class="flex gap-3 items-end">
-        <div class="flex-1">
-            <label class="block text-xs text-gray-500 mb-1">AI 自动拆解任务</label>
-            <input type="text" name="goal" required placeholder="输入项目目标，AI 自动拆解为子任务..." value="{{ project.description }}"
-                class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-violet-500 focus:border-purple-500 outline-none">
-        </div>
-        <div class="w-32">
-            <label class="block text-xs text-gray-500 mb-1">模型</label>
-            <select name="model" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
-                <option value="auto">自动</option>
-                <option value="claude">Claude</option>
-                <option value="openai">OpenAI</option>
-                <option value="deepseek">DeepSeek</option>
-            </select>
-        </div>
-        <button type="submit" class="bg-violet-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-violet-700 transition" style="white-space:nowrap">AI 拆解</button>
-    </form>
-</div>
+    <div class="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-xs">
+        <span class="{% if core_count %}text-amber-700 font-medium{% else %}text-gray-400{% endif %}">⭐ 核心档 {{ core_count }} 篇</span>
+        <span class="text-violet-600 font-medium">AI费用 ${{ project_cost }}</span>
+        {% if project.budget %}<span class="text-gray-500">预算 ¥{{ project.budget }}</span>{% endif %}
+        {% if project.revenue %}<span class="text-green-600 font-medium">收款 ¥{{ project.revenue }}</span>{% endif %}
+        {% if project.description %}<span class="text-gray-400">{{ project.description }}</span>{% endif %}
+    </div>
 
-<!-- 手动添加任务 -->
-<div class="bg-white rounded-lg shadow-sm p-4 mb-6">
-    <form method="POST" action="/projects/{{ project.id }}/tasks/new" class="flex flex-wrap gap-3 items-end">
-        <div class="flex-1" style="min-width:200px">
-            <label class="block text-xs text-gray-500 mb-1">任务标题</label>
-            <input type="text" name="title" required placeholder="输入任务..."
-                class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+    <!-- AI 控制面板（点击状态按钮展开） -->
+    <div id="ai-ctrl-panel" class="mt-3 pt-3 border-t border-gray-100">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+            <div class="flex flex-wrap items-center gap-3 text-xs">
+                <span class="text-gray-500">模式: <strong>{{ '全自动' if project.automation_level == 'auto' else '每步确认' }}</strong></span>
+                {% if project.ai_budget and project.ai_budget > 0 %}
+                {% set pct = ((project_cost / project.ai_budget * 100) | round(0)) | int %}
+                <div class="flex items-center gap-2">
+                    <div class="bg-gray-200 rounded-full h-1.5 w-28">
+                        <div class="h-1.5 rounded-full {% if pct >= 100 %}bg-red-500{% elif pct >= 80 %}bg-yellow-500{% else %}bg-green-500{% endif %}" style="width:{{ [pct,100]|min }}%"></div>
+                    </div>
+                    <span class="text-gray-500">${{ project_cost }}/${{ project.ai_budget }} ({{ pct }}%)</span>
+                </div>
+                {% else %}
+                <span class="text-gray-400">未设 AI 预算（编辑项目可设置，80% 预警 / 100% 暂停）</span>
+                {% endif %}
+            </div>
+            <div class="flex gap-2">
+                {% if auto_running %}
+                <form method="POST" action="/projects/{{ project.id }}/auto/stop">
+                    <button class="text-sm px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition">停止</button>
+                </form>
+                {% else %}
+                <form method="POST" action="/projects/{{ project.id }}/auto/start"
+                      onsubmit="return confirm('启动后 AI 会自动逐个执行所有待处理的 AI 任务（含自动审核），费用受预算护栏控制。确定启动？')">
+                    <button class="text-sm px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">&#9654; 启动自动执行</button>
+                </form>
+                {% endif %}
+            </div>
         </div>
-        <div class="w-32">
-            <label class="block text-xs text-gray-500 mb-1">执行者</label>
-            <select name="assignee" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
-                <option value="ai">AI</option>
-                <option value="">人工</option>
-            </select>
-        </div>
-        <div class="w-32">
-            <label class="block text-xs text-gray-500 mb-1">AI 模型</label>
-            <select name="ai_model" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
-                <option value="auto">自动</option>
-                <option value="claude">Claude</option>
-                <option value="openai">OpenAI</option>
-                <option value="deepseek">DeepSeek</option>
-            </select>
-        </div>
-        <div class="w-20">
-            <label class="block text-xs text-gray-500 mb-1">优先级</label>
-            <select name="priority" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
-                <option value="1">P1</option>
-                <option value="2">P2</option>
-                <option value="3" selected>P3</option>
-                <option value="4">P4</option>
-                <option value="5">P5</option>
-            </select>
-        </div>
-        <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 transition">添加</button>
-    </form>
-</div>
-
-<!-- 视图切换 -->
-<div class="flex gap-2 mb-4" id="view-tabs">
-    <button onclick="switchView('board')" class="text-sm px-3 py-1 rounded-lg bg-blue-100 text-blue-700" data-tab="board">看板</button>
-    <button onclick="switchView('tree')" class="text-sm px-3 py-1 rounded-lg" data-tab="tree">任务树</button>
-    <button onclick="switchView('docs')" class="text-sm px-3 py-1 rounded-lg" data-tab="docs">资料库 ({{ project_notes|length }})</button>
-    <button onclick="switchView('decisions')" class="text-sm px-3 py-1 rounded-lg" data-tab="decisions">决策 ({{ project_decisions|length }})</button>
-    <button onclick="switchView('expenses')" class="text-sm px-3 py-1 rounded-lg" data-tab="expenses">支出 (¥{{ expense_total }})</button>
-    <button onclick="switchView('warroom')" class="text-sm px-3 py-1 rounded-lg" data-tab="warroom">🛰️ AI 作战室</button>
-    <button onclick="switchView('projai')" class="text-sm px-3 py-1 rounded-lg" data-tab="projai">💬 项目 AI</button>
+    </div>
 </div>
 <script>
-function switchView(name) {
-    ['board','tree','docs','decisions','expenses','warroom','projai'].forEach(function(v){
-        var el = document.getElementById(v+'-view');
-        if(el) el.style.display = v===name ? (v==='board'?'grid':'block') : 'none';
-    });
+document.addEventListener('click',function(){document.getElementById('more-menu').classList.remove('open');});
+</script>
+
+<!-- Layer 2: Tabs -->
+<div class="proj-tabs mb-4" id="view-tabs">
+    <button onclick="switchView('board')" class="text-sm px-4 py-2 rounded-lg bg-blue-100 text-blue-700 font-medium" data-tab="board">看板</button>
+    <button onclick="switchView('tree')" class="text-sm px-4 py-2 rounded-lg text-gray-600 hover:bg-gray-100" data-tab="tree">任务树</button>
+    <button onclick="switchView('docs')" class="text-sm px-4 py-2 rounded-lg text-gray-600 hover:bg-gray-100" data-tab="docs">资料库 ({{ project_notes|length }})</button>
+    <button onclick="switchView('records')" class="text-sm px-4 py-2 rounded-lg text-gray-600 hover:bg-gray-100" data-tab="records">记录</button>
+    <button onclick="switchView('ai')" class="text-sm px-4 py-2 rounded-lg text-gray-600 hover:bg-gray-100" data-tab="ai">🤖 AI指挥</button>
+</div>
+<script>
+var _ALL_TABS=['board','tree','docs','records','ai'];
+function switchView(name){
+    _ALL_TABS.forEach(function(v){var el=document.getElementById(v+'-view');if(el)el.style.display=v===name?'block':'none';});
     document.querySelectorAll('#view-tabs button').forEach(function(b){
-        if(b.dataset.tab===name) { b.classList.add('bg-blue-100','text-blue-700'); }
-        else { b.classList.remove('bg-blue-100','text-blue-700'); }
+        var on=b.dataset.tab===name;
+        b.className='text-sm px-4 py-2 rounded-lg '+(on?'bg-blue-100 text-blue-700 font-medium':'text-gray-600 hover:bg-gray-100');
     });
 }
 </script>
 
-<!-- 任务看板 -->
-<div id="board-view" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-    {% for status, label in [('pending', '待处理'), ('running', '执行中'), ('reviewing', '审核中'), ('blocked', '阻塞'), ('done', '已完成'), ('failed', '失败')] %}
-    <div class="bg-gray-100 rounded-lg p-3" style="min-height:200px">
-        <div class="flex items-center justify-between mb-3">
-            <h3 class="text-sm font-semibold text-gray-600">{{ label }}</h3>
-            <span class="text-xs bg-gray-200 text-gray-500 px-2 rounded-full">{{ task_board[status]|length }}</span>
-        </div>
-        <div class="space-y-2">
-            {% for t in task_board[status] %}
-            <div class="bg-white rounded-lg p-3 shadow-sm hover:shadow-md transition">
-                <a href="/tasks/{{ t.id }}" class="block">
-                    <div class="text-sm font-medium text-gray-800">{{ t.title }}</div>
-                    {% if t.parent_task_id %}
-                    <div class="text-xs text-purple-400 mt-1">子任务</div>
-                    {% endif %}
-                    <div class="flex items-center justify-between mt-2 text-xs text-gray-400">
-                        <span>{{ t.assignee or '未分配' }}</span>
-                        <span class="{% if t.priority <= 2 %}text-red-500 font-medium{% endif %}">P{{ t.priority }}</span>
+<!-- ===== 看板 ===== -->
+<div id="board-view">
+    {% set has_tasks = task_board['pending'] or task_board['running'] or task_board['reviewing'] or task_board['blocked'] or task_board['done'] or task_board['failed'] %}
+    {% if not has_tasks %}
+    <div class="bg-white rounded-xl shadow-sm p-12 text-center">
+        <div class="text-4xl mb-3">📋</div>
+        <p class="text-gray-600 font-medium mb-1">项目还没有任务</p>
+        <p class="text-xs text-gray-400 mb-5">可以让 AI 自动拆解，或手动添加第一个任务</p>
+        <button onclick="switchView('ai')" class="text-sm px-5 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition">🤖 去 AI 指挥 →</button>
+    </div>
+    {% else %}
+    <div class="kanban-scroll">
+        <div class="kanban-cols">
+            {% for status, label in [('pending','待处理'),('running','执行中'),('reviewing','审核中'),('blocked','阻塞'),('done','已完成'),('failed','失败')] %}
+            {% set col = task_board[status] %}
+            <div class="{% if col %}bg-gray-100{% else %}bg-gray-50{% endif %} rounded-lg p-3" style="min-height:160px">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="text-sm font-semibold {% if col %}text-gray-600{% else %}text-gray-300{% endif %}">{{ label }}</h3>
+                    <span class="text-xs {% if col %}bg-gray-200 text-gray-500{% else %}bg-gray-100 text-gray-300{% endif %} px-2 rounded-full">{{ col|length }}</span>
+                </div>
+                <div class="space-y-2">
+                    {% for t in col %}
+                    <div class="bg-white rounded-lg p-3 shadow-sm hover:shadow-md transition">
+                        <a href="/tasks/{{ t.id }}" class="block">
+                            <div class="text-sm font-medium text-gray-800">{{ t.title }}</div>
+                            {% if t.parent_task_id %}<div class="text-xs text-violet-400 mt-1">子任务</div>{% endif %}
+                            <div class="flex items-center justify-between mt-2 text-xs text-gray-400">
+                                <span>{{ t.assignee or '未分配' }}</span>
+                                <span class="{% if t.priority <= 2 %}text-red-500 font-medium{% endif %}">P{{ t.priority }}</span>
+                            </div>
+                            {% if t.progress and t.progress > 0 and t.status != 'done' %}
+                            <div class="mt-2 bg-gray-200 rounded-full h-1">
+                                <div class="bg-blue-500 h-1 rounded-full" style="width:{{ t.progress }}%"></div>
+                            </div>
+                            {% endif %}
+                        </a>
+                        {% if status == 'pending' %}
+                        <div class="mt-2 flex gap-1">
+                            {% if t.assignee == 'ai' %}
+                            <form method="POST" action="/tasks/{{ t.id }}/execute" class="inline">
+                                <button class="text-xs px-2 py-0.5 bg-violet-50 text-violet-600 rounded hover:bg-violet-100">AI 执行</button>
+                            </form>
+                            {% endif %}
+                            <form method="POST" action="/tasks/{{ t.id }}/status" class="inline">
+                                <input type="hidden" name="status" value="running">
+                                <button class="text-xs px-2 py-0.5 bg-blue-50 text-blue-600 rounded hover:bg-blue-100">开始</button>
+                            </form>
+                        </div>
+                        {% elif status == 'running' %}
+                        <div class="mt-2">
+                            <form method="POST" action="/tasks/{{ t.id }}/status" class="inline">
+                                <input type="hidden" name="status" value="done">
+                                <button class="text-xs px-2 py-0.5 bg-green-50 text-green-600 rounded hover:bg-green-100">完成</button>
+                            </form>
+                        </div>
+                        {% elif status == 'blocked' %}
+                        <div class="mt-2 flex gap-1">
+                            {% if t.assignee == 'ai' %}
+                            <form method="POST" action="/tasks/{{ t.id }}/execute" class="inline">
+                                <button class="text-xs px-2 py-0.5 bg-violet-50 text-violet-600 rounded hover:bg-violet-100">重新执行</button>
+                            </form>
+                            {% endif %}
+                            <form method="POST" action="/tasks/{{ t.id }}/status" class="inline">
+                                <input type="hidden" name="status" value="done">
+                                <button class="text-xs px-2 py-0.5 bg-green-50 text-green-600 rounded hover:bg-green-100">人工通过</button>
+                            </form>
+                        </div>
+                        {% elif status == 'failed' %}
+                        <div class="mt-2">
+                            <form method="POST" action="/tasks/{{ t.id }}/status" class="inline">
+                                <input type="hidden" name="status" value="pending">
+                                <button class="text-xs px-2 py-0.5 bg-gray-50 text-gray-600 rounded hover:bg-gray-100">重置</button>
+                            </form>
+                        </div>
+                        {% endif %}
                     </div>
-                    {% if t.progress and t.progress > 0 and t.status != 'done' %}
-                    <div class="mt-2 bg-gray-200 rounded-full h-1">
-                        <div class="bg-blue-500 h-1 rounded-full" style="width: {{ t.progress }}%"></div>
-                    </div>
-                    {% endif %}
-                </a>
-                {% if status == 'pending' %}
-                <div class="mt-2 flex gap-1">
-                    {% if t.assignee == 'ai' %}
-                    <form method="POST" action="/tasks/{{ t.id }}/execute" class="inline">
-                        <button class="text-xs px-2 py-0.5 bg-violet-50 text-violet-600 rounded hover:bg-violet-100">AI 执行</button>
-                    </form>
-                    {% endif %}
-                    <form method="POST" action="/tasks/{{ t.id }}/status" class="inline">
-                        <input type="hidden" name="status" value="running">
-                        <button class="text-xs px-2 py-0.5 bg-blue-50 text-blue-600 rounded hover:bg-blue-100">开始</button>
-                    </form>
+                    {% endfor %}
+                    {% if not col %}<p class="text-center text-gray-300 text-xs py-4">—</p>{% endif %}
                 </div>
-                {% elif status == 'running' %}
-                <div class="mt-2 flex gap-1">
-                    <form method="POST" action="/tasks/{{ t.id }}/status" class="inline">
-                        <input type="hidden" name="status" value="done">
-                        <button class="text-xs px-2 py-0.5 bg-green-50 text-green-600 rounded hover:bg-green-100">完成</button>
-                    </form>
-                </div>
-                {% elif status == 'blocked' %}
-                <div class="mt-2 flex gap-1">
-                    {% if t.assignee == 'ai' %}
-                    <form method="POST" action="/tasks/{{ t.id }}/execute" class="inline">
-                        <button class="text-xs px-2 py-0.5 bg-violet-50 text-violet-600 rounded hover:bg-violet-100">重新执行</button>
-                    </form>
-                    {% endif %}
-                    <form method="POST" action="/tasks/{{ t.id }}/status" class="inline">
-                        <input type="hidden" name="status" value="done">
-                        <button class="text-xs px-2 py-0.5 bg-green-50 text-green-600 rounded hover:bg-green-100">人工通过</button>
-                    </form>
-                </div>
-                {% elif status == 'failed' %}
-                <div class="mt-2">
-                    <form method="POST" action="/tasks/{{ t.id }}/status" class="inline">
-                        <input type="hidden" name="status" value="pending">
-                        <button class="text-xs px-2 py-0.5 bg-gray-50 text-gray-600 rounded hover:bg-gray-100">重置</button>
-                    </form>
-                </div>
-                {% endif %}
             </div>
             {% endfor %}
         </div>
     </div>
-    {% endfor %}
+    {% endif %}
 </div>
 
-<!-- 任务树视图 -->
-<div id="tree-view" class="bg-white rounded-lg shadow-sm p-6" style="display:none">
+<!-- ===== 任务树 ===== -->
+<div id="tree-view" class="bg-white rounded-xl shadow-sm p-6" style="display:none">
     <h3 class="text-lg font-semibold text-gray-700 mb-4">任务层级结构</h3>
     {% macro render_tree(nodes, depth=0) %}
     <div class="{% if depth > 0 %}ml-6 border-l-2 border-gray-200 pl-4{% endif %}">
@@ -235,45 +217,33 @@ function switchView(name) {
         <div class="py-2 {% if not loop.last %}border-b border-gray-100{% endif %}">
             <div class="flex items-center justify-between">
                 <div class="flex items-center gap-2">
-                    {% if node.children %}
-                    <span class="text-gray-400 text-xs">&#9660;</span>
-                    {% else %}
-                    <span class="text-gray-300 text-xs">&#9679;</span>
-                    {% endif %}
+                    {% if node.children %}<span class="text-gray-400 text-xs">&#9660;</span>
+                    {% else %}<span class="text-gray-300 text-xs">&#9679;</span>{% endif %}
                     <a href="/tasks/{{ node.id }}" class="text-sm font-medium text-gray-800 hover:text-blue-600">{{ node.title }}</a>
                     <span class="text-xs px-2 py-0.5 rounded status-{{ node.status }}">{{ node.status }}</span>
                 </div>
                 <div class="flex items-center gap-3 text-xs text-gray-400">
                     <span>{{ node.assignee or '未分配' }}</span>
                     <span class="{% if node.priority <= 2 %}text-red-500{% endif %}">P{{ node.priority }}</span>
-                    {% if node.progress > 0 %}
-                    <span>{{ node.progress }}%</span>
-                    {% endif %}
+                    {% if node.progress > 0 %}<span>{{ node.progress }}%</span>{% endif %}
                 </div>
             </div>
-            {% if node.children %}
-            {{ render_tree(node.children, depth + 1) }}
-            {% endif %}
+            {% if node.children %}{{ render_tree(node.children, depth + 1) }}{% endif %}
         </div>
         {% endfor %}
     </div>
     {% endmacro %}
-    {% if task_tree %}
-    {{ render_tree(task_tree) }}
-    {% else %}
-    <div class="text-center text-gray-400 py-6">暂无任务</div>
-    {% endif %}
+    {% if task_tree %}{{ render_tree(task_tree) }}
+    {% else %}<div class="text-center text-gray-400 py-6">暂无任务</div>{% endif %}
 </div>
 
-<!-- 资料库视图 -->
+<!-- ===== 资料库 ===== -->
 <div id="docs-view" class="space-y-4" style="display:none">
-    <!-- 上传/粘贴入口 -->
-    <div class="grid md:grid-cols-2 gap-4">
-        <div class="bg-white rounded-lg shadow-sm p-4">
+    <div class="grid gap-4" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr))">
+        <div class="bg-white rounded-xl shadow-sm p-4">
             <h3 class="text-sm font-semibold text-gray-700 mb-3">上传文件</h3>
             <form method="POST" action="/projects/{{ project.id }}/upload" enctype="multipart/form-data" class="space-y-3">
-                <input type="file" name="files" multiple accept=".md,.txt,.csv,.json,.py,.js,.html,.css,.yaml,.yml,.toml,.log,.xml"
-                    class="w-full border rounded-lg px-3 py-2 text-sm">
+                <input type="file" name="files" multiple accept=".md,.txt,.csv,.json,.py,.js,.html,.css,.yaml,.yml,.toml,.log,.xml" class="w-full border rounded-lg px-3 py-2 text-sm">
                 <div class="flex gap-2">
                     <input type="text" name="author" placeholder="作者" class="flex-1 border rounded-lg px-3 py-2 text-sm outline-none">
                     <input type="text" name="tags" placeholder="标签" class="flex-1 border rounded-lg px-3 py-2 text-sm outline-none">
@@ -281,11 +251,10 @@ function switchView(name) {
                 <button type="submit" class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700 transition w-full">上传到项目</button>
             </form>
         </div>
-        <div class="bg-white rounded-lg shadow-sm p-4">
+        <div class="bg-white rounded-xl shadow-sm p-4">
             <h3 class="text-sm font-semibold text-gray-700 mb-3">粘贴内容 → AI 自动归类</h3>
             <form method="POST" action="/projects/{{ project.id }}/classify" class="space-y-3">
-                <textarea name="text" rows="4" required placeholder="粘贴聊天记录、会议纪要、录音转文字..."
-                    class="w-full border rounded-lg px-3 py-2 text-sm outline-none"></textarea>
+                <textarea name="text" rows="4" required placeholder="粘贴聊天记录、会议纪要、录音转文字..." class="w-full border rounded-lg px-3 py-2 text-sm outline-none"></textarea>
                 <div class="flex gap-2">
                     <select name="model" class="border rounded-lg px-3 py-2 text-sm outline-none">
                         <option value="auto">自动</option>
@@ -297,425 +266,391 @@ function switchView(name) {
             </form>
         </div>
     </div>
-
-    <!-- 资料列表 -->
-    <div class="bg-white rounded-lg shadow-sm p-6">
-        <h3 class="text-lg font-semibold text-gray-700 mb-4">项目资料 ({{ project_notes|length }})</h3>
+    <div class="bg-white rounded-xl shadow-sm p-6">
+        <h3 class="text-sm font-semibold text-gray-700 mb-4">项目资料 ({{ project_notes|length }})</h3>
         {% if project_notes %}
         <div class="space-y-2">
             {% for n in project_notes %}
             <a href="/notes/{{ n.id }}" class="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 transition {% if n.is_core %}bg-amber-50 border-amber-200{% endif %}">
-                <div class="flex items-center gap-2">
-                    {% if n.is_core %}<span class="text-amber-500" title="项目核心档（AI 任务必读）">⭐</span>{% endif %}
-                    {% if n.source_type == 'ai_classified' %}
-                    <span class="text-xs bg-violet-100 text-violet-600 px-2 py-0.5 rounded">AI分类</span>
-                    {% elif n.source_type == 'file_import' or n.source_type == 'upload' %}
-                    <span class="text-xs bg-green-100 text-green-600 px-2 py-0.5 rounded">文件</span>
-                    {% elif n.source_type == 'master_ai' %}
-                    <span class="text-xs bg-violet-100 text-violet-600 px-2 py-0.5 rounded">总AI</span>
-                    {% elif n.source_type == 'auto_progress' %}
-                    <span class="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded">进度</span>
-                    {% else %}
-                    <span class="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded">手动</span>
-                    {% endif %}
-                    <span class="text-sm text-gray-800">{{ n.title }}</span>
+                <div class="flex items-center gap-2 min-w-0">
+                    {% if n.is_core %}<span class="text-amber-500 flex-shrink-0">⭐</span>{% endif %}
+                    {% if n.source_type == 'ai_classified' %}<span class="text-xs bg-violet-100 text-violet-600 px-2 py-0.5 rounded flex-shrink-0">AI分类</span>
+                    {% elif n.source_type == 'file_import' or n.source_type == 'upload' %}<span class="text-xs bg-green-100 text-green-600 px-2 py-0.5 rounded flex-shrink-0">文件</span>
+                    {% elif n.source_type == 'master_ai' %}<span class="text-xs bg-violet-100 text-violet-600 px-2 py-0.5 rounded flex-shrink-0">总AI</span>
+                    {% elif n.source_type == 'auto_progress' %}<span class="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded flex-shrink-0">进度</span>
+                    {% else %}<span class="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded flex-shrink-0">手动</span>{% endif %}
+                    <span class="text-sm text-gray-800 truncate">{{ n.title }}</span>
                 </div>
-                <div class="flex items-center gap-2 text-xs text-gray-400">
-                    {% if n.tags %}
-                    {% for tag in n.tags.split(',')[:3] %}
-                    <span class="text-purple-400">#{{ tag.strip() }}</span>
-                    {% endfor %}
-                    {% endif %}
+                <div class="flex items-center gap-2 text-xs text-gray-400 flex-shrink-0">
+                    {% if n.tags %}{% for tag in n.tags.split(',')[:3] %}<span class="text-violet-400">#{{ tag.strip() }}</span>{% endfor %}{% endif %}
                     <span>{{ n.updated_at[:10] if n.updated_at else '' }}</span>
                 </div>
             </a>
             {% endfor %}
         </div>
         {% else %}
-        <div class="text-center text-gray-400 py-6">还没有项目资料，上传文件或粘贴内容即可</div>
+        <div class="text-center text-gray-400 py-8">还没有项目资料，上传文件或粘贴内容即可</div>
         {% endif %}
     </div>
 </div>
 
-<!-- 支出台账视图 -->
-<div id="expenses-view" class="space-y-4" style="display:none">
-    <div class="bg-white rounded-lg shadow-sm p-4">
-        <h3 class="text-sm font-semibold text-gray-700 mb-3">记一笔支出（广告费、服务器、域名等外部花费）</h3>
-        <form method="POST" action="/projects/{{ project.id }}/expenses/new" class="flex flex-wrap gap-3 items-end">
-            <div class="flex-1" style="min-width:160px">
-                <label class="block text-xs text-gray-500 mb-1">支出项目</label>
-                <input type="text" name="title" required placeholder="如: 抖音广告投放"
-                    class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
-            </div>
-            <div class="w-28">
-                <label class="block text-xs text-gray-500 mb-1">金额 (¥)</label>
-                <input type="number" step="0.01" name="amount" required placeholder="0.00"
-                    class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
-            </div>
-            <div class="w-32">
-                <label class="block text-xs text-gray-500 mb-1">分类</label>
-                <select name="category" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
-                    {% for c in ['广告推广', '服务器', '域名', '软件订阅', '素材版权', '外包', '其他'] %}
-                    <option value="{{ c }}">{{ c }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="flex-1" style="min-width:120px">
-                <label class="block text-xs text-gray-500 mb-1">备注 (可选)</label>
-                <input type="text" name="note" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
-            </div>
-            <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 transition">记账</button>
-        </form>
+<!-- ===== 记录（决策 + 支出合并）===== -->
+<div id="records-view" class="space-y-4" style="display:none">
+    <div class="flex gap-2">
+        <button class="rec-tab active" id="rec-btn-d" onclick="showRec('d')">决策 ({{ project_decisions|length }} 条)</button>
+        <button class="rec-tab" id="rec-btn-e" onclick="showRec('e')">支出 (¥{{ expense_total }})</button>
     </div>
+    <script>
+    function showRec(t){
+        document.getElementById('rec-d').style.display=t==='d'?'block':'none';
+        document.getElementById('rec-e').style.display=t==='e'?'block':'none';
+        document.getElementById('rec-btn-d').className='rec-tab'+(t==='d'?' active':'');
+        document.getElementById('rec-btn-e').className='rec-tab'+(t==='e'?' active':'');
+    }
+    </script>
 
-    <div class="bg-white rounded-lg shadow-sm p-6">
-        <div class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-semibold text-gray-700">支出明细 ({{ expenses|length }} 笔)</h3>
-            <div class="text-sm text-gray-600">
-                合计: <span class="font-bold text-red-600">¥{{ expense_total }}</span>
-                <span class="text-xs text-gray-400 ml-2">+ AI 费用 ${{ project_cost }}</span>
-            </div>
-        </div>
-        {% if expenses %}
-        <div class="space-y-2">
-            {% for e in expenses %}
-            <div class="flex items-center justify-between p-3 border rounded-lg">
-                <div class="flex items-center gap-3">
-                    <span class="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">{{ e.category }}</span>
-                    <span class="text-sm text-gray-800">{{ e.title }}</span>
-                    {% if e.note %}<span class="text-xs text-gray-400">{{ e.note }}</span>{% endif %}
+    <!-- 决策 -->
+    <div id="rec-d" class="bg-white rounded-xl shadow-sm p-6">
+        <h3 class="text-sm font-semibold text-gray-700 mb-4">项目决策记录</h3>
+        {% if project_decisions %}
+        <div class="space-y-4">
+            {% for d in project_decisions %}
+            <div class="border-l-4 {% if d.made_by == 'AI' %}border-violet-400{% else %}border-blue-400{% endif %} pl-4 py-2">
+                <div class="flex flex-wrap items-center gap-2 mb-1">
+                    <span class="text-xs px-2 py-0.5 rounded {% if d.made_by == 'AI' %}bg-violet-100 text-violet-600{% else %}bg-blue-100 text-blue-600{% endif %}">{{ d.made_by or '未知' }}</span>
+                    <h4 class="font-medium text-gray-800 text-sm">{{ d.title }}</h4>
+                    <span class="text-xs text-gray-400">{{ d.created_at[:16] if d.created_at else '' }}</span>
                 </div>
-                <div class="flex items-center gap-3">
-                    <span class="text-sm font-medium text-red-600">¥{{ e.amount }}</span>
-                    <span class="text-xs text-gray-400">{{ e.created_at[:10] if e.created_at else '' }}</span>
-                    <form method="POST" action="/projects/{{ project.id }}/expenses/{{ e.id }}/delete" onsubmit="return confirm('删除这笔支出记录？')">
-                        <button class="text-xs text-gray-400 hover:text-red-600">删除</button>
-                    </form>
-                </div>
+                {% if d.decision %}<p class="text-sm text-gray-700">{{ d.decision }}</p>{% endif %}
+                {% if d.reason %}<p class="text-xs text-gray-500 mt-1">原因: {{ d.reason }}</p>{% endif %}
             </div>
             {% endfor %}
         </div>
         {% else %}
-        <div class="text-center text-gray-400 py-6">还没有支出记录</div>
+        <div class="text-center text-gray-400 py-6">还没有决策记录</div>
         {% endif %}
+    </div>
+
+    <!-- 支出 -->
+    <div id="rec-e" style="display:none" class="space-y-4">
+        <div class="bg-white rounded-xl shadow-sm p-4">
+            <h3 class="text-sm font-semibold text-gray-700 mb-3">记一笔支出</h3>
+            <form method="POST" action="/projects/{{ project.id }}/expenses/new" class="flex flex-wrap gap-3 items-end">
+                <div class="flex-1" style="min-width:160px">
+                    <label class="block text-xs text-gray-500 mb-1">支出项目</label>
+                    <input type="text" name="title" required placeholder="如: 抖音广告投放" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                </div>
+                <div class="w-28">
+                    <label class="block text-xs text-gray-500 mb-1">金额 (¥)</label>
+                    <input type="number" step="0.01" name="amount" required placeholder="0.00" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                </div>
+                <div class="w-32">
+                    <label class="block text-xs text-gray-500 mb-1">分类</label>
+                    <select name="category" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                        {% for c in ['广告推广','服务器','域名','软件订阅','素材版权','外包','其他'] %}
+                        <option value="{{ c }}">{{ c }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="flex-1" style="min-width:120px">
+                    <label class="block text-xs text-gray-500 mb-1">备注 (可选)</label>
+                    <input type="text" name="note" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                </div>
+                <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 transition">记账</button>
+            </form>
+        </div>
+        <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-sm font-semibold text-gray-700">支出明细 ({{ expenses|length }} 笔)</h3>
+                <div class="text-sm text-gray-600">合计: <span class="font-bold text-red-600">¥{{ expense_total }}</span> <span class="text-xs text-gray-400 ml-1">+ AI ${{ project_cost }}</span></div>
+            </div>
+            {% if expenses %}
+            <div class="space-y-2">
+                {% for e in expenses %}
+                <div class="flex items-center justify-between p-3 border rounded-lg">
+                    <div class="flex items-center gap-3 min-w-0">
+                        <span class="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded flex-shrink-0">{{ e.category }}</span>
+                        <span class="text-sm text-gray-800 truncate">{{ e.title }}</span>
+                        {% if e.note %}<span class="text-xs text-gray-400">{{ e.note }}</span>{% endif %}
+                    </div>
+                    <div class="flex items-center gap-3 flex-shrink-0">
+                        <span class="text-sm font-medium text-red-600">¥{{ e.amount }}</span>
+                        <span class="text-xs text-gray-400">{{ e.created_at[:10] if e.created_at else '' }}</span>
+                        <form method="POST" action="/projects/{{ project.id }}/expenses/{{ e.id }}/delete" onsubmit="return confirm('删除？')">
+                            <button class="text-xs text-gray-400 hover:text-red-600">删除</button>
+                        </form>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center text-gray-400 py-6">还没有支出记录</div>
+            {% endif %}
+        </div>
     </div>
 </div>
 
-<!-- AI 作战室视图：实时显示在跑的 worker agent -->
-<div id="warroom-view" class="space-y-4" style="display:none">
-    <div class="bg-white rounded-lg shadow-sm p-4 flex items-center justify-between">
-        <div>
-            <h3 class="text-sm font-semibold text-gray-700">实时 Worker 状态</h3>
-            <p class="text-xs text-gray-400 mt-1">最多 {{ 3 }} 个 worker 同时干活。每 2 秒自动刷新。</p>
-        </div>
-        <div class="flex items-center gap-4">
-            <span class="text-xs text-gray-500">运行中: <span id="wr-running" class="font-medium text-gray-700">--</span></span>
-            <span class="text-xs text-gray-500">Worker 数: <span id="wr-count" class="font-medium text-gray-700">--</span></span>
-            <span class="text-xs text-gray-500">AI 累计: $<span id="wr-spent" class="font-medium text-gray-700">--</span></span>
-        </div>
-    </div>
+<!-- ===== AI指挥（项目AI + AI拆解 + 作战室）===== -->
+<div id="ai-view" class="space-y-4" style="display:none">
 
-    <div id="warroom-list" class="space-y-3"></div>
-
-    <div class="bg-white rounded-lg shadow-sm p-4">
-        <h4 class="text-sm font-semibold text-gray-700 mb-3">最近执行记录（含工具调用步骤）</h4>
-        {% if runs_with_tools %}
-        <div class="space-y-3">
-            {% for r in runs_with_tools %}
-            <details class="border rounded-lg p-3">
-                <summary class="cursor-pointer text-sm text-gray-800 flex items-center justify-between">
-                    <span>
-                        <span class="text-xs bg-violet-100 text-violet-700 px-2 py-0.5 rounded mr-2">{{ r.model }}</span>
-                        {{ r.task_title or '(无标题)' }}
-                    </span>
-                    <span class="text-xs text-gray-400">${{ '%.4f' % r.cost }} · {{ r.created_at[:16] if r.created_at }}</span>
-                </summary>
-                <div class="mt-3 text-xs text-gray-600 bg-gray-50 rounded p-3" style="white-space:pre-wrap;max-height:300px;overflow-y:auto">{{ r.response[-2000:] if r.response else '' }}</div>
-            </details>
-            {% endfor %}
-        </div>
-        {% else %}
-        <p class="text-xs text-gray-400 text-center py-4">还没有执行记录</p>
-        {% endif %}
-    </div>
-</div>
-
-<script>
-// 作战室轮询
-(function(){
-    var projectId = "{{ project.id }}";
-    var pollTimer = null;
-
-    function escapeHtml(s){
-        var d = document.createElement('div');
-        d.textContent = s;
-        return d.innerHTML;
-    }
-
-    function renderWorkers(data){
-        document.getElementById('wr-running').textContent = data.auto_running ? '✅ 是' : '⏹ 否';
-        document.getElementById('wr-count').textContent = data.worker_count;
-        document.getElementById('wr-spent').textContent = (data.ai_spent || 0).toFixed(4);
-
-        var list = document.getElementById('warroom-list');
-        if (!data.workers || data.workers.length === 0){
-            list.innerHTML = '<div class="bg-white rounded-lg shadow-sm p-6 text-center text-gray-400 text-sm">'
-                + (data.auto_running ? '⏳ 自动执行运行中，等待派工…' : '没有 worker 在跑。点击上方"启动自动执行"开始派工。')
-                + '</div>';
-            return;
-        }
-        list.innerHTML = data.workers.map(function(w){
-            return '<div class="bg-white rounded-lg shadow-sm p-4 border-l-4 border-green-500">'
-                + '<div class="flex items-center justify-between">'
-                +   '<div class="flex-1 min-w-0">'
-                +     '<div class="text-sm font-medium text-gray-800 truncate">🤖 ' + escapeHtml(w.task_title || '(无标题)') + '</div>'
-                +     '<div class="text-xs text-gray-500 mt-1">第 ' + (w.step || 0) + ' 步 · 当前: <span class="text-blue-600">' + escapeHtml(w.tool || '...') + '</span></div>'
-                +     (w.args_brief ? '<div class="text-xs text-gray-400 mt-1 truncate font-mono">' + escapeHtml(w.args_brief) + '</div>' : '')
-                +   '</div>'
-                +   '<a href="/tasks/' + w.task_id + '" class="text-xs text-blue-600 hover:underline ml-3">查看任务</a>'
-                + '</div>'
-                + '<div class="mt-2"><div class="bg-gray-200 rounded-full h-1 overflow-hidden"><div class="bg-green-500 h-1 animate-pulse" style="width: 100%"></div></div></div>'
-                + '</div>';
-        }).join('');
-    }
-
-    function poll(){
-        fetch('/projects/' + projectId + '/workers')
-            .then(function(r){ return r.json(); })
-            .then(renderWorkers)
-            .catch(function(){});
-    }
-
-    var origSwitch = window.switchView;
-    window.switchView = function(name){
-        origSwitch(name);
-        if (name === 'warroom'){
-            poll();
-            if (!pollTimer) pollTimer = setInterval(poll, 2000);
-        } else {
-            if (pollTimer){ clearInterval(pollTimer); pollTimer = null; }
-        }
-    };
-})();
-</script>
-
-<!-- 项目 AI 对话视图 -->
-<div id="projai-view" class="space-y-4" style="display:none">
-    <div class="bg-white rounded-lg shadow-sm p-4">
+    <!-- 项目 AI 对话 -->
+    <div class="bg-white rounded-xl shadow-sm p-4">
         <div class="flex items-start justify-between mb-3">
             <div>
                 <h3 class="text-sm font-semibold text-gray-700">💬 [{{ project.code }}]「{{ project.name }}」专属 AI</h3>
                 <p class="text-xs text-gray-400 mt-1">只懂本项目（核心档+所有任务+笔记）。可以让它当场干活、追加任务、启停自动执行。</p>
             </div>
             <form method="POST" action="/projects/{{ project.id }}/ai-clear" onsubmit="return confirm('清空本项目所有对话？')">
-                <button class="text-xs px-3 py-1 border rounded-lg text-gray-500 hover:bg-gray-50">清空</button>
+                <button class="text-xs px-3 py-1 border rounded-lg text-gray-500 hover:bg-gray-50 flex-shrink-0">清空</button>
             </form>
         </div>
-    </div>
-
-    <div id="projai-messages" class="bg-white rounded-lg shadow-sm p-4 space-y-3" style="min-height:300px;max-height:500px;overflow-y:auto">
-        <div class="text-center text-gray-400 text-sm py-12" id="projai-empty">
-            还没有对话。试试说："这个项目目前进度怎么样？" 或 "帮我新建一个任务：撰写品牌故事"
+        <div id="projai-messages" class="space-y-3 mb-3" style="min-height:200px;max-height:500px;overflow-y:auto">
+            <div class="text-center text-gray-400 text-sm py-10" id="projai-empty">
+                还没有对话。试试说："这个项目目前进度怎么样？" 或 "帮我新建一个任务：撰写品牌故事"
+            </div>
         </div>
-    </div>
-
-    <div class="bg-white rounded-lg shadow-sm p-3">
         <form id="projai-form" class="flex gap-2">
-            <select id="projai-sender" class="w-20 border rounded-lg px-2 py-2 text-sm outline-none">
+            <select id="projai-sender" class="w-20 border rounded-lg px-2 py-2 text-sm outline-none flex-shrink-0">
                 <option value="Gaga">Gaga</option>
                 <option value="An">An</option>
             </select>
             <textarea id="projai-input" required rows="2" placeholder="跟项目 AI 说点什么...（Enter 发送, Shift+Enter 换行）"
                 class="flex-1 border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-violet-500 resize-none"></textarea>
-            <button type="submit" id="projai-send" class="bg-violet-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-violet-700 transition self-stretch">发送</button>
+            <button type="submit" id="projai-send" class="bg-violet-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-violet-700 transition self-stretch flex-shrink-0">发送</button>
+        </form>
+    </div>
+
+    <!-- AI 拆解 -->
+    <div class="bg-white rounded-xl shadow-sm p-4" id="ai-decompose">
+        <h3 class="text-sm font-semibold text-gray-700 mb-3">🔧 AI 自动拆解任务</h3>
+        <form method="POST" action="/projects/{{ project.id }}/decompose" class="flex flex-wrap gap-3 items-end">
+            <div class="flex-1" style="min-width:200px">
+                <input type="text" name="goal" required placeholder="输入项目目标，AI 自动拆解为子任务..." value="{{ project.description }}"
+                    class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-violet-500 outline-none">
+            </div>
+            <div class="w-32">
+                <select name="model" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                    <option value="auto">自动</option>
+                    <option value="claude">Claude</option>
+                    <option value="openai">OpenAI</option>
+                    <option value="deepseek">DeepSeek</option>
+                </select>
+            </div>
+            <button type="submit" class="bg-violet-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-violet-700 transition" style="white-space:nowrap">AI 拆解</button>
+        </form>
+    </div>
+
+    <!-- 作战室 Worker 状态 -->
+    <div class="bg-white rounded-xl shadow-sm p-4">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <div>
+                <h3 class="text-sm font-semibold text-gray-700">🛰️ 实时 Worker 状态</h3>
+                <p class="text-xs text-gray-400 mt-0.5">最多 3 个 worker 同时干活。进入此 Tab 自动刷新。</p>
+            </div>
+            <div class="flex items-center gap-4 text-xs text-gray-500 flex-shrink-0">
+                <span>运行中: <span id="wr-running" class="font-medium text-gray-700">--</span></span>
+                <span>AI累计: $<span id="wr-spent" class="font-medium text-gray-700">--</span></span>
+            </div>
+        </div>
+        <div id="warroom-list" class="space-y-2 mb-4"></div>
+        <h4 class="text-xs font-semibold text-gray-600 mb-2">最近执行记录（含工具调用步骤）</h4>
+        {% if runs_with_tools %}
+        <div class="space-y-2">
+            {% for r in runs_with_tools %}
+            <details class="border rounded-lg p-3">
+                <summary class="cursor-pointer text-sm text-gray-800 flex items-center justify-between">
+                    <span><span class="text-xs bg-violet-100 text-violet-700 px-2 py-0.5 rounded mr-2">{{ r.model }}</span>{{ r.task_title or '(无标题)' }}</span>
+                    <span class="text-xs text-gray-400">${{ '%.4f' % r.cost }} · {{ r.created_at[:16] if r.created_at }}</span>
+                </summary>
+                <div class="mt-2 text-xs text-gray-600 bg-gray-50 rounded p-3" style="white-space:pre-wrap;max-height:300px;overflow-y:auto">{{ r.response[-2000:] if r.response else '' }}</div>
+            </details>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-xs text-gray-400 text-center py-3">还没有执行记录</p>
+        {% endif %}
+    </div>
+</div>
+
+<!-- ===== FAB ===== -->
+<div class="fab-root">
+    <div class="ddmenu" id="fab-menu" style="bottom:calc(100% + 8px);top:auto;right:0">
+        <button onclick="switchView('ai');_closeFab();setTimeout(function(){var e=document.getElementById('ai-decompose');if(e)e.scrollIntoView({behavior:'smooth'})},150)"
+            class="w-full text-left px-4 py-3 text-sm text-violet-700 hover:bg-violet-50">🤖 AI 拆解</button>
+        <div class="border-t border-gray-100"></div>
+        <button onclick="_closeFab();document.getElementById('manual-overlay').style.display='block'"
+            class="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50">✍️ 手动添加</button>
+    </div>
+    <button onclick="event.stopPropagation();document.getElementById('fab-menu').classList.toggle('open')"
+        class="w-12 h-12 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition flex items-center justify-center text-2xl leading-none">+</button>
+</div>
+<script>
+function _closeFab(){document.getElementById('fab-menu').classList.remove('open');}
+document.addEventListener('click',function(){_closeFab();document.getElementById('manual-overlay').style.display='none';});
+</script>
+
+<!-- 手动添加浮层 -->
+<div id="manual-overlay" onclick="event.stopPropagation()">
+    <div class="bg-white rounded-xl shadow-xl border p-4">
+        <div class="flex items-center justify-between mb-3">
+            <span class="text-sm font-semibold text-gray-700">添加任务</span>
+            <button onclick="document.getElementById('manual-overlay').style.display='none'" class="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
+        </div>
+        <form method="POST" action="/projects/{{ project.id }}/tasks/new" class="space-y-3">
+            <input type="text" name="title" required placeholder="任务标题..."
+                class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+            <div class="flex gap-2">
+                <select name="assignee" class="flex-1 border rounded-lg px-3 py-2 text-sm outline-none">
+                    <option value="ai">AI 执行</option>
+                    <option value="">人工</option>
+                </select>
+                <select name="ai_model" class="w-28 border rounded-lg px-3 py-2 text-sm outline-none">
+                    <option value="auto">自动</option>
+                    <option value="claude">Claude</option>
+                    <option value="openai">OpenAI</option>
+                    <option value="deepseek">DeepSeek</option>
+                </select>
+                <select name="priority" class="w-20 border rounded-lg px-3 py-2 text-sm outline-none">
+                    <option value="1">P1</option><option value="2">P2</option>
+                    <option value="3" selected>P3</option><option value="4">P4</option><option value="5">P5</option>
+                </select>
+            </div>
+            <button type="submit" class="w-full bg-blue-600 text-white py-2 rounded-lg text-sm hover:bg-blue-700 transition">添加任务</button>
         </form>
     </div>
 </div>
 
+<!-- ===== 作战室轮询 + 项目 AI 对话 JS ===== -->
 <script>
 (function(){
     var projectId = "{{ project.id }}";
-    var box, input, sendBtn, form;
+    var pollTimer = null;
     var loaded = false, busy = false;
     var DRAFT_KEY = 'projai_draft_' + projectId;
     var thinkingTimer = null;
+    var box, input, sendBtn, form;
 
-    function esc(s){ var d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
-    function nowHM(){ var d=new Date(); return ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2); }
-
-    function addUserMsg(text, time){
-        document.getElementById('projai-empty') && document.getElementById('projai-empty').remove();
-        var msgId = 'pm-u-' + Date.now() + '-' + Math.random().toString(36).slice(2,7);
-        box.insertAdjacentHTML('beforeend',
-            '<div class="flex justify-end"><div class="max-w-[80%]">'
-            + '<div class="bg-blue-600 text-white rounded-lg rounded-br-none px-4 py-3"><div id="' + msgId + '" class="text-sm leading-relaxed" style="white-space:pre-wrap">' + esc(text) + '</div></div>'
-            + '<div class="flex items-center justify-end gap-2 mt-1">'
-            + '<button onclick="copyMsg(\'' + msgId + '\', this)" class="text-xs text-gray-400 hover:text-blue-600 transition" title="复制内容">📋 复制</button>'
-            + '<span class="text-xs text-gray-400">' + (time||nowHM()) + '</span>'
-            + '</div></div></div>');
-        box.scrollTop = box.scrollHeight;
-    }
-    function addAiMsg(text, time){
-        document.getElementById('projai-empty') && document.getElementById('projai-empty').remove();
-        var msgId = 'pm-' + Date.now() + '-' + Math.random().toString(36).slice(2,7);
-        box.insertAdjacentHTML('beforeend',
-            '<div class="flex justify-start"><div class="max-w-[85%] w-full">'
-            + '<div class="text-xs font-semibold text-purple-600 mb-1">💬 项目 AI</div>'
-            + '<div class="bg-gray-100 text-gray-800 rounded-lg rounded-bl-none px-4 py-3"><div id="' + msgId + '" class="text-sm leading-relaxed" style="white-space:pre-wrap">' + esc(text) + '</div></div>'
-            + '<div class="flex items-center justify-between mt-1">'
-            + '<span class="text-xs text-gray-400">' + (time||nowHM()) + '</span>'
-            + '<button onclick="copyMsg(\'' + msgId + '\', this)" class="text-xs text-gray-400 hover:text-purple-600 transition" title="复制内容">📋 复制</button>'
-            + '</div>'
-            + '</div></div>');
-        box.scrollTop = box.scrollHeight;
-    }
-
-    // 复制工具函数（全局）
-    window.copyMsg = window.copyMsg || function(elemId, btn){
-        var el = document.getElementById(elemId);
-        if (!el) return;
-        var text = el.innerText || el.textContent || '';
-        function showCopied(){
-            var old = btn.innerHTML;
-            btn.innerHTML = '✅ 已复制';
-            btn.classList.add('text-green-600');
-            setTimeout(function(){ btn.innerHTML = old; btn.classList.remove('text-green-600'); }, 1500);
+    /* ---- 作战室 ---- */
+    function _esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML;}
+    function renderWorkers(data){
+        document.getElementById('wr-running').textContent = data.auto_running ? '✅ 是' : '⏹ 否';
+        document.getElementById('wr-spent').textContent = (data.ai_spent||0).toFixed(4);
+        var list = document.getElementById('warroom-list');
+        if (!data.workers || !data.workers.length){
+            list.innerHTML = '<div class="text-center text-gray-400 text-sm py-4">'
+                + (data.auto_running ? '⏳ 自动执行运行中，等待派工…' : '没有 worker 在跑。点击头部状态按钮可启动自动执行。')
+                + '</div>';
+            return;
         }
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(text).then(showCopied, function(){
-                window.prompt('复制此内容：', text);
-            });
-        } else {
-            // 兼容回退
-            var ta = document.createElement('textarea');
-            ta.value = text;
-            document.body.appendChild(ta);
-            ta.select();
-            try { document.execCommand('copy'); showCopied(); } catch(e) { window.prompt('复制此内容：', text); }
-            document.body.removeChild(ta);
-        }
+        list.innerHTML = data.workers.map(function(w){
+            return '<div class="border rounded-lg p-3 border-l-4 border-green-500">'
+                +'<div class="flex items-center justify-between">'
+                +'<div class="flex-1 min-w-0">'
+                +'<div class="text-sm font-medium text-gray-800 truncate">🤖 '+_esc(w.task_title||'(无标题)')+'</div>'
+                +'<div class="text-xs text-gray-500 mt-1">第 '+(w.step||0)+' 步 · <span class="text-blue-600">'+_esc(w.tool||'...')+'</span></div>'
+                +(w.args_brief?'<div class="text-xs text-gray-400 mt-1 truncate font-mono">'+_esc(w.args_brief)+'</div>':'')
+                +'</div>'
+                +'<a href="/tasks/'+w.task_id+'" class="text-xs text-blue-600 hover:underline ml-2 flex-shrink-0">查看</a>'
+                +'</div>'
+                +'<div class="mt-2 bg-gray-200 rounded-full h-1 overflow-hidden"><div class="bg-green-500 h-1 animate-pulse" style="width:100%"></div></div>'
+                +'</div>';
+        }).join('');
+    }
+    function poll(){fetch('/projects/'+projectId+'/workers').then(function(r){return r.json();}).then(renderWorkers).catch(function(){});}
+
+    /* ---- 项目 AI ---- */
+    function nowHM(){var d=new Date();return ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);}
+    function addUserMsg(text,time){
+        document.getElementById('projai-empty')&&document.getElementById('projai-empty').remove();
+        var id='pm-u-'+Date.now()+'-'+Math.random().toString(36).slice(2,7);
+        box.insertAdjacentHTML('beforeend','<div class="flex justify-end"><div class="max-w-[80%]">'
+            +'<div class="bg-blue-600 text-white rounded-lg rounded-br-none px-4 py-3"><div id="'+id+'" class="text-sm leading-relaxed" style="white-space:pre-wrap">'+_esc(text)+'</div></div>'
+            +'<div class="flex items-center justify-end gap-2 mt-1">'
+            +'<button onclick="copyMsg(\''+id+'\',this)" class="text-xs text-gray-400 hover:text-blue-600 transition">📋 复制</button>'
+            +'<span class="text-xs text-gray-400">'+(time||nowHM())+'</span>'
+            +'</div></div></div>');
+        box.scrollTop=box.scrollHeight;
+    }
+    function addAiMsg(text,time){
+        document.getElementById('projai-empty')&&document.getElementById('projai-empty').remove();
+        var id='pm-'+Date.now()+'-'+Math.random().toString(36).slice(2,7);
+        box.insertAdjacentHTML('beforeend','<div class="flex justify-start"><div class="max-w-[85%] w-full">'
+            +'<div class="text-xs font-semibold text-violet-600 mb-1">💬 项目 AI</div>'
+            +'<div class="bg-gray-100 text-gray-800 rounded-lg rounded-bl-none px-4 py-3"><div id="'+id+'" class="text-sm leading-relaxed" style="white-space:pre-wrap">'+_esc(text)+'</div></div>'
+            +'<div class="flex items-center justify-between mt-1">'
+            +'<span class="text-xs text-gray-400">'+(time||nowHM())+'</span>'
+            +'<button onclick="copyMsg(\''+id+'\',this)" class="text-xs text-gray-400 hover:text-violet-600 transition">📋 复制</button>'
+            +'</div></div></div>');
+        box.scrollTop=box.scrollHeight;
+    }
+    window.copyMsg = window.copyMsg || function(elemId,btn){
+        var el=document.getElementById(elemId); if(!el) return;
+        var text=el.innerText||el.textContent||'';
+        function ok(){var o=btn.innerHTML;btn.innerHTML='✅ 已复制';btn.classList.add('text-green-600');setTimeout(function(){btn.innerHTML=o;btn.classList.remove('text-green-600');},1500);}
+        if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(ok,function(){window.prompt('复制此内容：',text);});}
+        else{var ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();try{document.execCommand('copy');ok();}catch(e){window.prompt('复制此内容：',text);}document.body.removeChild(ta);}
     };
     function addThinking(){
-        box.insertAdjacentHTML('beforeend',
-            '<div class="flex justify-start" id="projai-thinking"><div>'
-            + '<div class="bg-violet-50 border border-violet-200 text-violet-700 rounded-lg px-4 py-3 text-sm flex items-center gap-2">'
-            + '<span style="display:inline-block;width:14px;height:14px;border:2px solid #8b5cf6;border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite"></span>'
-            + '⚙️ AI 执行中 <span id="projai-elapsed">0</span> 秒…'
-            + '</div></div></div>');
-        box.scrollTop = box.scrollHeight;
-        var start = Date.now();
-        thinkingTimer = setInterval(function(){
-            var el = document.getElementById('projai-elapsed');
-            if (el) el.textContent = Math.floor((Date.now() - start) / 1000);
-            else { clearInterval(thinkingTimer); thinkingTimer = null; }
-        }, 1000);
+        box.insertAdjacentHTML('beforeend','<div class="flex justify-start" id="projai-thinking"><div>'
+            +'<div class="bg-violet-50 border border-violet-200 text-violet-700 rounded-lg px-4 py-3 text-sm flex items-center gap-2">'
+            +'<span style="display:inline-block;width:14px;height:14px;border:2px solid #8b5cf6;border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite"></span>'
+            +'⚙️ AI 执行中 <span id="projai-elapsed">0</span> 秒…</div></div></div>');
+        box.scrollTop=box.scrollHeight;
+        var start=Date.now();
+        thinkingTimer=setInterval(function(){var el=document.getElementById('projai-elapsed');if(el)el.textContent=Math.floor((Date.now()-start)/1000);else{clearInterval(thinkingTimer);thinkingTimer=null;}},1000);
     }
-
     function loadHistory(){
-        if (loaded) return;
-        fetch('/projects/' + projectId + '/ai-messages')
-            .then(function(r){
-                return r.text().then(function(txt){
-                    if (!txt) return {messages: []};
-                    try { return JSON.parse(txt); } catch(e){ return {messages: []}; }
-                });
-            })
+        if(loaded)return;
+        fetch('/projects/'+projectId+'/ai-messages')
+            .then(function(r){return r.text().then(function(t){if(!t)return{messages:[]};try{return JSON.parse(t);}catch(e){return{messages:[]};} });})
             .then(function(data){
-                loaded = true;
-                if (!data.messages || data.messages.length === 0) return;
-                document.getElementById('projai-empty') && document.getElementById('projai-empty').remove();
-                data.messages.forEach(function(m){
-                    var t = (m.created_at || '').substring(11, 16);
-                    if (m.direction === 'in') addUserMsg(m.content, t);
-                    else addAiMsg(m.content, t);
-                });
+                loaded=true;
+                if(!data.messages||!data.messages.length)return;
+                document.getElementById('projai-empty')&&document.getElementById('projai-empty').remove();
+                data.messages.forEach(function(m){var t=(m.created_at||'').substring(11,16);if(m.direction==='in')addUserMsg(m.content,t);else addAiMsg(m.content,t);});
             });
     }
-
     function send(){
-        if (busy) return;
-        var text = input.value.trim();
-        if (!text) return;
-        busy = true; sendBtn.disabled = true; sendBtn.textContent = '发送中…'; sendBtn.classList.add('opacity-60');
-        addUserMsg(text);
-        input.value = '';
-        try { localStorage.removeItem(DRAFT_KEY); } catch(e){}
+        if(busy)return;
+        var text=input.value.trim(); if(!text)return;
+        busy=true;sendBtn.disabled=true;sendBtn.textContent='发送中…';sendBtn.classList.add('opacity-60');
+        addUserMsg(text);input.value='';
+        try{localStorage.removeItem(DRAFT_KEY);}catch(e){}
         addThinking();
-
-        var fd = new FormData();
-        fd.append('message', text);
-        fd.append('sender', document.getElementById('projai-sender').value);
-
-        fetch('/projects/' + projectId + '/ai-ask', {method:'POST', body:fd})
-            .then(function(r){
-                return r.text().then(function(txt){
-                    if (!txt) throw new Error('服务器返回空响应（HTTP ' + r.status + '）—— 可能是服务重启中、agent 超时被代理切断，或后端崩溃。稍等几秒重试。');
-                    try { return JSON.parse(txt); }
-                    catch(e){ throw new Error('响应不是合法 JSON（HTTP ' + r.status + '）：' + txt.substring(0, 300)); }
-                });
-            })
-            .then(function(data){
-                var t = document.getElementById('projai-thinking'); if (t) t.remove();
-                if (thinkingTimer) { clearInterval(thinkingTimer); thinkingTimer = null; }
-                addAiMsg(data.reply || '(无回复)');
-            })
-            .catch(function(err){
-                var t = document.getElementById('projai-thinking'); if (t) t.remove();
-                if (thinkingTimer) { clearInterval(thinkingTimer); thinkingTimer = null; }
-                addAiMsg('[出错了] ' + (err && err.message ? err.message : err));
-            })
-            .finally(function(){
-                busy = false; sendBtn.disabled = false; sendBtn.textContent = '发送'; sendBtn.classList.remove('opacity-60');
-                input.focus();
-            });
+        var fd=new FormData();fd.append('message',text);fd.append('sender',document.getElementById('projai-sender').value);
+        fetch('/projects/'+projectId+'/ai-ask',{method:'POST',body:fd})
+            .then(function(r){return r.text().then(function(t){
+                if(!t)throw new Error('服务器返回空响应（HTTP '+r.status+'）—— 可能是服务重启中、agent 超时被代理切断，或后端崩溃。稍等几秒重试。');
+                try{return JSON.parse(t);}catch(e){throw new Error('响应不是合法 JSON（HTTP '+r.status+'）：'+t.substring(0,300));}
+            });})
+            .then(function(data){var t=document.getElementById('projai-thinking');if(t)t.remove();if(thinkingTimer){clearInterval(thinkingTimer);thinkingTimer=null;}addAiMsg(data.reply||'(无回复)');})
+            .catch(function(err){var t=document.getElementById('projai-thinking');if(t)t.remove();if(thinkingTimer){clearInterval(thinkingTimer);thinkingTimer=null;}addAiMsg('[出错了] '+(err&&err.message?err.message:err));})
+            .finally(function(){busy=false;sendBtn.disabled=false;sendBtn.textContent='发送';sendBtn.classList.remove('opacity-60');input.focus();});
     }
 
+    /* ---- Tab 切换钩子 ---- */
+    var _origSwitch = window.switchView;
+    window.switchView = function(name){
+        _origSwitch(name);
+        if(name==='ai'){
+            poll(); if(!pollTimer) pollTimer=setInterval(poll,2000);
+            loadHistory(); setTimeout(function(){if(input)input.focus();},50);
+        } else {
+            if(pollTimer){clearInterval(pollTimer);pollTimer=null;}
+        }
+    };
+
+    /* ---- 初始化 ---- */
     function init(){
-        box = document.getElementById('projai-messages');
-        input = document.getElementById('projai-input');
-        sendBtn = document.getElementById('projai-send');
-        form = document.getElementById('projai-form');
-        // 草稿恢复
-        try { var d = localStorage.getItem(DRAFT_KEY); if (d) input.value = d; } catch(e){}
-        input.addEventListener('input', function(){
-            try { localStorage.setItem(DRAFT_KEY, input.value); } catch(e){}
-        });
-        form.addEventListener('submit', function(e){ e.preventDefault(); send(); });
-        input.addEventListener('keydown', function(e){
-            if (e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); send(); }
-        });
+        box=document.getElementById('projai-messages');
+        input=document.getElementById('projai-input');
+        sendBtn=document.getElementById('projai-send');
+        form=document.getElementById('projai-form');
+        try{var d=localStorage.getItem(DRAFT_KEY);if(d)input.value=d;}catch(e){}
+        input.addEventListener('input',function(){try{localStorage.setItem(DRAFT_KEY,input.value);}catch(e){}});
+        form.addEventListener('submit',function(e){e.preventDefault();send();});
+        input.addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}});
     }
     init();
-
-    var origSwitch = window.switchView;
-    window.switchView = function(name){
-        origSwitch(name);
-        if (name === 'projai'){ loadHistory(); setTimeout(function(){ input && input.focus(); }, 50); }
-    };
 })();
 </script>
-
-<!-- 决策视图 -->
-<div id="decisions-view" class="bg-white rounded-lg shadow-sm p-6" style="display:none">
-    <h3 class="text-lg font-semibold text-gray-700 mb-4">项目决策记录</h3>
-    {% if project_decisions %}
-    <div class="space-y-4">
-        {% for d in project_decisions %}
-        <div class="border-l-4 {% if d.made_by == 'AI' %}border-violet-400{% else %}border-blue-400{% endif %} pl-4 py-2">
-            <div class="flex items-center gap-2 mb-1">
-                <span class="text-xs px-2 py-0.5 rounded {% if d.made_by == 'AI' %}bg-violet-100 text-violet-600{% else %}bg-blue-100 text-blue-600{% endif %}">
-                    {{ d.made_by or '未知' }}
-                </span>
-                <h4 class="font-medium text-gray-800 text-sm">{{ d.title }}</h4>
-                <span class="text-xs text-gray-400">{{ d.created_at[:16] if d.created_at else '' }}</span>
-            </div>
-            {% if d.decision %}<p class="text-sm text-gray-700">{{ d.decision }}</p>{% endif %}
-            {% if d.reason %}<p class="text-xs text-gray-500 mt-1">原因: {{ d.reason }}</p>{% endif %}
-        </div>
-        {% endfor %}
-    </div>
-    {% else %}
-    <div class="text-center text-gray-400 py-6">还没有决策记录</div>
-    {% endif %}
-</div>
 {% endblock %}
