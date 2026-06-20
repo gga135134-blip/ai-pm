@@ -284,20 +284,22 @@ function switchView(name){
         {% if project_notes %}
         <div class="space-y-2">
             {% for n in project_notes %}
-            <a href="/notes/{{ n.id }}" class="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 transition {% if n.is_core %}bg-amber-50 border-amber-200{% endif %}">
+            <a href="/notes/{{ n.id }}" class="block p-3 border rounded-lg hover:bg-gray-50 transition {% if n.is_core %}bg-amber-50 border-amber-200{% endif %}">
                 <div class="flex items-center gap-2 min-w-0">
-                    {% if n.is_core %}<span class="text-amber-500 flex-shrink-0">⭐</span>{% endif %}
-                    {% if n.source_type == 'ai_classified' %}<span class="text-xs bg-violet-100 text-violet-600 px-2 py-0.5 rounded flex-shrink-0">AI分类</span>
-                    {% elif n.source_type == 'file_import' or n.source_type == 'upload' %}<span class="text-xs bg-green-100 text-green-600 px-2 py-0.5 rounded flex-shrink-0">文件</span>
-                    {% elif n.source_type == 'master_ai' %}<span class="text-xs bg-violet-100 text-violet-600 px-2 py-0.5 rounded flex-shrink-0">总AI</span>
-                    {% elif n.source_type == 'auto_progress' %}<span class="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded flex-shrink-0">进度</span>
-                    {% else %}<span class="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded flex-shrink-0">手动</span>{% endif %}
+                    {% if n.is_core %}<span class="text-amber-500 flex-shrink-0 text-xs">⭐</span>{% endif %}
+                    {% if n.source_type == 'ai_classified' %}<span class="text-xs bg-violet-100 text-violet-600 px-1.5 py-0.5 rounded flex-shrink-0">AI分类</span>
+                    {% elif n.source_type == 'file_import' or n.source_type == 'upload' %}<span class="text-xs bg-green-100 text-green-600 px-1.5 py-0.5 rounded flex-shrink-0">文件</span>
+                    {% elif n.source_type == 'master_ai' %}<span class="text-xs bg-violet-100 text-violet-600 px-1.5 py-0.5 rounded flex-shrink-0">总AI</span>
+                    {% elif n.source_type == 'auto_progress' %}<span class="text-xs bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded flex-shrink-0">进度</span>
+                    {% else %}<span class="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded flex-shrink-0">手动</span>{% endif %}
                     <span class="text-sm text-gray-800 truncate">{{ n.title }}</span>
                 </div>
-                <div class="flex items-center gap-2 text-xs text-gray-400 flex-shrink-0">
+                {% if n.tags or n.updated_at %}
+                <div class="flex items-center gap-2 mt-1.5 text-xs text-gray-400">
                     {% if n.tags %}{% for tag in n.tags.split(',')[:3] %}<span class="text-violet-400">#{{ tag.strip() }}</span>{% endfor %}{% endif %}
-                    <span>{{ n.updated_at[:10] if n.updated_at else '' }}</span>
+                    <span class="ml-auto flex-shrink-0">{{ n.updated_at[:10] if n.updated_at else '' }}</span>
                 </div>
+                {% endif %}
             </a>
             {% endfor %}
         </div>
