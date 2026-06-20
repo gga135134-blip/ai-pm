@@ -147,7 +147,7 @@ function switchTab(name) {
 }
 
 // Trend chart
-var monthly = {{ monthly_data | tojson }};
+var monthly = {{ monthly_data_json | safe }};
 var labels  = monthly.map(function(d){ return d.month.slice(5); }); // MM
 var aiData  = monthly.map(function(d){ return d.ai; });
 var manData = monthly.map(function(d){ return d.manual; });
