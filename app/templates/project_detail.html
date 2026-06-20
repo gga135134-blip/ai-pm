@@ -26,6 +26,12 @@
   .fab-root{bottom:80px}
   .proj-tabs button{font-size:12px;padding:6px 10px}
   .kb-col{min-width:200px;flex:none;width:200px}
+  /* 对话输入框固定在屏幕底部，键盘弹出时自动上移 */
+  #projai-form{position:fixed;bottom:0;left:0;right:0;background:white;border-top:1px solid #e5e7eb;padding:12px 16px;z-index:100}
+  /* 消息区域去掉高度上限，给底部固定框留出空间 */
+  #projai-messages{max-height:none;padding-bottom:110px}
+  /* 整个 AI 视图底部留白，避免内容被固定框遮住 */
+  #ai-view{padding-bottom:110px}
 }
 </style>
 
@@ -418,11 +424,22 @@ function switchView(name){
                 <button class="text-xs px-3 py-1 border rounded-lg text-gray-500 hover:bg-gray-50 flex-shrink-0">清空</button>
             </form>
         </div>
-        <div id="projai-messages" class="space-y-3" style="min-height:200px;max-height:500px;overflow-y:auto">
+        <div id="projai-messages" class="space-y-3 mb-3" style="min-height:200px;max-height:500px;overflow-y:auto">
             <div class="text-center text-gray-400 text-sm py-10" id="projai-empty">
                 还没有对话。试试说："这个项目目前进度怎么样？" 或 "帮我新建一个任务：撰写品牌故事"
             </div>
         </div>
+        <form id="projai-form" class="space-y-2">
+            <select id="projai-sender" class="border rounded-lg px-2 py-2 text-sm outline-none" style="width:80px">
+                <option value="Gaga">Gaga</option>
+                <option value="An">An</option>
+            </select>
+            <div class="flex gap-2">
+                <textarea id="projai-input" required rows="2" placeholder="跟项目 AI 说点什么..."
+                    class="flex-1 border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-violet-500 resize-none"></textarea>
+                <button type="submit" id="projai-send" class="bg-violet-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-violet-700 transition self-stretch flex-shrink-0">发送</button>
+            </div>
+        </form>
     </div>
 
     <!-- AI 拆解 -->
@@ -451,21 +468,6 @@ function switchView(name){
             btn.classList.add('btn-loading');
         });
         </script>
-    </div>
-
-    <!-- 发送消息输入框 -->
-    <div class="bg-white rounded-xl shadow-sm p-4">
-        <form id="projai-form" class="space-y-2">
-            <select id="projai-sender" class="border rounded-lg px-2 py-2 text-sm outline-none" style="width:80px">
-                <option value="Gaga">Gaga</option>
-                <option value="An">An</option>
-            </select>
-            <div class="flex gap-2">
-                <textarea id="projai-input" required rows="2" placeholder="跟项目 AI 说点什么..."
-                    class="flex-1 border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-violet-500 resize-none"></textarea>
-                <button type="submit" id="projai-send" class="bg-violet-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-violet-700 transition self-stretch flex-shrink-0">发送</button>
-            </div>
-        </form>
     </div>
 
     <!-- 作战室 Worker 状态 -->
