@@ -7,9 +7,9 @@
 .proj-tabs::-webkit-scrollbar{height:3px}
 .proj-tabs button{flex-shrink:0;white-space:nowrap}
 .kanban-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
-.kanban-cols{display:flex;gap:12px;align-items:flex-start;width:max-content}
-.kb-col{width:220px;flex-shrink:0}
-.kb-col-empty{width:36px;flex-shrink:0;cursor:pointer;border-radius:8px;padding:10px 4px;background:#f9fafb;display:flex;flex-direction:column;align-items:center;gap:6px;transition:background .15s}
+.kanban-cols{display:flex;gap:12px;align-items:flex-start}
+.kb-col{min-width:200px;flex:1}
+.kb-col-empty{width:32px;flex-shrink:0;flex-grow:0;cursor:pointer;border-radius:8px;padding:10px 4px;background:#f9fafb;display:flex;flex-direction:column;align-items:center;gap:6px;transition:background .15s}
 .kb-col-empty:hover{background:#f3f4f6}
 .kb-col-empty .kbe-label{font-size:11px;color:#d1d5db;font-weight:500;writing-mode:vertical-lr;letter-spacing:.05em;user-select:none}
 .kb-col-empty .kbe-add{font-size:14px;color:#e5e7eb;line-height:1}
