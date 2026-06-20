@@ -2,11 +2,13 @@
 {% block title %}知识库 - AI 项目管理{% endblock %}
 {% block content %}
 <style>
-.notes-actions { display:flex; gap:8px; overflow-x:auto; padding-bottom:4px; -webkit-overflow-scrolling:touch; }
-.notes-actions::-webkit-scrollbar { height:3px; }
 .notes-layout { display:flex; gap:24px; }
 .notes-sidebar { width:192px; flex-shrink:0; }
 .notes-sidebar-toggle { display:none; }
+.nb-ddmenu { display:none; position:absolute; top:calc(100% + 4px); left:0; z-index:50;
+    background:#fff; border:1px solid #e5e7eb; border-radius:8px;
+    box-shadow:0 4px 16px rgba(0,0,0,.12); min-width:180px; overflow:hidden; }
+.nb-ddmenu.open { display:block; }
 @media (max-width:767px) {
     .notes-layout { flex-direction:column; gap:0; }
     .notes-sidebar { width:100%; margin-bottom:12px; }
@@ -18,80 +20,86 @@
 }
 </style>
 
-<div class="flex items-center justify-between mb-3">
+<!-- 顶部操作栏 -->
+<div class="flex items-center justify-between mb-4">
     <h1 class="text-xl font-bold text-gray-800">知识库</h1>
-</div>
-<div class="notes-actions mb-4">
-    <a href="/notes/new{% if current_folder %}?folder={{ current_folder }}{% endif %}" class="flex-shrink-0 bg-blue-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-blue-700 transition">+ 新建</a>
-    <a href="/notes/import" class="flex-shrink-0 bg-green-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-green-700 transition">导入</a>
-    <a href="/notes/chat" class="flex-shrink-0 bg-violet-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-violet-700 transition">AI 助手</a>
-    <a href="/notes/classify" class="flex-shrink-0 bg-violet-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-violet-700 transition">AI 分类</a>
-    <form method="POST" action="/notes/summarize" class="inline flex-shrink-0">
-        <input type="hidden" name="tag" value="{{ current_tag }}">
-        <button class="bg-violet-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-violet-700 transition">AI 整理</button>
-    </form>
-    <a href="/notes/weekly" class="flex-shrink-0 text-sm px-3 py-2 border rounded-lg text-gray-600 hover:bg-gray-50 transition">周报</a>
-    <a href="/notes/trash" class="flex-shrink-0 text-sm px-3 py-2 border rounded-lg text-gray-600 hover:bg-gray-50 transition">回收站</a>
-    <a href="/backups" class="flex-shrink-0 text-sm px-3 py-2 border rounded-lg text-gray-600 hover:bg-gray-50 transition">备份</a>
-</div>
+    <div class="flex items-center gap-2">
+        <!-- 主 CTA -->
+        <a href="/notes/new{% if current_folder %}?folder={{ current_folder }}{% endif %}"
+            class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 transition">+ 新建</a>
 
-<!-- IMA 同步卡片 -->
-<div class="bg-blue-50 border border-blue-200 rounded-xl px-5 py-4 mb-4">
-    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px">
-        <div style="min-width:0;flex:1 1 160px">
-            <div class="font-semibold text-blue-800 text-base">🔗 腾讯 IMA 知识库同步</div>
-            <div id="ima-msg" class="text-sm text-blue-600 mt-0.5">同步后笔记放入「IMA同步」文件夹，不影响现有内容</div>
+        <!-- 导入 ▾ -->
+        <div class="relative" id="nb-import-wrap">
+            <button onclick="event.stopPropagation();document.getElementById('nb-import-menu').classList.toggle('open')"
+                class="px-4 py-2 border rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition">导入 ▾</button>
+            <div class="nb-ddmenu" id="nb-import-menu">
+                <a href="/notes/import" class="block px-4 py-3 text-sm text-gray-700 hover:bg-gray-50">📄 上传 / 导入文件</a>
+                <div class="border-t border-gray-100"></div>
+                <a href="/notes/ima/browse" class="block px-4 py-3 text-sm text-gray-700 hover:bg-gray-50">🔗 IMA 知识库</a>
+                <div class="border-t border-gray-100"></div>
+                <button onclick="imaSync();document.getElementById('nb-import-menu').classList.remove('open')"
+                    class="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50">↓ IMA 一键同步</button>
+            </div>
         </div>
-        <div style="display:flex;flex-wrap:wrap;gap:8px">
-            <button id="ima-test-btn" onclick="imaTest()"
-                class="border border-blue-400 text-blue-700 px-4 py-2 rounded-lg font-medium hover:bg-blue-100 transition text-sm">
-                测试连接
-            </button>
-            <a href="/notes/ima/browse"
-                class="border border-blue-400 text-blue-700 px-4 py-2 rounded-lg font-medium hover:bg-blue-100 transition text-sm flex items-center">
-                📂 浏览知识库
-            </a>
-            <button id="ima-sync-btn" onclick="imaSync()"
-                class="bg-blue-600 text-white px-5 py-2 rounded-lg font-medium hover:bg-blue-700 transition text-sm">
-                ↓ 同步笔记
-            </button>
+
+        <!-- AI ▾ -->
+        <div class="relative" id="nb-ai-wrap">
+            <button onclick="event.stopPropagation();document.getElementById('nb-ai-menu').classList.toggle('open')"
+                class="px-4 py-2 border rounded-lg text-sm text-violet-600 hover:bg-violet-50 transition">🤖 AI ▾</button>
+            <div class="nb-ddmenu" id="nb-ai-menu">
+                <a href="/notes/chat" class="block px-4 py-3 text-sm text-gray-700 hover:bg-gray-50">💬 AI 助手（问答）</a>
+                <a href="/notes/classify" class="block px-4 py-3 text-sm text-gray-700 hover:bg-gray-50">🏷️ AI 分类（粘贴归档）</a>
+                <div class="border-t border-gray-100"></div>
+                <form method="POST" action="/notes/summarize">
+                    <input type="hidden" name="tag" value="{{ current_tag }}">
+                    <button class="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50">📋 AI 整理当前视图</button>
+                </form>
+                <div class="border-t border-gray-100"></div>
+                <a href="/notes/weekly" class="block px-4 py-3 text-sm text-gray-700 hover:bg-gray-50">📰 生成周报</a>
+            </div>
         </div>
+
+        <!-- 次级链接 -->
+        <a href="/notes/trash" class="text-sm text-gray-400 hover:text-gray-600 transition px-1">回收站</a>
+        <a href="/backups" class="text-sm text-gray-400 hover:text-gray-600 transition px-1">备份</a>
     </div>
 </div>
 <script>
+document.addEventListener('click', function() {
+    document.getElementById('nb-import-menu').classList.remove('open');
+    document.getElementById('nb-ai-menu').classList.remove('open');
+});
+</script>
+
+<!-- IMA 同步状态（折叠，只在同步中/出错时显示） -->
+<div id="ima-status-bar" class="hidden bg-blue-50 border border-blue-200 rounded-lg px-4 py-2 mb-3 flex items-center gap-3">
+    <span id="ima-msg" class="text-sm text-blue-700 flex-1"></span>
+    <button onclick="document.getElementById('ima-status-bar').classList.add('hidden')" class="text-xs text-gray-400 hover:text-gray-600">×</button>
+</div>
+<script>
 function _imaMsg(text, color) {
+    var bar = document.getElementById('ima-status-bar');
     var el = document.getElementById('ima-msg');
     el.textContent = text;
     el.style.color = color || '';
+    bar.classList.remove('hidden');
 }
 async function imaTest() {
-    var btn = document.getElementById('ima-test-btn');
-    btn.textContent = '检测中…'; btn.disabled = true;
     _imaMsg('正在测试连接…', '#1d4ed8');
     try {
         var r = await fetch('/notes/ima/test', {method:'POST', credentials:'same-origin'});
-        var text = await r.text();
-        var d = JSON.parse(text);
-        _imaMsg(d.result || text, d.result && d.result.startsWith('✅') ? '#15803d' : '#b91c1c');
-    } catch(e) {
-        _imaMsg('❌ 请求失败：' + e, '#b91c1c');
-    }
-    btn.textContent = '测试连接'; btn.disabled = false;
+        var d = JSON.parse(await r.text());
+        _imaMsg(d.result || '完成', d.result && d.result.startsWith('✅') ? '#15803d' : '#b91c1c');
+    } catch(e) { _imaMsg('❌ 请求失败：' + e, '#b91c1c'); }
 }
 async function imaSync() {
-    var btn = document.getElementById('ima-sync-btn');
-    btn.textContent = '同步中…'; btn.disabled = true;
     _imaMsg('正在连接 IMA，请稍候…', '#1d4ed8');
     try {
         var r = await fetch('/notes/ima/sync', {method:'POST', credentials:'same-origin'});
-        var text = await r.text();
-        var d = JSON.parse(text);
-        _imaMsg(d.msg || text, d.ok ? '#15803d' : '#b91c1c');
+        var d = JSON.parse(await r.text());
+        _imaMsg(d.msg || '完成', d.ok ? '#15803d' : '#b91c1c');
         if (d.ok) setTimeout(function(){ location.reload(); }, 2500);
-    } catch(e) {
-        _imaMsg('❌ 请求失败：' + e, '#b91c1c');
-    }
-    btn.textContent = '↓ 立即同步'; btn.disabled = false;
+    } catch(e) { _imaMsg('❌ 请求失败：' + e, '#b91c1c'); }
 }
 </script>
 
