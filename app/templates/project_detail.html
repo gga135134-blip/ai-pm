@@ -7,8 +7,12 @@
 .proj-tabs::-webkit-scrollbar{height:3px}
 .proj-tabs button{flex-shrink:0;white-space:nowrap}
 .kanban-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
-.kanban-cols{display:grid;grid-template-columns:repeat(6,220px);gap:12px}
-@media(min-width:1440px){.kanban-cols{grid-template-columns:repeat(6,1fr)}}
+.kanban-cols{display:flex;gap:12px;align-items:flex-start}
+.kb-col{width:220px;flex-shrink:0}
+.kb-col-empty{width:36px;flex-shrink:0;cursor:pointer;border-radius:8px;padding:10px 4px;background:#f9fafb;display:flex;flex-direction:column;align-items:center;gap:6px;transition:background .15s}
+.kb-col-empty:hover{background:#f3f4f6}
+.kb-col-empty .kbe-label{font-size:11px;color:#d1d5db;font-weight:500;writing-mode:vertical-rl;transform:rotate(180deg);letter-spacing:.05em;user-select:none}
+.kb-col-empty .kbe-add{font-size:14px;color:#e5e7eb;line-height:1}
 .ddmenu{display:none;position:absolute;right:0;top:calc(100% + 4px);z-index:50;background:#fff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);min-width:160px;overflow:hidden}
 .ddmenu.open{display:block}
 #ai-ctrl-panel{display:none}
@@ -137,10 +141,11 @@ function switchView(name){
         <div class="kanban-cols">
             {% for status, label in [('pending','待处理'),('running','执行中'),('reviewing','审核中'),('blocked','阻塞'),('done','已完成'),('failed','失败')] %}
             {% set col = task_board[status] %}
-            <div class="{% if col %}bg-gray-100{% else %}bg-gray-50{% endif %} rounded-lg p-3" style="min-height:160px">
+            {% if col %}
+            <div class="kb-col bg-gray-100 rounded-lg p-3">
                 <div class="flex items-center justify-between mb-3">
-                    <h3 class="text-sm font-semibold {% if col %}text-gray-600{% else %}text-gray-300{% endif %}">{{ label }}</h3>
-                    <span class="text-xs {% if col %}bg-gray-200 text-gray-500{% else %}bg-gray-100 text-gray-300{% endif %} px-2 rounded-full">{{ col|length }}</span>
+                    <h3 class="text-sm font-semibold text-gray-600">{{ label }}</h3>
+                    <span class="text-xs bg-gray-200 text-gray-500 px-2 rounded-full">{{ col|length }}</span>
                 </div>
                 <div class="space-y-2">
                     {% for t in col %}
@@ -199,9 +204,15 @@ function switchView(name){
                         {% endif %}
                     </div>
                     {% endfor %}
-                    {% if not col %}<p class="text-center text-gray-300 text-xs py-4">—</p>{% endif %}
                 </div>
             </div>
+            {% else %}
+            <div class="kb-col-empty" title="{{ label }}（空）— 点击添加任务"
+                 onclick="document.getElementById('manual-overlay').style.display='block'">
+                <span class="kbe-label">{{ label }}</span>
+                <span class="kbe-add">+</span>
+            </div>
+            {% endif %}
             {% endfor %}
         </div>
     </div>
@@ -422,7 +433,7 @@ function switchView(name){
     <!-- AI 拆解 -->
     <div class="bg-white rounded-xl shadow-sm p-4" id="ai-decompose">
         <h3 class="text-sm font-semibold text-gray-700 mb-3">🔧 AI 自动拆解任务</h3>
-        <form method="POST" action="/projects/{{ project.id }}/decompose" class="flex flex-wrap gap-3 items-end">
+        <form id="decompose-form" method="POST" action="/projects/{{ project.id }}/decompose" class="flex flex-wrap gap-3 items-end">
             <div class="flex-1" style="min-width:200px">
                 <input type="text" name="goal" required placeholder="输入项目目标，AI 自动拆解为子任务..." value="{{ project.description }}"
                     class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-violet-500 outline-none">
@@ -435,8 +446,16 @@ function switchView(name){
                     <option value="deepseek">DeepSeek</option>
                 </select>
             </div>
-            <button type="submit" class="bg-violet-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-violet-700 transition" style="white-space:nowrap">AI 拆解</button>
+            <button type="submit" id="decompose-btn" class="bg-violet-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-violet-700 transition" style="white-space:nowrap">AI 拆解</button>
         </form>
+        <script>
+        document.getElementById('decompose-form').addEventListener('submit', function() {
+            var btn = document.getElementById('decompose-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<span style="display:inline-block;width:12px;height:12px;border:2px solid #fff;border-top-color:transparent;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:6px"></span>拆解中…';
+            btn.classList.add('btn-loading');
+        });
+        </script>
     </div>
 
     <!-- 作战室 Worker 状态 -->

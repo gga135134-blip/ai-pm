@@ -62,6 +62,10 @@
         .hover\:bg-violet-700:hover { background-color: #6d28d9; }
         .hover\:text-violet-600:hover { color: #7c3aed; }
         .focus\:ring-violet-500:focus { box-shadow: 0 0 0 2px rgba(139,92,246,.4); }
+        /* 全局交互状态 */
+        :focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; border-radius: 4px; }
+        button:disabled, input:disabled, select:disabled, textarea:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-loading { opacity: 0.7; pointer-events: none; }
     </style>
 </head>
 <body class="bg-gray-50 min-h-screen text-base">
