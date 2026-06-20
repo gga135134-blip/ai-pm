@@ -236,17 +236,20 @@ function switchView(name){
     <div class="{% if depth > 0 %}ml-6 border-l-2 border-gray-200 pl-4{% endif %}">
         {% for node in (active + done_nodes) %}
         <div class="py-2 {% if not loop.last %}border-b border-gray-100{% endif %}">
-            <div class="flex items-center justify-between">
-                <div class="flex items-center gap-2">
-                    {% if node.children %}<span class="text-gray-400 text-xs">&#9660;</span>
-                    {% else %}<span class="text-gray-300 text-xs">&#9679;</span>{% endif %}
-                    <a href="/tasks/{{ node.id }}" class="text-sm font-medium text-gray-800 hover:text-blue-600">{{ node.title }}</a>
-                    <span class="text-xs px-2 py-0.5 rounded status-{{ node.status }}">{{ node.status }}</span>
-                </div>
-                <div class="flex items-center gap-3 text-xs text-gray-400">
-                    <span>{{ node.assignee or '未分配' }}</span>
-                    <span class="{% if node.priority <= 2 %}text-red-500{% endif %}">P{{ node.priority }}</span>
-                    {% if node.progress > 0 %}<span>{{ node.progress }}%</span>{% endif %}
+            <div class="flex items-start gap-2">
+                <span class="flex-shrink-0 mt-1 text-xs {% if node.children %}text-gray-400{% else %}text-gray-300{% endif %}">
+                    {% if node.children %}&#9660;{% else %}&#9679;{% endif %}
+                </span>
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <a href="/tasks/{{ node.id }}" class="text-sm font-medium text-gray-800 hover:text-blue-600">{{ node.title }}</a>
+                        <span class="text-xs px-2 py-0.5 rounded flex-shrink-0 status-{{ node.status }}">{{ node.status }}</span>
+                    </div>
+                    <div class="flex items-center gap-2 mt-0.5 text-xs text-gray-400">
+                        <span>{{ node.assignee or '未分配' }}</span>
+                        <span class="{% if node.priority <= 2 %}text-red-500{% endif %}">P{{ node.priority }}</span>
+                        {% if node.progress > 0 %}<span>{{ node.progress }}%</span>{% endif %}
+                    </div>
                 </div>
             </div>
             {% if node.children %}{{ render_tree(node.children, depth + 1) }}{% endif %}
