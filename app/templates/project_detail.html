@@ -488,9 +488,12 @@ function switchView(name){
         <div class="space-y-2">
             {% for r in runs_with_tools %}
             <details class="border rounded-lg p-3">
-                <summary class="cursor-pointer text-sm text-gray-800 flex items-center justify-between">
-                    <span><span class="text-xs bg-violet-100 text-violet-700 px-2 py-0.5 rounded mr-2">{{ r.model }}</span>{{ r.task_title or '(无标题)' }}</span>
-                    <span class="text-xs text-gray-400">${{ '%.4f' % r.cost }} · {{ r.created_at[:16] if r.created_at }}</span>
+                <summary class="cursor-pointer">
+                    <div class="flex items-center gap-2 mb-1">
+                        <span class="text-xs bg-violet-100 text-violet-700 px-2 py-0.5 rounded flex-shrink-0" style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.model }}</span>
+                        <span class="text-sm text-gray-800 truncate">{{ r.task_title or '(无标题)' }}</span>
+                    </div>
+                    <div class="text-xs text-gray-400">${{ '%.4f' % r.cost }} · {{ r.created_at[5:16].replace('T',' ') if r.created_at }}</div>
                 </summary>
                 <div class="mt-2 text-xs text-gray-600 bg-gray-50 rounded p-3" style="white-space:pre-wrap;max-height:300px;overflow-y:auto">{{ r.response[-2000:] if r.response else '' }}</div>
             </details>
