@@ -130,19 +130,20 @@ async def _finance_page(request: Request):
     """)
     ai_runs = [dict(r) for r in await cursor.fetchall()]
 
-    templates = request.app.state.templates
-    return templates.TemplateResponse("finance.html", {
-        "request": request,
-        "total_ai": total_ai,
-        "total_manual": total_manual,
-        "month_ai": month_ai,
-        "month_manual": month_manual,
-        "total_all": round(total_ai + total_manual, 4),
-        "month_all": round(month_ai + month_manual, 4),
-        "now_month": f"{now.year}-{now.month:02d}",
-        "project_stats": project_stats,
-        "monthly_data": monthly_data,
-        "monthly_data_json": json.dumps(monthly_data),
-        "expenses": expenses,
-        "ai_runs": ai_runs,
-    })
+    return request.app.state.templates.TemplateResponse(
+        request, "finance.html", {
+            "request": request,
+            "total_ai": total_ai,
+            "total_manual": total_manual,
+            "month_ai": month_ai,
+            "month_manual": month_manual,
+            "total_all": round(total_ai + total_manual, 4),
+            "month_all": round(month_ai + month_manual, 4),
+            "now_month": f"{now.year}-{now.month:02d}",
+            "project_stats": project_stats,
+            "monthly_data": monthly_data,
+            "monthly_data_json": json.dumps(monthly_data),
+            "expenses": expenses,
+            "ai_runs": ai_runs,
+        }
+    )
