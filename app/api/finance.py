@@ -9,6 +9,14 @@ router = APIRouter()
 
 @router.get("/finance", response_class=HTMLResponse)
 async def finance_page(request: Request):
+    import traceback
+    try:
+        return await _finance_page(request)
+    except Exception:
+        err = traceback.format_exc()
+        return HTMLResponse(f"<pre style='color:red;padding:20px'>{err}</pre>", status_code=500)
+
+async def _finance_page(request: Request):
     db = await get_db()
 
     # ── 汇总 ──────────────────────────────────────────────
