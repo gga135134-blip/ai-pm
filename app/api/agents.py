@@ -30,7 +30,7 @@ async def api_project_workers(project_id: str):
     """作战室数据：返回当前项目正在跑的 worker agent 状态（前端轮询）"""
     from fastapi.responses import JSONResponse
     from app.services.worker_status import get_project_workers
-    from app.services.auto_runner import is_running, get_ai_spent
+    from app.services.auto_runner import is_running, get_ai_spent, board_signature
 
     workers = get_project_workers(project_id)
     spent = await get_ai_spent(project_id)
@@ -39,6 +39,7 @@ async def api_project_workers(project_id: str):
         "workers": workers,
         "worker_count": len(workers),
         "ai_spent": spent,
+        "board_sig": await board_signature(project_id),
     })
 
 

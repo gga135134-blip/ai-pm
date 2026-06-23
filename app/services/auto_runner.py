@@ -1,6 +1,7 @@
 """自动执行引擎：项目启动自动模式后，AI 任务排队自动执行+审核，
 预算护栏拦截超支，进度自动写入知识库，关键事件微信/飞书通知。"""
 import asyncio
+import hashlib
 import logging
 import uuid
 from datetime import datetime
@@ -16,6 +17,20 @@ _running: dict[str, bool] = {}
 
 def is_running(project_id: str) -> bool:
     return _running.get(project_id, False)
+
+
+async def board_signature(project_id: str) -> str:
+    """看板指纹：所有任务的 id:status 摘要。状态一变指纹就变，前端据此判断看板是否过期。"""
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            "SELECT id, status FROM tasks WHERE project_id = ? ORDER BY id", (project_id,)
+        )
+        rows = await cursor.fetchall()
+    finally:
+        await db.close()
+    raw = ";".join(f"{r['id']}:{r['status']}" for r in rows)
+    return hashlib.md5(raw.encode()).hexdigest()
 
 
 async def get_ai_spent(project_id: str) -> float:

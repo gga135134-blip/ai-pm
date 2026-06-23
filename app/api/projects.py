@@ -159,7 +159,7 @@ async def project_detail(request: Request, project_id: str):
     task_board = {s: [t for t in tasks if t["status"] == s] for s in statuses}
     task_tree = _build_task_tree(tasks)
 
-    from app.services.auto_runner import is_running
+    from app.services.auto_runner import is_running, board_signature
     return request.app.state.templates.TemplateResponse(
         request, "project_detail.html",
         {
@@ -170,6 +170,7 @@ async def project_detail(request: Request, project_id: str):
             "auto_running": is_running(project_id),
             "runs_with_tools": runs_with_tools,
             "core_count": core_count,
+            "board_sig": await board_signature(project_id),
         },
     )
 

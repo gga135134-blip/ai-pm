@@ -3,6 +3,10 @@
 {% block content %}
 <style>
 @keyframes spin{to{transform:rotate(360deg)}}
+@keyframes wr-march{0%{margin-left:-30%}100%{margin-left:100%}}
+.wr-bar{width:30%;background:#22c55e;height:4px;border-radius:9999px;animation:wr-march 1.1s ease-in-out infinite}
+#board-sync-chip{position:fixed;left:50%;transform:translateX(-50%);top:64px;z-index:60;display:none;align-items:center;gap:8px;background:#1d4ed8;color:#fff;font-size:13px;padding:8px 16px;border-radius:9999px;box-shadow:0 4px 12px rgba(0,0,0,.15);cursor:pointer}
+#board-sync-chip:hover{background:#1e40af}
 .proj-tabs{display:flex;gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px}
 .proj-tabs::-webkit-scrollbar{height:3px}
 .proj-tabs button{flex-shrink:0;white-space:nowrap}
@@ -510,6 +514,12 @@ function switchView(name){
     </div>
 </div>
 
+<!-- 看板状态变化提示（任务被自动执行推进后弹出） -->
+<div id="board-sync-chip" onclick="location.reload()">
+    <span style="display:inline-block;width:14px;height:14px;border:2px solid #fff;border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite"></span>
+    任务状态有更新，点击刷新
+</div>
+
 <!-- ===== FAB ===== -->
 <div class="fab-root">
     <div class="ddmenu" id="fab-menu" style="bottom:calc(100% + 8px);top:auto;right:0">
@@ -564,6 +574,8 @@ document.addEventListener('click',function(){_closeFab();document.getElementById
     var projectId = "{{ project.id }}";
     var pollTimer = null;
     var loaded = false, busy = false;
+    var BOARD_SIG = "{{ board_sig }}";      // 页面渲染时的看板指纹
+    var boardChipShown = false;             // 防止重复弹提示
     var DRAFT_KEY = 'projai_draft_' + projectId;
     var thinkingTimer = null;
     var box, input, sendBtn, form;
@@ -590,11 +602,18 @@ document.addEventListener('click',function(){_closeFab();document.getElementById
                 +'</div>'
                 +'<a href="/tasks/'+w.task_id+'" class="text-xs text-blue-600 hover:underline ml-2 flex-shrink-0">查看</a>'
                 +'</div>'
-                +'<div class="mt-2 bg-gray-200 rounded-full h-1 overflow-hidden"><div class="bg-green-500 h-1 animate-pulse" style="width:100%"></div></div>'
+                +'<div class="mt-2 bg-gray-200 rounded-full overflow-hidden" style="height:4px"><div class="wr-bar"></div></div>'
                 +'</div>';
         }).join('');
     }
-    function poll(){fetch('/projects/'+projectId+'/workers').then(function(r){return r.json();}).then(renderWorkers).catch(function(){});}
+    function checkBoardSync(sig){
+        if(!sig || sig===BOARD_SIG || boardChipShown) return;
+        // 看板数据已变（任务被自动执行推进），提示用户刷新
+        boardChipShown = true;
+        var chip = document.getElementById('board-sync-chip');
+        if(chip) chip.style.display = 'inline-flex';
+    }
+    function poll(){fetch('/projects/'+projectId+'/workers').then(function(r){return r.json();}).then(function(data){renderWorkers(data);checkBoardSync(data.board_sig);}).catch(function(){});}
 
     /* ---- 项目 AI ---- */
     function nowHM(){var d=new Date();return ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);}
@@ -671,10 +690,8 @@ document.addEventListener('click',function(){_closeFab();document.getElementById
     window.switchView = function(name){
         _origSwitch(name);
         if(name==='ai'){
-            poll(); if(!pollTimer) pollTimer=setInterval(poll,2000);
+            poll();  // 立即刷新一次 worker 面板
             loadHistory(); setTimeout(function(){if(input)input.focus();},50);
-        } else {
-            if(pollTimer){clearInterval(pollTimer);pollTimer=null;}
         }
     };
 
@@ -688,6 +705,9 @@ document.addEventListener('click',function(){_closeFab();document.getElementById
         input.addEventListener('input',function(){try{localStorage.setItem(DRAFT_KEY,input.value);}catch(e){}});
         form.addEventListener('submit',function(e){e.preventDefault();send();});
         input.addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}});
+        // 常驻轮询：刷新 worker 面板 + 检测看板是否过期（不分 Tab，3 秒一次）
+        poll();
+        if(!pollTimer) pollTimer = setInterval(poll, 3000);
     }
     init();
 })();
