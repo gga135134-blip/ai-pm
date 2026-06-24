@@ -107,6 +107,78 @@ CREATE TABLE IF NOT EXISTS backups (
     size_bytes INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS study_points (
+    id TEXT PRIMARY KEY,
+    subject TEXT NOT NULL,
+    chapter TEXT DEFAULT '',
+    title TEXT DEFAULT '',
+    content TEXT DEFAULT '',
+    type TEXT DEFAULT '[]',
+    importance INTEGER DEFAULT 3,
+    memory_method TEXT DEFAULT '',
+    related TEXT DEFAULT '[]',
+    source_refs TEXT DEFAULT '[]'
+);
+
+CREATE TABLE IF NOT EXISTS study_archetypes (
+    id TEXT PRIMARY KEY,
+    subject TEXT NOT NULL,
+    stem TEXT DEFAULT '',
+    solution_logic TEXT DEFAULT '',
+    knowledge_points TEXT DEFAULT '[]',
+    variants TEXT DEFAULT '[]'
+);
+
+CREATE TABLE IF NOT EXISTS study_questions (
+    id TEXT PRIMARY KEY,
+    subject TEXT NOT NULL,
+    source TEXT DEFAULT '',
+    qtype TEXT DEFAULT '单选',
+    stem TEXT DEFAULT '',
+    options TEXT DEFAULT '[]',
+    answer TEXT DEFAULT '',
+    maps_to TEXT DEFAULT '[]'
+);
+
+CREATE TABLE IF NOT EXISTS study_review (
+    id TEXT PRIMARY KEY,
+    item_type TEXT NOT NULL,
+    item_id TEXT NOT NULL,
+    subject TEXT DEFAULT '',
+    stage INTEGER DEFAULT 0,
+    due_date DATE,
+    last_result TEXT DEFAULT '',
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS study_records (
+    id TEXT PRIMARY KEY,
+    item_type TEXT NOT NULL,
+    item_id TEXT NOT NULL,
+    subject TEXT DEFAULT '',
+    action TEXT DEFAULT '',
+    plan_date DATE,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS study_plan (
+    id TEXT PRIMARY KEY,
+    plan_date DATE NOT NULL,
+    items TEXT DEFAULT '[]',
+    status TEXT DEFAULT 'active',
+    generated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS study_settings (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    daily_minutes INTEGER DEFAULT 150,
+    rest_weekday INTEGER DEFAULT 6,
+    subject_weights TEXT DEFAULT '{"建筑实务":0.32,"管理":0.32,"法规":0.20,"经济":0.16}',
+    exam_date DATE DEFAULT '2026-09-12',
+    sprint_date DATE DEFAULT '2026-08-15',
+    daily_new_target INTEGER DEFAULT 20
+);
 """
 
 
@@ -143,6 +215,9 @@ async def init_db():
                 await db.execute(sql)
             except Exception:
                 pass  # column already exists
+        await db.execute(
+            "INSERT OR IGNORE INTO study_settings (id) VALUES (1)"
+        )
         await db.commit()
     finally:
         await db.close()
