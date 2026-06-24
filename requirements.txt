@@ -9,3 +9,4 @@ openai
 pydantic
 pydantic-settings
 itsdangerous
+pytest
