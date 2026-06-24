@@ -1,22 +1,37 @@
 {% extends "base.html" %}
 {% block title %}{{ note.title }} - 知识库{% endblock %}
 {% block content %}
+<style>
+.nd-layout{display:flex;gap:24px;align-items:flex-start}
+.nd-layout > *{min-width:0}
+.nd-main{flex:1}
+.nd-side{width:224px;flex-shrink:0}
+.nd-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
+.nd-actions{display:flex;gap:8px;flex-shrink:0}
+.nd-layout [style*="pre-wrap"]{word-break:break-word;overflow-wrap:anywhere}
+@media(max-width:767px){
+  .nd-layout{flex-direction:column}
+  .nd-side{width:100%}
+  .nd-header{flex-direction:column;align-items:flex-start}
+  .nd-actions{flex-wrap:wrap}
+}
+</style>
 <div class="mb-4 text-sm text-gray-400">
     <a href="/notes" class="hover:text-gray-600">知识库</a> /
     <span class="text-gray-600">{{ note.title }}</span>
 </div>
 
-<div class="flex gap-6">
+<div class="nd-layout">
     <!-- 主内容 -->
-    <div class="flex-1">
+    <div class="nd-main">
         <div class="bg-white rounded-lg shadow-sm p-6">
-            <div class="flex items-center justify-between mb-4">
+            <div class="nd-header">
                 <h1 class="text-xl font-bold text-gray-800">
                     {% if note.is_core %}<span class="text-amber-500 mr-1" title="项目核心档（AI 任务必读）">⭐</span>{% endif %}
                     {% if note.is_pinned %}<span class="text-yellow-500 mr-1">&#9733;</span>{% endif %}
                     {{ note.title }}
                 </h1>
-                <div class="flex gap-2">
+                <div class="nd-actions">
                     {% if note.image_path %}
                     <form method="POST" action="/notes/{{ note.id }}/analyze-images" onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').textContent='分析中…'">
                         <button class="text-sm px-3 py-1 bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition">AI 分析图片</button>
@@ -53,8 +68,8 @@
             <div class="flex items-center gap-4 text-xs text-gray-400 mb-6 pb-4 border-b">
                 {% if note.author %}<span>作者: {{ note.author }}</span>{% endif %}
                 {% if note.project_name %}<span>项目: <a href="/projects/{{ note.project_id }}" class="text-blue-500 hover:underline">{{ note.project_name }}</a></span>{% endif %}
-                <span>创建: {{ note.created_at[:16] if note.created_at else '' }}</span>
-                <span>更新: {{ note.updated_at[:16] if note.updated_at else '' }}</span>
+                <span>创建: {{ note.created_at[:16].replace('T',' ') if note.created_at else '' }}</span>
+                <span>更新: {{ note.updated_at[:16].replace('T',' ') if note.updated_at else '' }}</span>
             </div>
 
             <!-- 图片 -->
@@ -76,7 +91,7 @@
     </div>
 
     <!-- 侧边栏：相关笔记 -->
-    <div class="w-56 flex-shrink-0">
+    <div class="nd-side">
         <div class="bg-white rounded-lg shadow-sm p-4">
             <h3 class="text-sm font-semibold text-gray-700 mb-3">相关笔记</h3>
             {% if related %}

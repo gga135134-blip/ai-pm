@@ -1,15 +1,21 @@
 {% extends "base.html" %}
 {% block title %}{{ task.title }} - AI 项目管理{% endblock %}
 {% block content %}
+<style>
+.td-layout{display:grid;grid-template-columns:2fr 1fr;gap:24px;align-items:start}
+.td-layout > *{min-width:0}  /* 关键：允许子项收缩，否则长串撑破列宽 */
+.td-layout [style*="pre-wrap"]{word-break:break-word;overflow-wrap:anywhere}
+@media(max-width:767px){ .td-layout{grid-template-columns:1fr} }
+</style>
 <div class="mb-4 text-sm text-gray-400">
     <a href="/projects" class="hover:text-gray-600">项目</a> /
     <a href="/projects/{{ project.id }}" class="hover:text-gray-600">{{ project.name }}</a> /
     <span class="text-gray-600">{{ task.title }}</span>
 </div>
 
-<div class="grid md:grid-cols-3 gap-6">
+<div class="td-layout">
     <!-- 主要信息 -->
-    <div class="md:col-span-2 space-y-4">
+    <div class="space-y-4">
         <div class="bg-white rounded-lg shadow-sm p-6">
             <div class="flex items-center justify-between mb-4">
                 <h1 class="text-xl font-bold text-gray-800">{{ task.title }}</h1>
@@ -66,7 +72,7 @@
                     {% if run.response %}
                     <div class="text-sm text-gray-700 bg-blue-50 rounded p-3" style="white-space:pre-wrap;max-height:240px;overflow-y:auto">{{ run.response }}</div>
                     {% endif %}
-                    <div class="text-xs text-gray-400 mt-2">{{ run.created_at }}</div>
+                    <div class="text-xs text-gray-400 mt-2">{{ run.created_at[:16].replace('T',' ') if run.created_at else '' }}</div>
                 </div>
                 {% endfor %}
             </div>
@@ -121,7 +127,7 @@
                 </div>
                 <div class="flex justify-between">
                     <span class="text-gray-500">创建时间</span>
-                    <span class="text-gray-800 text-xs">{{ task.created_at }}</span>
+                    <span class="text-gray-800 text-xs">{{ task.created_at[:16].replace('T',' ') if task.created_at else '' }}</span>
                 </div>
             </div>
         </div>
