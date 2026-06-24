@@ -291,8 +291,10 @@ async function imaSync() {
                             class="text-gray-400 hover:text-blue-600 px-1.5 py-0.5 rounded hover:bg-blue-50 transition">改名</button>
                         <button onclick="moveNote('{{ n.id }}')"
                             class="text-gray-400 hover:text-blue-600 px-1.5 py-0.5 rounded hover:bg-blue-50 transition">移动</button>
-                        <button onclick="copyLink('{{ n.id }}', this)"
+                        <button onclick="copyLink('{{ n.id }}', this)" title="复制站内链接（需登录才能打开）"
                             class="text-gray-400 hover:text-violet-600 px-1.5 py-0.5 rounded hover:bg-violet-50 transition">链接</button>
+                        <button onclick="shareNote('{{ n.id }}', this)" title="生成公开只读分享链接（对方无需登录）"
+                            class="text-gray-400 hover:text-green-600 px-1.5 py-0.5 rounded hover:bg-green-50 transition">分享</button>
                         <button onclick="deleteNote('{{ n.id }}', this)" data-title="{{ n.title }}"
                             class="text-gray-400 hover:text-red-600 px-1.5 py-0.5 rounded hover:bg-red-50 transition">删除</button>
                     </div>
@@ -388,6 +390,23 @@ async function imaSync() {
             } else {
                 prompt('复制此链接分享：', url);
             }
+        }
+
+        function shareNote(id, btn) {
+            var old = btn.textContent;
+            btn.textContent = '生成中…';
+            fetch('/notes/' + id + '/share?ajax=1', { method: 'POST' })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    var url = data.url;
+                    function done() { btn.textContent = '✅ 链接已复制'; setTimeout(function() { btn.textContent = old; }, 2000); }
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(url).then(done, function() { prompt('复制此公开分享链接：', url); btn.textContent = old; });
+                    } else {
+                        prompt('复制此公开分享链接：', url); btn.textContent = old;
+                    }
+                })
+                .catch(function() { btn.textContent = old; alert('生成分享链接失败，请重试'); });
         }
         </script>
         {% else %}

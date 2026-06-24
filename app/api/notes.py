@@ -828,8 +828,9 @@ async def note_delete(note_id: str):
 
 
 @router.post("/notes/{note_id}/share")
-async def note_share(note_id: str):
-    """生成公开分享链接（凭链接只读）。已有 token 则复用，不重复生成。"""
+async def note_share(request: Request, note_id: str):
+    """生成公开分享链接（凭链接只读）。已有 token 则复用，不重复生成。
+    带 ?ajax=1 时返回 JSON（知识库列表里就地复制用），否则跳回详情页。"""
     db = await get_db()
     try:
         cursor = await db.execute("SELECT share_token FROM notes WHERE id = ?", (note_id,))
@@ -841,6 +842,10 @@ async def note_share(note_id: str):
             await db.commit()
     finally:
         await db.close()
+    if request.query_params.get("ajax"):
+        from fastapi.responses import JSONResponse
+        base = str(request.base_url).rstrip("/")
+        return JSONResponse({"token": token, "url": f"{base}/s/{token}"})
     return RedirectResponse(f"/notes/{note_id}", status_code=303)
 
 
