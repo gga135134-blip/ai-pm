@@ -15,3 +15,18 @@ def next_review(current_stage, passed, today):
         new_stage = 0
     due = today + datetime.timedelta(days=INTERVALS[new_stage])
     return new_stage, due
+
+
+def allocate_new_quota(due_count, today, sprint_date, weights, daily_new_target=20):
+    """按四科配比分配今日新学名额；复习多则缩、过冲刺日则停。"""
+    if today >= sprint_date:
+        effective = 0
+    else:
+        effective = max(0, daily_new_target - due_count)
+    quota = {s: int(effective * w) for s, w in weights.items()}
+    # 余数补给占比最大的科目，保证总和=effective
+    remainder = effective - sum(quota.values())
+    if remainder > 0:
+        top = max(weights, key=weights.get)
+        quota[top] += remainder
+    return quota
