@@ -21,7 +21,7 @@
 
   <h2 class="text-base font-semibold text-gray-700 mb-2">🔁 复习（{{ reviews|length }}）</h2>
   {% for it in reviews %}
-  <a href="{% if it.item_type=='point' %}/study/point/{{ it.item_id }}{% else %}/study/review{% endif %}"
+  <a href="{% if it.item_type=='point' %}/study/point/{{ it.item_id }}{% elif it.item_type=='archetype' %}/study/archetype/{{ it.item_id }}{% else %}/study/exam/{{ it.subject }}{% endif %}"
      class="block bg-white rounded-lg shadow-sm p-3 mb-2 active:bg-gray-50">
     <span class="text-xs text-purple-500">{{ it.subject }}</span>
     <div class="text-sm text-gray-800">{{ titles.get(it.item_id, it.item_id) }}</div>
@@ -30,9 +30,9 @@
 
   <h2 class="text-base font-semibold text-gray-700 mb-2 mt-4">📖 新学（{{ news|length }}）</h2>
   {% for it in news %}
-  <a href="/study/point/{{ it.item_id }}"
+  <a href="{% if it.item_type=='archetype' %}/study/archetype/{{ it.item_id }}{% elif it.item_type=='question' %}/study/exam/{{ it.subject }}{% else %}/study/point/{{ it.item_id }}{% endif %}"
      class="block bg-white rounded-lg shadow-sm p-3 mb-2 active:bg-gray-50">
-    <span class="text-xs text-blue-500">{{ it.subject }}</span>
+    <span class="text-xs {% if it.item_type=='archetype' %}text-amber-600{% else %}text-blue-500{% endif %}">{{ it.subject }}{% if it.item_type=='archetype' %} · 母题{% endif %}</span>
     <div class="text-sm text-gray-800">{{ titles.get(it.item_id, it.item_id) }}</div>
   </a>
   {% else %}<p class="text-sm text-gray-400">今日新学已排完</p>{% endfor %}
