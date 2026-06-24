@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}{{ subject }}密卷{% endblock %}
+{% block content %}
+<div class="max-w-2xl mx-auto px-3 py-4">
+  <h1 class="text-lg font-bold text-gray-900 mb-3">{{ subject }} · 2026预测密卷</h1>
+  {% for q in questions %}
+  <div class="bg-white rounded-lg shadow-sm p-4 mb-3">
+    <div class="text-xs text-gray-400">{{ loop.index }} / {{ q.qtype }}</div>
+    <div class="text-sm text-gray-900 mt-1 whitespace-pre-wrap">{{ q.stem }}</div>
+    <ul class="mt-2 text-sm text-gray-700">
+      {% for opt in q.options %}<li class="py-0.5">{{ opt }}</li>{% endfor %}
+    </ul>
+    <details class="mt-2"><summary class="text-xs text-purple-500">看答案</summary>
+      <div class="text-sm text-green-700 mt-1">答案：{{ q.answer }}</div></details>
+    <form method="post" action="/study/record" class="flex gap-2 mt-2">
+      <input type="hidden" name="item_type" value="question">
+      <input type="hidden" name="item_id" value="{{ q.id }}">
+      <input type="hidden" name="subject" value="{{ subject }}">
+      <input type="hidden" name="next_url" value="/study/exam/{{ subject }}">
+      <button name="action" value="对" class="px-4 py-1.5 rounded bg-green-500 text-white text-sm">做对</button>
+      <button name="action" value="错" class="px-4 py-1.5 rounded bg-red-400 text-white text-sm">做错</button>
+    </form>
+  </div>
+  {% else %}<p class="text-sm text-gray-400">该科暂无密卷题</p>{% endfor %}
+</div>
+{% endblock %}

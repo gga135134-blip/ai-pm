@@ -21,7 +21,7 @@ async def study_home(request: Request):
         titles = {}
         if ids:
             q = ",".join("?" for _ in ids)
-            cur = await db.execute(f"SELECT id,title FROM study_points WHERE id IN ({q})", ids)
+            cur = await db.execute(f"SELECT id,title FROM study_points WHERE id IN ({q})", tuple(ids))
             titles = {r["id"]: r["title"] for r in await cur.fetchall()}
         # 倒计时 + 掌握度
         cur = await db.execute("SELECT exam_date FROM study_settings WHERE id=1")

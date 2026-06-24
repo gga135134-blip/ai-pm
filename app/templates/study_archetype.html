@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}母题{% endblock %}
+{% block content %}
+{% if arch %}
+<div class="max-w-2xl mx-auto px-3 py-4 pb-24">
+  <span class="text-xs text-purple-500">{{ arch.subject }} 母题</span>
+  <div class="bg-white rounded-lg shadow-sm p-4 mt-1 text-sm text-gray-900 whitespace-pre-wrap">{{ arch.stem }}</div>
+  <div class="mt-3 text-sm text-gray-700 bg-gray-50 rounded-lg p-3 whitespace-pre-wrap">🧭 解题逻辑：{{ arch.solution_logic }}</div>
+  <h3 class="text-sm font-semibold text-gray-600 mt-4 mb-2">变体练习</h3>
+  {% for v in arch.variants %}
+  <div class="bg-white rounded-lg shadow-sm p-3 mb-2 text-sm">
+    <div class="text-gray-800 whitespace-pre-wrap">{{ v.stem }}</div>
+    <details class="mt-2"><summary class="text-xs text-purple-500">看答案</summary>
+      <div class="text-xs text-gray-600 mt-1">{{ v.answer }}　<span class="text-gray-400">{{ v.note }}</span></div></details>
+  </div>
+  {% endfor %}
+</div>
+<form method="post" action="/study/record"
+      class="fixed bottom-0 inset-x-0 bg-white border-t flex gap-2 p-3 max-w-2xl mx-auto">
+  <input type="hidden" name="item_type" value="archetype">
+  <input type="hidden" name="item_id" value="{{ arch.id }}">
+  <input type="hidden" name="subject" value="{{ arch.subject }}">
+  <button name="action" value="会" class="flex-1 py-3 rounded-lg bg-green-500 text-white font-medium">会</button>
+  <button name="action" value="不会" class="flex-1 py-3 rounded-lg bg-red-400 text-white font-medium">不会</button>
+</form>
+{% else %}<p class="p-4 text-gray-500">母题不存在</p>{% endif %}
+{% endblock %}

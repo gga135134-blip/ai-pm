@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}考点{% endblock %}
+{% block content %}
+{% if point %}
+<div class="max-w-2xl mx-auto px-3 py-4 pb-24">
+  <span class="text-xs text-purple-500">{{ point.subject }} · {{ point.chapter }}</span>
+  <h1 class="text-lg font-bold text-gray-900 mt-1 mb-3">{{ point.title }}</h1>
+  <div class="bg-white rounded-lg shadow-sm p-4 text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">{{ point.content }}</div>
+  {% if point.memory_method %}<div class="mt-3 text-sm text-amber-700 bg-amber-50 rounded-lg p-3">💡 记忆法：{{ point.memory_method }}</div>{% endif %}
+</div>
+<form method="post" action="/study/record"
+      class="fixed bottom-0 inset-x-0 bg-white border-t flex gap-2 p-3 max-w-2xl mx-auto">
+  <input type="hidden" name="item_type" value="point">
+  <input type="hidden" name="item_id" value="{{ point.id }}">
+  <input type="hidden" name="subject" value="{{ point.subject }}">
+  <button name="action" value="会" class="flex-1 py-3 rounded-lg bg-green-500 text-white font-medium">会</button>
+  <button name="action" value="模糊" class="flex-1 py-3 rounded-lg bg-amber-400 text-white font-medium">模糊</button>
+  <button name="action" value="不会" class="flex-1 py-3 rounded-lg bg-red-400 text-white font-medium">不会</button>
+</form>
+{% else %}<p class="p-4 text-gray-500">考点不存在</p>{% endif %}
+{% endblock %}
