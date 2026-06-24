@@ -13,7 +13,7 @@ from starlette.responses import RedirectResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 from app.config import BASE_DIR
 from app.database import init_db
-from app.api import dashboard, projects, tasks, settings, agents, notes, chat, auth, finance
+from app.api import dashboard, projects, tasks, settings, agents, notes, chat, auth, finance, study
 
 app = FastAPI(title="AI 项目管理平台")
 
@@ -36,6 +36,7 @@ app.include_router(settings.router)
 app.include_router(agents.router)
 app.include_router(notes.router)
 app.include_router(finance.router)
+app.include_router(study.router)
 
 # ── Auth middleware (pure ASGI, runs after session is loaded) ──
 
