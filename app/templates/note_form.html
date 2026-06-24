@@ -1,6 +1,15 @@
 {% extends "base.html" %}
 {% block title %}{{ '编辑笔记' if note else '新建笔记' }} - AI 项目管理{% endblock %}
 {% block content %}
+<style>
+.nf-grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.nf-grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+.nf-thumb{width:96px;height:96px}
+@media(max-width:767px){
+  .nf-grid3,.nf-grid2{grid-template-columns:1fr}
+  .nf-thumb{width:80px;height:80px}
+}
+</style>
 <div class="max-w-3xl mx-auto">
     <div class="mb-4 text-sm text-gray-400">
         <a href="/notes" class="hover:text-gray-600">← 知识库</a> /
@@ -30,7 +39,7 @@
                 {% for img in note.image_path.split(',') %}
                 {% if img.strip() %}
                 <div class="relative">
-                    <img src="{{ img.strip() }}" class="w-24 h-24 object-cover rounded-lg border">
+                    <img src="{{ img.strip() }}" class="nf-thumb object-cover rounded-lg border">
                     <label class="absolute bottom-1 left-1 bg-white/90 rounded px-1.5 py-0.5 text-xs flex items-center gap-1 cursor-pointer shadow-sm">
                         <input type="checkbox" name="keep_images" value="{{ img.strip() }}" checked> 保留
                     </label>
@@ -44,7 +53,7 @@
                 class="w-full border rounded-lg px-3 py-2 text-sm">
             <p class="text-xs text-gray-400 mt-1">支持 png/jpg/gif/webp，单张最大 8MB，可多选。保存后在笔记里以画廊显示。</p>
         </div>
-        <div class="grid grid-cols-3 gap-4">
+        <div class="nf-grid3">
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">作者</label>
                 <input type="text" name="author" value="{{ note.author if note else '' }}" placeholder="Gaga / An"
@@ -65,7 +74,7 @@
                     class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
             </div>
         </div>
-        <div class="grid grid-cols-2 gap-4">
+        <div class="nf-grid2">
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">关联项目 (可选)</label>
                 <select name="project_id" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
