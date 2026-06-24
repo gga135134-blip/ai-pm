@@ -118,6 +118,21 @@ async def note_new_form(request: Request, project_id: str = "", task_id: str = "
     )
 
 
+async def _save_uploaded_images(images) -> list[str]:
+    """保存表单上传的图片，返回 /uploads/xx 路径列表（跳过空文件和失败项）"""
+    paths = []
+    for f in (images or []):
+        if not f or not getattr(f, "filename", ""):
+            continue
+        data = await f.read()
+        if not data:
+            continue
+        r = save_image_upload(f.filename, data)
+        if "path" in r:
+            paths.append(r["path"])
+    return paths
+
+
 @router.post("/notes/new")
 async def note_create(
     title: str = Form(...),
@@ -127,18 +142,20 @@ async def note_create(
     task_id: str = Form(""),
     tags: str = Form(""),
     folder: str = Form(""),
+    images: list[UploadFile] = File(default=[]),
 ):
     note_id = str(uuid.uuid4())
     now = datetime.now().isoformat()
     # 清理标签格式
     clean_tags = ",".join(t.strip() for t in tags.split(",") if t.strip())
     folder = folder.strip().strip("/")
+    image_path = ",".join(await _save_uploaded_images(images))
     db = await get_db()
     try:
         await db.execute(
-            """INSERT INTO notes (id, title, content, author, project_id, task_id, tags, folder, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (note_id, title, content, author, project_id or None, task_id or None, clean_tags, folder, now, now),
+            """INSERT INTO notes (id, title, content, author, project_id, task_id, tags, folder, image_path, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (note_id, title, content, author, project_id or None, task_id or None, clean_tags, folder, image_path, now, now),
         )
         await db.commit()
     finally:
@@ -705,19 +722,39 @@ async def note_update(
     task_id: str = Form(""),
     tags: str = Form(""),
     folder: str = Form(""),
+    keep_images: list[str] = Form(default=[]),
+    images: list[UploadFile] = File(default=[]),
 ):
     now = datetime.now().isoformat()
     clean_tags = ",".join(t.strip() for t in tags.split(",") if t.strip())
     folder = folder.strip().strip("/")
+
+    # 现有图片：只保留用户勾了「保留」的；其余删文件
+    db = await get_db()
+    try:
+        cur = await db.execute("SELECT image_path FROM notes WHERE id = ?", (note_id,))
+        row = await cur.fetchone()
+        existing = [p for p in (row["image_path"] or "").split(",") if p.strip()] if row else []
+    finally:
+        await db.close()
+    keep_set = set(keep_images)
+    kept = [p for p in existing if p in keep_set]
+    removed = [p for p in existing if p not in keep_set]
+    # 追加新上传的图片
+    kept.extend(await _save_uploaded_images(images))
+    image_path = ",".join(kept)
+
     db = await get_db()
     try:
         await db.execute(
-            "UPDATE notes SET title=?, content=?, author=?, project_id=?, task_id=?, tags=?, folder=?, updated_at=? WHERE id=?",
-            (title, content, author, project_id or None, task_id or None, clean_tags, folder, now, note_id),
+            "UPDATE notes SET title=?, content=?, author=?, project_id=?, task_id=?, tags=?, folder=?, image_path=?, updated_at=? WHERE id=?",
+            (title, content, author, project_id or None, task_id or None, clean_tags, folder, image_path, now, note_id),
         )
         await db.commit()
     finally:
         await db.close()
+    if removed:
+        _delete_image_files(removed)
     return RedirectResponse(f"/notes/{note_id}", status_code=303)
 
 

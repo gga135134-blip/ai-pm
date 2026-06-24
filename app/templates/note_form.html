@@ -12,7 +12,7 @@
         {% endif %}
     </div>
     <h1 class="text-2xl font-bold text-gray-800 mb-6">{{ '编辑笔记' if note else '新建笔记' }}</h1>
-    <form method="POST" action="{{ '/notes/' + note.id + '/edit' if note else '/notes/new' }}" class="bg-white rounded-lg shadow-sm p-6 space-y-4">
+    <form method="POST" enctype="multipart/form-data" action="{{ '/notes/' + note.id + '/edit' if note else '/notes/new' }}" class="bg-white rounded-lg shadow-sm p-6 space-y-4">
         <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">标题</label>
             <input type="text" name="title" value="{{ note.title if note else '' }}" required placeholder="笔记标题"
@@ -22,6 +22,27 @@
             <label class="block text-sm font-medium text-gray-700 mb-1">内容 (支持 Markdown)</label>
             <textarea name="content" rows="16" placeholder="写点什么..."
                 class="w-full border rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none" style="tab-size:4">{{ note.content if note else '' }}</textarea>
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">图片 (可选)</label>
+            {% if note and note.image_path %}
+            <div class="flex flex-wrap gap-3 mb-2">
+                {% for img in note.image_path.split(',') %}
+                {% if img.strip() %}
+                <div class="relative">
+                    <img src="{{ img.strip() }}" class="w-24 h-24 object-cover rounded-lg border">
+                    <label class="absolute bottom-1 left-1 bg-white/90 rounded px-1.5 py-0.5 text-xs flex items-center gap-1 cursor-pointer shadow-sm">
+                        <input type="checkbox" name="keep_images" value="{{ img.strip() }}" checked> 保留
+                    </label>
+                </div>
+                {% endif %}
+                {% endfor %}
+            </div>
+            <p class="text-xs text-gray-400 mb-2">取消勾选「保留」并保存，即可删除该图。</p>
+            {% endif %}
+            <input type="file" name="images" multiple accept="image/png,image/jpeg,image/gif,image/webp"
+                class="w-full border rounded-lg px-3 py-2 text-sm">
+            <p class="text-xs text-gray-400 mt-1">支持 png/jpg/gif/webp，单张最大 8MB，可多选。保存后在笔记里以画廊显示。</p>
         </div>
         <div class="grid grid-cols-3 gap-4">
             <div>
