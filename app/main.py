@@ -50,7 +50,8 @@ class _AuthMiddleware:
             await self.app(scope, receive, send)
             return
         path = scope.get("path", "")
-        if path.startswith("/static") or path in _PUBLIC:
+        # /s/<token> 是公开的只读笔记分享页，无需登录
+        if path.startswith("/static") or path.startswith("/s/") or path in _PUBLIC:
             await self.app(scope, receive, send)
             return
         request = Request(scope)

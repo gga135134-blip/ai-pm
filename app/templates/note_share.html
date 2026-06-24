@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% if note %}{{ note.title }}{% else %}链接已失效{% endif %}</title>
+    <link href="/static/tailwind.min.css" rel="stylesheet">
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background:#f9fafb; }
+        .doc { max-width: 760px; margin: 0 auto; padding: 24px 16px 80px; }
+        .doc-body { white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; line-height: 1.8; }
+    </style>
+</head>
+<body>
+    <div class="doc">
+        {% if note %}
+        <article class="bg-white rounded-xl shadow-sm p-6 md:p-8">
+            <h1 class="text-2xl font-bold text-gray-800 mb-2">{{ note.title }}</h1>
+            <div class="text-xs text-gray-400 mb-6 pb-4 border-b">
+                更新于 {{ note.updated_at[:16].replace('T',' ') if note.updated_at else '' }}
+            </div>
+            <div class="doc-body text-[15px] text-gray-700">{{ note.content }}</div>
+        </article>
+        <p class="text-center text-xs text-gray-300 mt-6">通过 AI-PM 分享 · 只读</p>
+        {% else %}
+        <div class="bg-white rounded-xl shadow-sm p-12 text-center mt-12">
+            <div class="text-4xl mb-3">🔒</div>
+            <p class="text-gray-700 font-medium mb-1">链接已失效或不存在</p>
+            <p class="text-sm text-gray-400">分享者可能已撤销此链接。</p>
+        </div>
+        {% endif %}
+    </div>
+</body>
+</html>

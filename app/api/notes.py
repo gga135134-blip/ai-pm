@@ -1,4 +1,5 @@
 import uuid
+import secrets
 from datetime import datetime
 from fastapi import APIRouter, Request, Form, Query, UploadFile, File
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -787,6 +788,55 @@ async def note_delete(note_id: str):
     finally:
         await db.close()
     return RedirectResponse("/notes", status_code=303)
+
+
+@router.post("/notes/{note_id}/share")
+async def note_share(note_id: str):
+    """生成公开分享链接（凭链接只读）。已有 token 则复用，不重复生成。"""
+    db = await get_db()
+    try:
+        cursor = await db.execute("SELECT share_token FROM notes WHERE id = ?", (note_id,))
+        row = await cursor.fetchone()
+        token = row["share_token"] if row else None
+        if not token:
+            token = secrets.token_urlsafe(8)
+            await db.execute("UPDATE notes SET share_token = ? WHERE id = ?", (token, note_id))
+            await db.commit()
+    finally:
+        await db.close()
+    return RedirectResponse(f"/notes/{note_id}", status_code=303)
+
+
+@router.post("/notes/{note_id}/unshare")
+async def note_unshare(note_id: str):
+    """撤销分享链接：清掉 token，旧链接立即失效。"""
+    db = await get_db()
+    try:
+        await db.execute("UPDATE notes SET share_token = NULL WHERE id = ?", (note_id,))
+        await db.commit()
+    finally:
+        await db.close()
+    return RedirectResponse(f"/notes/{note_id}", status_code=303)
+
+
+@router.get("/s/{token}", response_class=HTMLResponse)
+async def public_note_share(request: Request, token: str):
+    """公开只读笔记页 —— 无需登录（已在 main.py 中间件放行 /s/）。"""
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            "SELECT title, content, updated_at FROM notes WHERE share_token = ? AND deleted_at IS NULL",
+            (token,),
+        )
+        row = await cursor.fetchone()
+        note = dict(row) if row else None
+    finally:
+        await db.close()
+    return request.app.state.templates.TemplateResponse(
+        request, "note_share.html",
+        {"request": request, "note": note},
+        status_code=200 if note else 404,
+    )
 
 
 # ── 决策日志 ──────────────────────────────────────────

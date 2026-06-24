@@ -49,11 +49,46 @@
                         <button class="text-sm px-3 py-1 border rounded-lg hover:bg-gray-50 transition">{{ '取消置顶' if note.is_pinned else '置顶' }}</button>
                     </form>
                     <a href="/notes/{{ note.id }}/edit" class="text-sm px-3 py-1 border rounded-lg hover:bg-gray-50 transition">编辑</a>
+                    {% if not note.share_token %}
+                    <form method="POST" action="/notes/{{ note.id }}/share">
+                        <button class="text-sm px-3 py-1 border rounded-lg hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 transition" title="生成一个公开只读链接，凭链接可看，无需登录">🔗 分享</button>
+                    </form>
+                    {% else %}
+                    <span class="text-sm px-3 py-1 border border-blue-200 bg-blue-50 text-blue-700 rounded-lg">🔗 已分享</span>
+                    {% endif %}
                     <form method="POST" action="/notes/{{ note.id }}/delete" onsubmit="return confirm('确定删除？')">
                         <button class="text-sm px-3 py-1 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition">删除</button>
                     </form>
                 </div>
             </div>
+
+            <!-- 公开分享链接面板 -->
+            {% if note.share_token %}
+            <div class="mb-4 p-3 bg-blue-50 border border-blue-100 rounded-lg">
+                <div class="text-xs text-blue-700 font-medium mb-2">🔗 公开只读链接 · 凭链接可看（谁拿到都能看，请勿外传敏感内容）</div>
+                <div class="flex flex-wrap gap-2 items-center">
+                    <input id="share-url" readonly onclick="this.select()"
+                        class="flex-1 text-xs bg-white border rounded px-2 py-1.5 text-gray-600" style="min-width:180px" value="">
+                    <button onclick="copyShareUrl(this)" class="text-xs px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex-shrink-0">复制链接</button>
+                    <form method="POST" action="/notes/{{ note.id }}/unshare" class="inline" onsubmit="return confirm('撤销后旧链接立即失效，确定？')">
+                        <button class="text-xs px-3 py-1.5 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition">撤销分享</button>
+                    </form>
+                </div>
+            </div>
+            <script>
+                (function(){
+                    var u = window.location.origin + '/s/' + '{{ note.share_token }}';
+                    var el = document.getElementById('share-url'); if(el) el.value = u;
+                })();
+                function copyShareUrl(btn){
+                    var el = document.getElementById('share-url'); if(!el) return;
+                    el.select();
+                    function ok(){var o=btn.textContent;btn.textContent='✅ 已复制';setTimeout(function(){btn.textContent=o;},1500);}
+                    if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(el.value).then(ok,function(){try{document.execCommand('copy');ok();}catch(e){}});}
+                    else{try{document.execCommand('copy');ok();}catch(e){}}
+                }
+            </script>
+            {% endif %}
 
             <!-- 标签 -->
             {% if tag_list %}
