@@ -30,3 +30,18 @@ def allocate_new_quota(due_count, today, sprint_date, weights, daily_new_target=
         top = max(weights, key=weights.get)
         quota[top] += remainder
     return quota
+
+
+def build_plan_items(due_reviews, unlearned_by_subject, today, sprint_date,
+                     weights, daily_new_target=20):
+    """组装今日计划：先全部到期复习，再按各科配额取未学考点作为新学。"""
+    items = [{"item_type": r["item_type"], "item_id": r["item_id"],
+              "subject": r["subject"], "kind": "review"} for r in due_reviews]
+    quota = allocate_new_quota(len(due_reviews), today, sprint_date,
+                               weights, daily_new_target)
+    for subject, n in quota.items():
+        ids = unlearned_by_subject.get(subject, [])
+        for pid in ids[:n]:
+            items.append({"item_type": "point", "item_id": pid,
+                          "subject": subject, "kind": "new"})
+    return items

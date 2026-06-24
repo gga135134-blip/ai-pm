@@ -1,5 +1,5 @@
 import datetime
-from app.services.study_engine import next_review, INTERVALS, allocate_new_quota
+from app.services.study_engine import next_review, INTERVALS, allocate_new_quota, build_plan_items
 
 T = datetime.date(2026, 6, 24)
 
@@ -48,3 +48,23 @@ def test_quota_zero_after_sprint():
     q = allocate_new_quota(due_count=0, today=datetime.date(2026,8,20),
                            sprint_date=SPRINT, weights=W, daily_new_target=20)
     assert sum(q.values()) == 0
+
+def test_build_plan_review_first_then_new():
+    due = [{"item_type":"point","item_id":"ZS-经济-0001","subject":"经济"}]
+    unlearned = {"建筑实务":["a1","a2","a3"], "管理":["b1"], "法规":[], "经济":["c1"]}
+    items = build_plan_items(due, unlearned, datetime.date(2026,6,24),
+                             SPRINT, W, daily_new_target=4)
+    # 复习项排最前
+    assert items[0] == {"item_type":"point","item_id":"ZS-经济-0001","subject":"经济","kind":"review"}
+    # 有效新学=4-1=3, 配比下实务应分到最多
+    new_items = [it for it in items if it["kind"] == "new"]
+    assert len(new_items) == 3
+    assert any(it["item_id"] == "a1" for it in new_items)  # 实务取头部
+
+def test_build_plan_caps_new_at_available_unlearned():
+    due = []
+    unlearned = {"建筑实务":["a1"], "管理":[], "法规":[], "经济":[]}
+    items = build_plan_items(due, unlearned, datetime.date(2026,6,24),
+                             SPRINT, W, daily_new_target=20)
+    new_items = [it for it in items if it["kind"]=="new"]
+    assert len(new_items) == 1  # 只有 a1 可学，不超发
