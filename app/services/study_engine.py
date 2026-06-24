@@ -68,6 +68,9 @@ async def get_or_build_today_plan(db, today=None):
     s = await _settings(db)
     weights = _json.loads(s["subject_weights"])
     sprint = _dt.date.fromisoformat(s["sprint_date"])
+    # Fix 1: 周日休息日 — 休息日不排新学
+    rest_weekday = s["rest_weekday"] if s["rest_weekday"] is not None else 6
+    daily_new_target = 0 if today.weekday() == rest_weekday else s["daily_new_target"]
     # 到期复习
     cur = await db.execute(
         "SELECT item_type,item_id,subject FROM study_review WHERE due_date<=?", (iso,))
@@ -80,8 +83,48 @@ async def get_or_build_today_plan(db, today=None):
                (SELECT item_id FROM study_review WHERE item_type='point')
                ORDER BY importance DESC""", (subj,))
         unlearned[subj] = [r["id"] for r in await cur.fetchall()]
-    items = build_plan_items(due, unlearned, today, sprint, weights,
-                             s["daily_new_target"])
+    items = build_plan_items(due, unlearned, today, sprint, weights, daily_new_target)
+    # Fix 2: 新学考点带出关联母题
+    new_point_items = [it for it in items if it["kind"] == "new" and it["item_type"] == "point"]
+    if new_point_items:
+        # Collect titles of new points (need to query study_points for titles)
+        new_point_ids = [it["item_id"] for it in new_point_items]
+        placeholders = ",".join("?" for _ in new_point_ids)
+        cur = await db.execute(
+            f"SELECT id,title,subject FROM study_points WHERE id IN ({placeholders})",
+            tuple(new_point_ids))
+        point_title_map = {r["id"]: (r["title"], r["subject"]) for r in await cur.fetchall()}
+        # Query archetypes for each subject that appears in new points
+        subjects_needed = set(it["subject"] for it in new_point_items)
+        seen_arch_ids = set()
+        arch_items = []
+        for subj in subjects_needed:
+            cur = await db.execute(
+                "SELECT id,subject,knowledge_points FROM study_archetypes WHERE subject=?",
+                (subj,))
+            for arch_row in await cur.fetchall():
+                arch_id = arch_row["id"]
+                if arch_id in seen_arch_ids:
+                    continue
+                try:
+                    kp_list = _json.loads(arch_row["knowledge_points"])
+                except Exception:
+                    kp_list = []
+                # Check if any new point's title is in this archetype's knowledge_points
+                for pt_item in new_point_items:
+                    if pt_item["subject"] != subj:
+                        continue
+                    pt_title = point_title_map.get(pt_item["item_id"], ("", ""))[0]
+                    if pt_title and pt_title in kp_list:
+                        seen_arch_ids.add(arch_id)
+                        arch_items.append({
+                            "item_type": "archetype",
+                            "item_id": arch_id,
+                            "subject": arch_row["subject"],
+                            "kind": "new",
+                        })
+                        break
+        items = items + arch_items
     await db.execute(
         "INSERT INTO study_plan (id,plan_date,items) VALUES (?,?,?)",
         (str(_uuid.uuid4()), iso, _json.dumps(items, ensure_ascii=False)))

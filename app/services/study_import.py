@@ -48,8 +48,12 @@ def question_rows(q_json, subject):
 def _load(path):
     if not os.path.exists(path):
         return []
-    with open(path, encoding="utf-8") as f:
-        return json.load(f)
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError):
+        # 源文件损坏/读不出时返回空，避免整次导入崩溃(服务器 git pull→重导流程更稳)
+        return []
 
 
 async def _bulk(db, table, rows):

@@ -4,7 +4,7 @@
 <div class="max-w-2xl mx-auto px-3 py-4">
   <h1 class="text-lg font-bold text-gray-900 mb-3">🔁 到期复习（{{ due|length }}）</h1>
   {% for it in due %}
-  <a href="{% if it.item_type=='point' %}/study/point/{{ it.item_id }}{% else %}/study/exam/{{ it.subject }}{% endif %}"
+  <a href="{% if it.item_type=='point' %}/study/point/{{ it.item_id }}{% elif it.item_type=='archetype' %}/study/archetype/{{ it.item_id }}{% else %}/study/exam/{{ it.subject }}{% endif %}"
      class="block bg-white rounded-lg shadow-sm p-3 mb-2 active:bg-gray-50">
     <span class="text-xs text-purple-500">{{ it.subject }} · {{ it.item_type }} · 第{{ it.stage }}档</span>
     <div class="text-sm text-gray-800">{{ it.item_id }}</div>

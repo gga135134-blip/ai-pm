@@ -17,12 +17,19 @@ async def study_home(request: Request):
     db = await get_db()
     try:
         items = await get_or_build_today_plan(db)
-        ids = [i["item_id"] for i in items]
+        ids = [i["item_id"] for i in items if i["item_type"] == "point"]
         titles = {}
         if ids:
             q = ",".join("?" for _ in ids)
             cur = await db.execute(f"SELECT id,title FROM study_points WHERE id IN ({q})", tuple(ids))
             titles = {r["id"]: r["title"] for r in await cur.fetchall()}
+        # archetype titles
+        arch_ids = [i["item_id"] for i in items if i["item_type"] == "archetype"]
+        if arch_ids:
+            q = ",".join("?" for _ in arch_ids)
+            cur = await db.execute(f"SELECT id,stem FROM study_archetypes WHERE id IN ({q})", tuple(arch_ids))
+            for r in await cur.fetchall():
+                titles[r["id"]] = r["stem"][:40] if r["stem"] else r["id"]
         # 倒计时 + 掌握度
         cur = await db.execute("SELECT exam_date FROM study_settings WHERE id=1")
         exam = datetime.date.fromisoformat((await cur.fetchone())["exam_date"])
@@ -31,11 +38,20 @@ async def study_home(request: Request):
         mastered = {r["subject"]: r["c"] for r in await cur.fetchall()}
         reviews = [i for i in items if i["kind"] == "review"]
         news = [i for i in items if i["kind"] == "new"]
+        # Fix 4: 今日进度条 — count done items from study_records
+        today_iso = datetime.date.today().isoformat()
+        cur = await db.execute(
+            "SELECT DISTINCT item_type,item_id FROM study_records WHERE plan_date=?",
+            (today_iso,))
+        done_set = {(r["item_type"], r["item_id"]) for r in await cur.fetchall()}
+        progress_done = sum(1 for it in items if (it["item_type"], it["item_id"]) in done_set)
+        progress_total = len(items)
     finally:
         await db.close()
     return _tpl(request, "study_today.html",
                 {"reviews": reviews, "news": news, "titles": titles,
-                 "days_left": days_left, "mastered": mastered})
+                 "days_left": days_left, "mastered": mastered,
+                 "progress_done": progress_done, "progress_total": progress_total})
 
 
 @router.get("/study/point/{pid}", response_class=HTMLResponse)
