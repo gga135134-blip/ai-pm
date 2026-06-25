@@ -2,6 +2,9 @@
 {% block title %}今日学习{% endblock %}
 {% block content %}
 <div class="max-w-2xl mx-auto px-3 py-4">
+  <div class="flex justify-end mb-1">
+    <a href="/study/settings" class="text-gray-400 text-xl px-1" title="提醒设置">⚙️</a>
+  </div>
   <div class="bg-white rounded-xl shadow-sm p-4 mb-4">
     <div class="text-sm text-gray-500">距考试</div>
     <div class="text-3xl font-bold text-purple-600">{{ days_left }} 天</div>

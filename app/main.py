@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 import json
 import logging
 import logging.handlers
@@ -83,6 +84,33 @@ async def startup():
     fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
     logging.getLogger().addHandler(fh)
     asyncio.create_task(_periodic_heal_loop())
+    asyncio.create_task(_study_reminder_loop())
+
+
+async def _study_reminder_loop():
+    """每 30 分钟检查一次；当前小时 == reminder_hour 且今天未发过 → 推送学习提醒。"""
+    from app.database import get_db
+    from app.services.study_engine import _settings
+    from app.services.notifier import send_daily_study_reminder
+    _log = logging.getLogger(__name__)
+    await asyncio.sleep(30)  # 启动后稍等，避免与 init_db 竞争
+    while True:
+        try:
+            db = await get_db()
+            try:
+                s = await _settings(db)
+                if s:
+                    now_hour = datetime.datetime.now().hour
+                    reminder_hour = s["reminder_hour"] if s["reminder_hour"] is not None else 8
+                    today = datetime.date.today().isoformat()
+                    last_sent = s["reminder_last_sent"] or ""
+                    if now_hour == reminder_hour and last_sent != today:
+                        await send_daily_study_reminder(db)
+            finally:
+                await db.close()
+        except Exception:
+            _log.exception("Study reminder loop error")
+        await asyncio.sleep(1800)  # 每 30 分钟检查
 
 
 async def _periodic_heal_loop():

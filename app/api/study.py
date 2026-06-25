@@ -111,6 +111,41 @@ async def study_review_page(request: Request):
     return _tpl(request, "study_review.html", {"due": due})
 
 
+@router.get("/study/settings", response_class=HTMLResponse)
+async def study_settings_page(request: Request):
+    db = await get_db()
+    try:
+        cur = await db.execute("SELECT * FROM study_settings WHERE id=1")
+        s = dict(await cur.fetchone())
+    finally:
+        await db.close()
+    from app.api.settings import load_settings
+    cfg = load_settings()
+    msg = request.query_params.get("msg", "")
+    return _tpl(request, "study_settings.html",
+                {"s": s, "has_key": bool(cfg.get("serverchan_key")), "msg": msg})
+
+
+@router.post("/study/settings")
+async def study_settings_save(request: Request, reminder_hour: int = Form(8)):
+    db = await get_db()
+    try:
+        await db.execute(
+            "UPDATE study_settings SET reminder_hour=? WHERE id=1", (reminder_hour,))
+        await db.commit()
+    finally:
+        await db.close()
+    return RedirectResponse("/study/settings?msg=saved", status_code=303)
+
+
+@router.post("/study/settings/test")
+async def study_settings_test(request: Request):
+    from app.services.notifier import notify_wechat
+    result = await notify_wechat("✅ 推送测试", "ai-pm 学习模块推送测试成功！距考试还有 N 天，加油！")
+    msg = "test_ok" if result["sent"] else f"test_fail"
+    return RedirectResponse(f"/study/settings?msg={msg}", status_code=303)
+
+
 @router.post("/study/record")
 async def study_record(request: Request, item_type: str = Form(...),
                        item_id: str = Form(...), action: str = Form(...),

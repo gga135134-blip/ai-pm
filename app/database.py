@@ -177,7 +177,9 @@ CREATE TABLE IF NOT EXISTS study_settings (
     subject_weights TEXT DEFAULT '{"建筑实务":0.32,"管理":0.32,"法规":0.20,"经济":0.16}',
     exam_date DATE DEFAULT '2026-09-12',
     sprint_date DATE DEFAULT '2026-08-15',
-    daily_new_target INTEGER DEFAULT 20
+    daily_new_target INTEGER DEFAULT 20,
+    reminder_hour INTEGER DEFAULT 8,
+    reminder_last_sent DATE DEFAULT NULL
 );
 """
 
@@ -203,6 +205,8 @@ MIGRATIONS = [
     "ALTER TABLE notes ADD COLUMN is_core BOOLEAN DEFAULT 0",
     "ALTER TABLE notes ADD COLUMN external_id TEXT DEFAULT ''",
     "ALTER TABLE notes ADD COLUMN share_token TEXT DEFAULT NULL",
+    "ALTER TABLE study_settings ADD COLUMN reminder_hour INTEGER DEFAULT 8",
+    "ALTER TABLE study_settings ADD COLUMN reminder_last_sent DATE DEFAULT NULL",
 ]
 
 

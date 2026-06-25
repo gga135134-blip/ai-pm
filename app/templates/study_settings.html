@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}学习提醒设置{% endblock %}
+{% block content %}
+<div class="max-w-lg mx-auto px-4 py-6">
+  <div class="flex items-center gap-2 mb-5">
+    <a href="/study" class="text-gray-400 text-sm">← 返回学习</a>
+  </div>
+  <h1 class="text-xl font-bold text-gray-800 mb-1">学习提醒设置</h1>
+  <p class="text-sm text-gray-500 mb-6">每天定时推送微信提醒，督促打卡</p>
+
+  {% if msg == 'saved' %}
+  <div class="bg-green-50 border border-green-200 text-green-700 text-sm rounded-lg px-4 py-3 mb-4">
+    ✅ 已保存
+  </div>
+  {% elif msg == 'test_ok' %}
+  <div class="bg-green-50 border border-green-200 text-green-700 text-sm rounded-lg px-4 py-3 mb-4">
+    ✅ 测试推送成功！去微信查看
+  </div>
+  {% elif msg == 'test_fail' %}
+  <div class="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3 mb-4">
+    ❌ 推送失败，请确认 Server酱 Key 已在全局设置中配置
+  </div>
+  {% endif %}
+
+  <!-- Server酱 Key 状态 -->
+  <div class="bg-white rounded-xl shadow-sm p-4 mb-4">
+    <div class="text-sm font-medium text-gray-700 mb-2">推送渠道（Server酱）</div>
+    {% if has_key %}
+    <div class="flex items-center gap-2 text-sm text-green-600">
+      <span>✅ Key 已配置</span>
+    </div>
+    {% else %}
+    <div class="text-sm text-red-500 mb-2">⚠️ 尚未配置 Server酱 Key</div>
+    <p class="text-xs text-gray-400">
+      请先去
+      <a href="/settings" class="text-blue-500 underline">全局设置</a>
+      填入 Server酱 SendKey（在
+      <span class="font-mono">sct.ftqq.com</span> 注册获取）
+    </p>
+    {% endif %}
+  </div>
+
+  <!-- 提醒时间设置 -->
+  <form method="post" action="/study/settings" class="bg-white rounded-xl shadow-sm p-4 mb-4">
+    <div class="text-sm font-medium text-gray-700 mb-3">每日提醒时间</div>
+    <div class="flex items-center gap-3">
+      <select name="reminder_hour"
+              class="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 bg-gray-50">
+        {% for h in range(6, 23) %}
+        <option value="{{ h }}" {% if s.reminder_hour == h %}selected{% endif %}>
+          {{ "%02d"|format(h) }}:00
+        </option>
+        {% endfor %}
+      </select>
+      <button type="submit"
+              class="bg-purple-600 text-white text-sm font-medium px-5 py-2 rounded-lg active:bg-purple-700">
+        保存
+      </button>
+    </div>
+    <p class="text-xs text-gray-400 mt-2">建议设为早上 07:00–08:00，起床后第一条微信</p>
+  </form>
+
+  <!-- 测试推送 -->
+  <form method="post" action="/study/settings/test">
+    <button type="submit"
+            class="w-full border border-gray-300 text-gray-600 text-sm font-medium py-3 rounded-xl active:bg-gray-50 {% if not has_key %}opacity-40 pointer-events-none{% endif %}">
+      发送测试推送
+    </button>
+  </form>
+
+  <p class="text-xs text-gray-400 text-center mt-4">
+    提醒内容包含：今日复习/新学数量、掌握进度、距考试倒计时
+  </p>
+</div>
+{% endblock %}
