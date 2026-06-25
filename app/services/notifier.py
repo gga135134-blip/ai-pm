@@ -55,6 +55,57 @@ async def _send_pushplus(token: str, title: str, content: str):
         resp.raise_for_status()
 
 
+async def send_deadline_reminder(db, checkpoint: str, label: str) -> bool:
+    """检查今日进度，未完成则催促推送。checkpoint: noon / evening / night"""
+    from app.services.study_engine import _settings, get_or_build_today_plan
+
+    s = await _settings(db)
+    col = f"reminded_{checkpoint}"
+    today = dt.date.today().isoformat()
+    if (s[col] or "") == today:
+        return False  # 今天该节点已发过
+
+    items = await get_or_build_today_plan(db)
+    total = len(items)
+    if total == 0:
+        return False
+
+    cur = await db.execute(
+        "SELECT DISTINCT item_type,item_id FROM study_records WHERE plan_date=?", (today,))
+    done_set = {(r["item_type"], r["item_id"]) for r in await cur.fetchall()}
+    done = sum(1 for it in items if (it["item_type"], it["item_id"]) in done_set)
+    remaining = total - done
+    if remaining <= 0:
+        return False  # 已全部完成，不打扰
+
+    exam = dt.date.fromisoformat(s["exam_date"])
+    days_left = (exam - dt.date.today()).days
+
+    icons = {"noon": "⏰", "evening": "🔥", "night": "🚨"}
+    urges = {
+        "noon": "下午还有时间，抓紧！",
+        "evening": "晚上最后机会，不能拖！",
+        "night": "今天还没搞完，睡前必须拿下！",
+    }
+    icon = icons.get(checkpoint, "📢")
+    urge = urges.get(checkpoint, "")
+
+    title = f"{icon} 学习催促（{label}）| 还差 {remaining} 项"
+    lines = [
+        f"**距考试还有 {days_left} 天**",
+        "",
+        f"今日进度：已完成 **{done} / {total}**，还差 **{remaining}** 项",
+        "",
+        urge,
+    ]
+    result = await notify_wechat(title, "\n".join(lines))
+    if result["sent"]:
+        await db.execute(
+            f"UPDATE study_settings SET {col}=? WHERE id=1", (today,))
+        await db.commit()
+    return result["sent"]
+
+
 async def send_daily_study_reminder(db) -> bool:
     """构建今日学习提醒消息并通过已配置渠道推送；成功后记录 reminder_last_sent。"""
     from app.services.study_engine import _settings, get_or_build_today_plan

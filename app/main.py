@@ -88,10 +88,10 @@ async def startup():
 
 
 async def _study_reminder_loop():
-    """每 30 分钟检查一次；当前小时 == reminder_hour 且今天未发过 → 推送学习提醒。"""
+    """每 30 分钟检查：晨间提醒 + 12/18/22 点截止催促（未完成才发）。"""
     from app.database import get_db
     from app.services.study_engine import _settings
-    from app.services.notifier import send_daily_study_reminder
+    from app.services.notifier import send_daily_study_reminder, send_deadline_reminder
     _log = logging.getLogger(__name__)
     await asyncio.sleep(30)  # 启动后稍等，避免与 init_db 竞争
     while True:
@@ -101,11 +101,18 @@ async def _study_reminder_loop():
                 s = await _settings(db)
                 if s:
                     now_hour = datetime.datetime.now().hour
-                    reminder_hour = s["reminder_hour"] if s["reminder_hour"] is not None else 8
                     today = datetime.date.today().isoformat()
-                    last_sent = s["reminder_last_sent"] or ""
-                    if now_hour == reminder_hour and last_sent != today:
+                    # 晨间提醒（可配置时间，默认 8 点）
+                    reminder_hour = s["reminder_hour"] if s["reminder_hour"] is not None else 8
+                    if now_hour == reminder_hour and (s["reminder_last_sent"] or "") != today:
                         await send_daily_study_reminder(db)
+                    # 截止催促（12 / 18 / 22 点，未完成才推）
+                    if now_hour == 12:
+                        await send_deadline_reminder(db, "noon", "12:00")
+                    elif now_hour == 18:
+                        await send_deadline_reminder(db, "evening", "18:00")
+                    elif now_hour == 22:
+                        await send_deadline_reminder(db, "night", "22:00")
             finally:
                 await db.close()
         except Exception:

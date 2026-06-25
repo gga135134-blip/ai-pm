@@ -127,11 +127,14 @@ async def study_settings_page(request: Request):
 
 
 @router.post("/study/settings")
-async def study_settings_save(request: Request, reminder_hour: int = Form(8)):
+async def study_settings_save(request: Request,
+                               reminder_hour: int = Form(8),
+                               daily_new_target: int = Form(150)):
     db = await get_db()
     try:
         await db.execute(
-            "UPDATE study_settings SET reminder_hour=? WHERE id=1", (reminder_hour,))
+            "UPDATE study_settings SET reminder_hour=?, daily_new_target=? WHERE id=1",
+            (reminder_hour, max(1, daily_new_target)))
         await db.commit()
     finally:
         await db.close()
