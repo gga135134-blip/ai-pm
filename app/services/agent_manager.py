@@ -188,10 +188,22 @@ async def execute_task(task_id: str) -> dict:
         "step": 0, "tool": "思考中…", "args_brief": "",
         "updated_at": _dt.now().isoformat(),
     })
-    # 带工具执行：AI 能联网、跑代码、读写文件，真正动手干活
+
+    # ── 路由：openclaw 任务交给本机 OpenClaw Agent 执行 ──
     try:
-        result = await run_agent_loop(prompt, system=with_constitution(EXECUTE_SYSTEM),
-                                       project_id=task.get("project_id"), on_step=_on_step)
+        if task.get("ai_model") == "openclaw":
+            from app.services.openclaw_client import ask_openclaw
+            update_worker(task["id"], {
+                "task_id": task["id"], "task_title": task["title"],
+                "project_id": task.get("project_id"),
+                "step": 1, "tool": "OpenClaw 执行中…", "args_brief": "",
+                "updated_at": _dt.now().isoformat(),
+            })
+            result = await ask_openclaw(prompt, system=with_constitution(EXECUTE_SYSTEM))
+        else:
+            # 带工具执行：AI 能联网、跑代码、读写文件，真正动手干活
+            result = await run_agent_loop(prompt, system=with_constitution(EXECUTE_SYSTEM),
+                                           project_id=task.get("project_id"), on_step=_on_step)
     finally:
         clear_worker(task["id"])
 

@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     serverchan_key: str = ""
     pushplus_token: str = ""
 
+    # OpenClaw Agent
+    openclaw_base_url: str = "http://127.0.0.1:18791"
+    openclaw_token: str = ""
+
     class Config:
         env_file = str(BASE_DIR / ".env")
         env_file_encoding = "utf-8"
