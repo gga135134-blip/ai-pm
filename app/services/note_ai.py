@@ -367,6 +367,95 @@ async def apply_organize_actions(actions: list[dict]) -> int:
     return updated
 
 
+STRUCTURE_SYSTEM = """你是知识库整理专家。读完一个项目的全部笔记，设计一套**直观、按内容主题**的文件夹结构，并把每篇笔记分到合适的文件夹。
+
+输出要求（严格遵守）：
+1. 文件夹名用「编号_主题」格式：01_品牌定位、02_产品方案、03_出海政策… 编号两位、从 01 起、按逻辑顺序排。
+2. 层级最多再分一层（主题夹 / 子主题夹），能不分子层就不分。绝大多数情况只要一层主题夹。
+3. 主题名要贴合真实内容，是给人看的知识库目录；不要用"配置/资料/执行/文档"这种抽象功能词。
+4. 来源是 auto_progress 或 master_ai 的笔记（AI 自动产生的进度/工作记录）一律归到 `00_工作记录`，不要混进知识主题里。
+5. 每个文件夹至少 1 篇笔记，不要造空夹。笔记少（<6 篇）就少分几类，别硬凑。
+6. 每一篇笔记都必须出现在 assignments 里，一篇都不能漏。
+
+只返回 JSON（不要任何额外文字、不要 markdown 代码块以外的解释）：
+{
+  "summary": "一句话说明你怎么分类的",
+  "folders": ["00_工作记录", "01_品牌定位", "02_产品方案", "03_出海政策/3-1_合规要求"],
+  "assignments": [{"id": "笔记完整id", "folder": "01_品牌定位"}]
+}
+folders 和 assignments 里的 folder 都是**不含项目名**的相对路径。id 必须原样使用上面给你的完整 id。"""
+
+
+async def propose_folder_structure(project_id: str, model: str = "auto") -> dict:
+    """AI 读项目全部笔记内容，设计一套编号主题文件夹结构（≤3 层）并分配每篇。
+    不写库；前端确认后复用 apply_organize_actions（/notes/chat/apply）应用。"""
+    db = await get_db()
+    try:
+        cursor = await db.execute("SELECT name FROM projects WHERE id = ?", (project_id,))
+        prow = await cursor.fetchone()
+        project_name = (prow["name"] if prow else "").strip()
+        cursor = await db.execute(
+            "SELECT id, title, content, folder, source_type, tags FROM notes "
+            "WHERE project_id = ? AND deleted_at IS NULL ORDER BY updated_at DESC",
+            (project_id,),
+        )
+        notes = [dict(r) for r in await cursor.fetchall()]
+    finally:
+        await db.close()
+
+    if not notes:
+        return {"summary": "该项目还没有笔记", "project_name": project_name,
+                "structure": [], "actions": [], "model": "none", "cost": 0}
+
+    lines = []
+    for n in notes:
+        preview = (n["content"] or "")[:300].replace("\n", " ")
+        lines.append(f"- id: {n['id']}\n  标题: {n['title']}\n  来源: {n['source_type'] or '手动'}\n  内容预览: {preview}")
+    prompt = f"项目名：{project_name}\n共 {len(notes)} 篇笔记：\n\n" + "\n\n".join(lines)
+
+    result = await ask_ai(prompt=prompt, model=model, task_type="analysis", system_prompt=STRUCTURE_SYSTEM)
+
+    try:
+        text = result["response"]
+        if "```json" in text:
+            text = text.split("```json")[1].split("```")[0]
+        elif "```" in text:
+            text = text.split("```")[1].split("```")[0]
+        parsed = json.loads(text.strip())
+    except (json.JSONDecodeError, IndexError):
+        return {"summary": "AI 返回解析失败，请重试。原始回复：" + result["response"][:300],
+                "project_name": project_name, "structure": [], "actions": [],
+                "model": result["model"], "cost": result["cost"]}
+
+    title_map = {n["id"]: n["title"] for n in notes}
+    folder_map = {n["id"]: (n["folder"] or "") for n in notes}
+    prefix = f"{project_name}/" if project_name else ""
+
+    actions = []
+    for a in parsed.get("assignments", []):
+        nid = a.get("id")
+        sub = (a.get("folder") or "").strip().strip("/")
+        if nid in title_map and sub:
+            actions.append({
+                "id": nid,
+                "title": title_map[nid],
+                "old_folder": folder_map[nid],
+                "folder": prefix + sub,
+                "add_tags": [],
+            })
+
+    structure = sorted({prefix + f.strip().strip("/") for f in parsed.get("folders", []) if f and f.strip()})
+
+    return {
+        "summary": parsed.get("summary", ""),
+        "project_name": project_name,
+        "structure": structure,
+        "actions": actions,
+        "model": result["model"],
+        "cost": result["cost"],
+    }
+
+
 async def chat_with_notes(question: str, history: str = "", model: str = "auto", scope: str = "auto") -> dict:
     """知识库 AI 助手：按范围取笔记，再让 AI 按指令执行（提问/整理/分类/总结）
 

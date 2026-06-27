@@ -5,7 +5,7 @@ from fastapi import APIRouter, Request, Form, Query, UploadFile, File
 from fastapi.responses import HTMLResponse, RedirectResponse
 from app.database import get_db
 from app.services.importer import import_file, import_folder, import_upload, import_url, save_image_upload
-from app.services.note_ai import classify_content, summarize_notes, generate_weekly_report, chat_with_notes, organize_notes, apply_organize_actions, analyze_image_paths
+from app.services.note_ai import classify_content, summarize_notes, generate_weekly_report, chat_with_notes, organize_notes, apply_organize_actions, analyze_image_paths, propose_folder_structure
 from app.services.backup import create_backup, list_backups, cleanup_old_backups
 
 router = APIRouter()
@@ -400,6 +400,35 @@ async def notes_chat_apply(actions: str = Form(...)):
         return JSONResponse({"error": "方案数据格式错误"}, status_code=400)
     updated = await apply_organize_actions(action_list)
     return JSONResponse({"updated": updated})
+
+
+@router.get("/projects/{project_id}/organize", response_class=HTMLResponse)
+async def project_organize_page(request: Request, project_id: str):
+    """AI 智能整理页：扫描项目笔记 → 提议主题文件夹结构 → 确认应用。"""
+    db = await get_db()
+    try:
+        cursor = await db.execute("SELECT id, name, code FROM projects WHERE id = ?", (project_id,))
+        row = await cursor.fetchone()
+        project = dict(row) if row else None
+        cursor = await db.execute(
+            "SELECT COUNT(*) as cnt FROM notes WHERE project_id = ? AND deleted_at IS NULL",
+            (project_id,),
+        )
+        note_count = (await cursor.fetchone())["cnt"]
+    finally:
+        await db.close()
+    return request.app.state.templates.TemplateResponse(
+        request, "note_organize.html",
+        {"request": request, "project": project, "note_count": note_count},
+    )
+
+
+@router.post("/projects/{project_id}/organize/propose")
+async def project_organize_propose(project_id: str, model: str = Form("auto")):
+    """AI 提议主题结构（不写库），返回 JSON 供前端预览。"""
+    from fastapi.responses import JSONResponse
+    result = await propose_folder_structure(project_id, model)
+    return JSONResponse(result)
 
 
 @router.post("/notes/chat/save")

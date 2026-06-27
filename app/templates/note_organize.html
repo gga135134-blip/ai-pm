@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% block title %}AI 智能整理 - {{ project.name if project else '' }}{% endblock %}
+{% block content %}
+<style>
+.org-card{border:1px solid #e5e7eb;border-radius:10px;padding:12px}
+.org-folder{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+
+<div class="mb-4 text-sm text-gray-400">
+    <a href="/notes" class="hover:text-gray-600">知识库</a> /
+    {% if project %}<a href="/projects/{{ project.id }}" class="hover:text-gray-600">{{ project.name }}</a> / {% endif %}
+    <span class="text-gray-600">AI 智能整理</span>
+</div>
+
+{% if not project %}
+<div class="bg-white rounded-xl shadow-sm p-12 text-center">
+    <p class="text-gray-600">项目不存在</p>
+</div>
+{% else %}
+
+<div class="max-w-3xl">
+    <h1 class="text-xl font-bold text-gray-800 mb-1">🤖 AI 智能整理 · {{ project.name }}</h1>
+    <p class="text-sm text-gray-400 mb-5">AI 读完本项目 {{ note_count }} 篇笔记，按内容主题生成编号文件夹（最多 3 层），你确认后再应用。只改归类，不删笔记，可逆。</p>
+
+    {% if note_count == 0 %}
+    <div class="bg-white rounded-xl shadow-sm p-10 text-center">
+        <div class="text-3xl mb-3">📭</div>
+        <p class="text-gray-600">这个项目还没有笔记，没什么可整理的。</p>
+    </div>
+    {% else %}
+
+    <!-- 第一步：发起整理 -->
+    <div id="org-start" class="bg-white rounded-xl shadow-sm p-5">
+        <div class="flex flex-wrap items-center gap-3">
+            <select id="org-model" class="border rounded-lg px-3 py-2 text-sm outline-none">
+                <option value="auto">自动选模型</option>
+                <option value="deepseek">DeepSeek（省钱）</option>
+                <option value="claude">Claude（质量高）</option>
+                <option value="openai">OpenAI</option>
+            </select>
+            <button id="org-go" onclick="propose()"
+                class="bg-violet-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-violet-700 transition">
+                🤖 开始 AI 整理
+            </button>
+        </div>
+    </div>
+
+    <!-- 加载中 -->
+    <div id="org-loading" class="bg-white rounded-xl shadow-sm p-10 text-center mt-4" style="display:none">
+        <span style="display:inline-block;width:22px;height:22px;border:3px solid #8b5cf6;border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite"></span>
+        <p class="text-sm text-gray-500 mt-3">AI 正在读笔记、设计结构… <span id="org-elapsed">0</span> 秒</p>
+    </div>
+
+    <!-- 结果预览 -->
+    <div id="org-result" class="mt-4" style="display:none">
+        <div class="bg-violet-50 border border-violet-100 rounded-xl p-4 mb-4">
+            <div class="text-sm text-violet-800" id="org-summary"></div>
+            <div class="text-xs text-violet-400 mt-1" id="org-meta"></div>
+        </div>
+        <div class="bg-white rounded-xl shadow-sm p-5">
+            <div class="flex items-center justify-between mb-3">
+                <h3 class="text-sm font-semibold text-gray-700">逐篇归类（可手动改「新文件夹」后再应用）</h3>
+                <span class="text-xs text-gray-400" id="org-count"></span>
+            </div>
+            <div id="org-list" class="space-y-2"></div>
+            <div class="flex items-center gap-3 mt-5 pt-4 border-t">
+                <button id="org-apply" onclick="applyOrganize()"
+                    class="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-blue-700 transition">✅ 应用整理</button>
+                <button onclick="propose()" class="text-sm text-gray-500 px-3 py-2 rounded-lg hover:bg-gray-100 transition">↻ 重新生成</button>
+                <span class="text-xs text-gray-400">应用后回到知识库就能看到新结构</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 完成 -->
+    <div id="org-done" class="bg-white rounded-xl shadow-sm p-10 text-center mt-4" style="display:none">
+        <div class="text-3xl mb-3">✅</div>
+        <p class="text-gray-700 font-medium mb-1">整理完成，已重新归类 <span id="org-updated">0</span> 篇笔记</p>
+        <div class="flex items-center justify-center gap-3 mt-4">
+            <a href="/notes?project_id={{ project.id }}" class="text-sm bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition">去知识库看看 →</a>
+            <a href="/projects/{{ project.id }}" class="text-sm text-gray-500 px-4 py-2 rounded-lg hover:bg-gray-100 transition">回项目</a>
+        </div>
+    </div>
+</div>
+
+<script>
+var PROJECT_ID = "{{ project.id }}";
+var _timer = null;
+
+function _esc(s){ var d=document.createElement('div'); d.textContent=s==null?'':s; return d.innerHTML; }
+
+function propose() {
+    document.getElementById('org-start').style.display = 'none';
+    document.getElementById('org-result').style.display = 'none';
+    document.getElementById('org-done').style.display = 'none';
+    var load = document.getElementById('org-loading');
+    load.style.display = 'block';
+    var t0 = Date.now();
+    _timer = setInterval(function(){ var el=document.getElementById('org-elapsed'); if(el) el.textContent = Math.floor((Date.now()-t0)/1000); }, 1000);
+
+    var fd = new FormData();
+    fd.append('model', document.getElementById('org-model').value);
+    fetch('/projects/' + PROJECT_ID + '/organize/propose', { method:'POST', body: fd })
+        .then(function(r){ return r.json(); })
+        .then(function(data){
+            clearInterval(_timer);
+            load.style.display = 'none';
+            renderResult(data);
+        })
+        .catch(function(){
+            clearInterval(_timer);
+            load.style.display = 'none';
+            document.getElementById('org-start').style.display = 'block';
+            alert('生成失败，请重试');
+        });
+}
+
+function renderResult(data) {
+    if (!data.actions || !data.actions.length) {
+        document.getElementById('org-start').style.display = 'block';
+        alert(data.summary || 'AI 没有给出可用的整理方案，请重试');
+        return;
+    }
+    document.getElementById('org-summary').textContent = data.summary || '';
+    document.getElementById('org-meta').textContent = '模型：' + (data.model || '—') + ' · 本次花费 $' + (data.cost || 0).toFixed(4);
+    document.getElementById('org-count').textContent = data.actions.length + ' 篇';
+
+    var list = document.getElementById('org-list');
+    list.innerHTML = data.actions.map(function(a){
+        var oldf = a.old_folder || '未分类';
+        return '<div class="org-card" data-id="' + _esc(a.id) + '">'
+            + '<div class="text-sm font-medium text-gray-800">' + _esc(a.title) + '</div>'
+            + '<div class="flex items-center gap-2 mt-2 text-xs">'
+            + '<span class="text-gray-400 flex-shrink-0">原：' + _esc(oldf) + '</span>'
+            + '<span class="text-gray-300 flex-shrink-0">→</span>'
+            + '<input class="org-folder flex-1 border rounded px-2 py-1 text-xs text-gray-700 outline-none focus:ring-2 focus:ring-blue-400" value="' + _esc(a.folder) + '">'
+            + '</div></div>';
+    }).join('');
+    document.getElementById('org-result').style.display = 'block';
+}
+
+function applyOrganize() {
+    var rows = document.querySelectorAll('#org-list .org-card');
+    var actions = [];
+    rows.forEach(function(r){
+        var folder = r.querySelector('.org-folder').value.trim();
+        if (folder) actions.push({ id: r.dataset.id, folder: folder });
+    });
+    if (!actions.length) { alert('没有可应用的归类'); return; }
+
+    var btn = document.getElementById('org-apply');
+    btn.disabled = true; btn.textContent = '应用中…';
+    var fd = new FormData();
+    fd.append('actions', JSON.stringify(actions));
+    fetch('/notes/chat/apply', { method:'POST', body: fd })
+        .then(function(r){ return r.json(); })
+        .then(function(data){
+            if (data.error) { alert(data.error); btn.disabled=false; btn.textContent='✅ 应用整理'; return; }
+            document.getElementById('org-result').style.display = 'none';
+            document.getElementById('org-updated').textContent = data.updated || actions.length;
+            document.getElementById('org-done').style.display = 'block';
+        })
+        .catch(function(){ alert('应用失败，请重试'); btn.disabled=false; btn.textContent='✅ 应用整理'; });
+}
+</script>
+{% endif %}
+</div>
+{% endif %}
+{% endblock %}

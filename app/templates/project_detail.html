@@ -295,7 +295,14 @@ function switchView(name){
         </div>
     </div>
     <div class="bg-white rounded-xl shadow-sm p-6">
-        <h3 class="text-sm font-semibold text-gray-700 mb-4">项目资料 ({{ project_notes|length }})</h3>
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-sm font-semibold text-gray-700">项目资料 ({{ project_notes|length }})</h3>
+            {% if project_notes %}
+            <a href="/projects/{{ project.id }}/organize"
+                class="text-xs px-3 py-1.5 border border-violet-200 text-violet-700 rounded-lg hover:bg-violet-50 transition flex-shrink-0"
+                title="AI 读完所有笔记，按内容主题自动归类到编号文件夹">🤖 AI 智能整理</a>
+            {% endif %}
+        </div>
         {% if project_notes %}
         <div class="space-y-2">
             {% for n in project_notes %}
