@@ -57,13 +57,14 @@ async def _write_progress_note(project: dict, task: dict, status_label: str, cos
         f"本次费用：${cost:.4f}\n\n"
         f"## 执行结果\n{result_snippet}"
     )
+    from app.services.folder_template import PROGRESS_SUBPATH
     db = await get_db()
     try:
         await db.execute(
             """INSERT INTO notes (id, title, content, project_id, task_id, tags, source_type, folder, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, '进度,自动执行', 'auto_progress', ?, ?, ?)""",
             (str(uuid.uuid4()), f"[{status_label}] {task['title']}", content,
-             project["id"], task["id"], f"{project['name']}/进度", now, now),
+             project["id"], task["id"], f"{project['name']}/{PROGRESS_SUBPATH}", now, now),
         )
         await db.commit()
     finally:
