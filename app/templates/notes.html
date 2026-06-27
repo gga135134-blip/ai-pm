@@ -47,12 +47,14 @@
             <button onclick="event.stopPropagation();document.getElementById('nb-ai-menu').classList.toggle('open')"
                 class="px-4 py-2 border rounded-lg text-sm text-violet-600 hover:bg-violet-50 transition">🤖 AI ▾</button>
             <div class="nb-ddmenu" id="nb-ai-menu">
+                <a href="/notes/organize" class="block px-4 py-3 text-sm text-violet-700 font-medium hover:bg-violet-50">🤖 AI 智能整理（按项目生成文件夹）</a>
+                <div class="border-t border-gray-100"></div>
                 <a href="/notes/chat" class="block px-4 py-3 text-sm text-gray-700 hover:bg-gray-50">💬 AI 助手（问答）</a>
                 <a href="/notes/classify" class="block px-4 py-3 text-sm text-gray-700 hover:bg-gray-50">🏷️ AI 分类（粘贴归档）</a>
                 <div class="border-t border-gray-100"></div>
                 <form method="POST" action="/notes/summarize">
                     <input type="hidden" name="tag" value="{{ current_tag }}">
-                    <button class="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50">📋 AI 整理当前视图</button>
+                    <button class="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50">📋 AI 整理当前视图（生成总结）</button>
                 </form>
                 <div class="border-t border-gray-100"></div>
                 <a href="/notes/weekly" class="block px-4 py-3 text-sm text-gray-700 hover:bg-gray-50">📰 生成周报</a>

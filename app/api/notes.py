@@ -402,6 +402,27 @@ async def notes_chat_apply(actions: str = Form(...)):
     return JSONResponse({"updated": updated})
 
 
+@router.get("/notes/organize", response_class=HTMLResponse)
+async def notes_organize_picker(request: Request):
+    """从知识库进入 AI 智能整理：先选一个项目（整理是按项目归类的）。"""
+    db = await get_db()
+    try:
+        cursor = await db.execute("""
+            SELECT p.id, p.name, p.code, COUNT(n.id) as note_count
+            FROM projects p
+            LEFT JOIN notes n ON n.project_id = p.id AND n.deleted_at IS NULL
+            GROUP BY p.id
+            ORDER BY p.code, p.name
+        """)
+        projects = [dict(r) for r in await cursor.fetchall()]
+    finally:
+        await db.close()
+    return request.app.state.templates.TemplateResponse(
+        request, "note_organize_picker.html",
+        {"request": request, "projects": projects},
+    )
+
+
 @router.get("/projects/{project_id}/organize", response_class=HTMLResponse)
 async def project_organize_page(request: Request, project_id: str):
     """AI 智能整理页：扫描项目笔记 → 提议主题文件夹结构 → 确认应用。"""
