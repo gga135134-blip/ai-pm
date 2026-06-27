@@ -1,4 +1,4 @@
-import datetime, json
+import datetime, json, random
 from fastapi import APIRouter, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from app.database import get_db
@@ -43,15 +43,21 @@ async def study_home(request: Request):
         cur = await db.execute(
             "SELECT DISTINCT item_type,item_id FROM study_records WHERE plan_date=?",
             (today_iso,))
-        done_set = {(r["item_type"], r["item_id"]) for r in await cur.fetchall()}
+        done_rows = await cur.fetchall()
+        done_set = {(r["item_type"], r["item_id"]) for r in done_rows}
+        done_keys = {f"{r['item_type']}:{r['item_id']}" for r in done_rows}
         progress_done = sum(1 for it in items if (it["item_type"], it["item_id"]) in done_set)
         progress_total = len(items)
+        # 今日已学科目，供练习入口判断
+        studied_subjects = list({it["subject"] for it in items
+                                  if (it["item_type"], it["item_id"]) in done_set})
     finally:
         await db.close()
     return _tpl(request, "study_today.html",
                 {"reviews": reviews, "news": news, "titles": titles,
                  "days_left": days_left, "mastered": mastered,
-                 "progress_done": progress_done, "progress_total": progress_total})
+                 "progress_done": progress_done, "progress_total": progress_total,
+                 "done_keys": done_keys, "studied_subjects": studied_subjects})
 
 
 @router.get("/study/point/{pid}", response_class=HTMLResponse)
@@ -96,6 +102,62 @@ async def study_exam(request: Request, subject: str):
     finally:
         await db.close()
     return _tpl(request, "study_exam.html", {"subject": subject, "questions": qs})
+
+
+@router.get("/study/practice", response_class=HTMLResponse)
+async def study_practice(request: Request):
+    db = await get_db()
+    try:
+        today_iso = datetime.date.today().isoformat()
+        # 今日已学考点 ID
+        cur = await db.execute(
+            "SELECT DISTINCT item_id FROM study_records WHERE plan_date=? AND item_type='point'",
+            (today_iso,))
+        studied_ids = [r["item_id"] for r in await cur.fetchall()]
+        # 今日已学科目
+        studied_subjects = []
+        if studied_ids:
+            q = ",".join("?" for _ in studied_ids)
+            cur = await db.execute(
+                f"SELECT DISTINCT subject FROM study_points WHERE id IN ({q})", tuple(studied_ids))
+            studied_subjects = [r["subject"] for r in await cur.fetchall()]
+        # 优先取与今日考点关联的题目
+        practice_qs, seen = [], set()
+        if studied_ids:
+            cur = await db.execute(
+                "SELECT * FROM study_questions WHERE qtype IN ('单选','多选')")
+            for r in await cur.fetchall():
+                d = dict(r)
+                try:
+                    maps = json.loads(d["maps_to"])
+                except Exception:
+                    maps = []
+                if any(m in studied_ids for m in maps) and d["id"] not in seen:
+                    d["options"] = json.loads(d["options"])
+                    practice_qs.append(d)
+                    seen.add(d["id"])
+        # 不足 5 题则从今日科目的 2026 密卷补充
+        if len(practice_qs) < 5 and studied_subjects:
+            need = 10 - len(practice_qs)
+            for subj in studied_subjects:
+                cur = await db.execute(
+                    "SELECT * FROM study_questions WHERE subject=? AND source='2026预测密卷'"
+                    " AND qtype IN ('单选','多选') ORDER BY RANDOM() LIMIT ?",
+                    (subj, need))
+                for r in await cur.fetchall():
+                    d = dict(r)
+                    if d["id"] not in seen:
+                        d["options"] = json.loads(d["options"])
+                        practice_qs.append(d)
+                        seen.add(d["id"])
+                        need -= 1
+                if need <= 0:
+                    break
+        random.shuffle(practice_qs)
+        practice_qs = practice_qs[:10]
+    finally:
+        await db.close()
+    return _tpl(request, "study_practice.html", {"questions": practice_qs})
 
 
 @router.get("/study/review", response_class=HTMLResponse)
