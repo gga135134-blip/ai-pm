@@ -415,27 +415,43 @@ async def notes_organize_picker(request: Request):
             ORDER BY p.code, p.name
         """)
         projects = [dict(r) for r in await cursor.fetchall()]
+        # 未分类/个人零散笔记（不属于任何项目、且没文件夹）
+        cursor = await db.execute(
+            "SELECT COUNT(*) as cnt FROM notes "
+            "WHERE project_id IS NULL AND (folder IS NULL OR folder = '') AND deleted_at IS NULL"
+        )
+        unfiled_count = (await cursor.fetchone())["cnt"]
     finally:
         await db.close()
     return request.app.state.templates.TemplateResponse(
         request, "note_organize_picker.html",
-        {"request": request, "projects": projects},
+        {"request": request, "projects": projects, "unfiled_count": unfiled_count},
     )
 
 
 @router.get("/projects/{project_id}/organize", response_class=HTMLResponse)
 async def project_organize_page(request: Request, project_id: str):
-    """AI 智能整理页：扫描项目笔记 → 提议主题文件夹结构 → 确认应用。"""
+    """AI 智能整理页：扫描项目笔记 → 提议主题文件夹结构 → 确认应用。
+    project_id == "__unfiled__" 时整理未归项目的个人零散笔记。"""
+    from app.services.note_ai import UNFILED_SCOPE
     db = await get_db()
     try:
-        cursor = await db.execute("SELECT id, name, code FROM projects WHERE id = ?", (project_id,))
-        row = await cursor.fetchone()
-        project = dict(row) if row else None
-        cursor = await db.execute(
-            "SELECT COUNT(*) as cnt FROM notes WHERE project_id = ? AND deleted_at IS NULL",
-            (project_id,),
-        )
-        note_count = (await cursor.fetchone())["cnt"]
+        if project_id == UNFILED_SCOPE:
+            cursor = await db.execute(
+                "SELECT COUNT(*) as cnt FROM notes "
+                "WHERE project_id IS NULL AND (folder IS NULL OR folder = '') AND deleted_at IS NULL"
+            )
+            note_count = (await cursor.fetchone())["cnt"]
+            project = {"id": UNFILED_SCOPE, "name": "个人笔记（未归项目）", "code": ""}
+        else:
+            cursor = await db.execute("SELECT id, name, code FROM projects WHERE id = ?", (project_id,))
+            row = await cursor.fetchone()
+            project = dict(row) if row else None
+            cursor = await db.execute(
+                "SELECT COUNT(*) as cnt FROM notes WHERE project_id = ? AND deleted_at IS NULL",
+                (project_id,),
+            )
+            note_count = (await cursor.fetchone())["cnt"]
     finally:
         await db.close()
     return request.app.state.templates.TemplateResponse(

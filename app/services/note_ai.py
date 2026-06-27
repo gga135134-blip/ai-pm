@@ -386,25 +386,38 @@ STRUCTURE_SYSTEM = """你是知识库整理专家。读完一个项目的全部�
 folders 和 assignments 里的 folder 都是**不含项目名**的相对路径。id 必须原样使用上面给你的完整 id。"""
 
 
+UNFILED_SCOPE = "__unfiled__"
+
+
 async def propose_folder_structure(project_id: str, model: str = "auto") -> dict:
     """AI 读项目全部笔记内容，设计一套编号主题文件夹结构（≤3 层）并分配每篇。
+    project_id 传 "__unfiled__" 时整理「未归入任何项目、且没有文件夹」的个人零散笔记，
+    归到「个人」区，不动已有文件夹（如 Gaga）。
     不写库；前端确认后复用 apply_organize_actions（/notes/chat/apply）应用。"""
     db = await get_db()
     try:
-        cursor = await db.execute("SELECT name FROM projects WHERE id = ?", (project_id,))
-        prow = await cursor.fetchone()
-        project_name = (prow["name"] if prow else "").strip()
-        cursor = await db.execute(
-            "SELECT id, title, content, folder, source_type, tags FROM notes "
-            "WHERE project_id = ? AND deleted_at IS NULL ORDER BY updated_at DESC",
-            (project_id,),
-        )
+        if project_id == UNFILED_SCOPE:
+            project_name = "个人"
+            cursor = await db.execute(
+                "SELECT id, title, content, folder, source_type, tags FROM notes "
+                "WHERE project_id IS NULL AND (folder IS NULL OR folder = '') "
+                "AND deleted_at IS NULL ORDER BY updated_at DESC"
+            )
+        else:
+            cursor = await db.execute("SELECT name FROM projects WHERE id = ?", (project_id,))
+            prow = await cursor.fetchone()
+            project_name = (prow["name"] if prow else "").strip()
+            cursor = await db.execute(
+                "SELECT id, title, content, folder, source_type, tags FROM notes "
+                "WHERE project_id = ? AND deleted_at IS NULL ORDER BY updated_at DESC",
+                (project_id,),
+            )
         notes = [dict(r) for r in await cursor.fetchall()]
     finally:
         await db.close()
 
     if not notes:
-        return {"summary": "该项目还没有笔记", "project_name": project_name,
+        return {"summary": "该范围还没有笔记", "project_name": project_name,
                 "structure": [], "actions": [], "model": "none", "cost": 0}
 
     lines = []
