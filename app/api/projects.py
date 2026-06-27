@@ -91,9 +91,7 @@ async def project_create(
     finally:
         await db.close()
     await ensure_project_codes()
-    # 建好标准知识库文件夹：配置/资料/执行/文档
-    from app.services.folder_template import ensure_project_folders
-    await ensure_project_folders(name)
+    # 注意：不预建空文件夹。配置/资料/执行/文档 由实际笔记归类时按需生成。
     return RedirectResponse(f"/projects/{project_id}", status_code=303)
 
 

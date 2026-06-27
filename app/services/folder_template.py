@@ -7,8 +7,11 @@
 - 文档：对外交付物——方案、报告、项目文档
 
 classify / reorg 都引用这里的常量，保证全站一致。
+
+**按需生成原则**：不预建空文件夹。某个项目有内容归到某一类时，那个文件夹
+才出现（笔记的 folder 字段一填，文件夹树自动显示该路径）。没产生文档就不会
+有空的「文档」夹。
 """
-from app.database import get_db
 
 STANDARD_SUBFOLDERS = ["配置", "资料", "执行", "文档"]
 
@@ -22,17 +25,3 @@ SUBFOLDER_GUIDE = {
 
 # AI 自动执行写进度笔记的去处（归到「执行」下，绝不进「资料」）
 PROGRESS_SUBPATH = "执行/进度"
-
-
-async def ensure_project_folders(project_name: str):
-    """为一个项目建好标准四个子文件夹（配置/资料/执行/文档）。幂等，可重复调用。"""
-    if not project_name or not project_name.strip():
-        return
-    name = project_name.strip().strip("/")
-    db = await get_db()
-    try:
-        for sub in STANDARD_SUBFOLDERS:
-            await db.execute("INSERT OR IGNORE INTO folders (path) VALUES (?)", (f"{name}/{sub}",))
-        await db.commit()
-    finally:
-        await db.close()
