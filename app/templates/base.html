@@ -4,6 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}AI 项目管理{% endblock %}</title>
+    <script>
+      /* 尽早应用保存的字号，避免页面闪一下小字。整站 rem 相对 html 字号，改这一处即全局等比缩放 */
+      (function(){
+        try{
+          var px = parseInt(localStorage.getItem('ui-font-px'));
+          if(px >= 14 && px <= 28){ document.documentElement.style.fontSize = px + 'px'; }
+        }catch(e){}
+      })();
+    </script>
     <link href="/static/tailwind.min.css" rel="stylesheet">
     <style>
         /* 颜色系统 token */
@@ -85,6 +94,13 @@
                 <a href="/study" class="text-gray-600 hover:text-gray-900 pb-0.5 {% if path.startswith('/study') %}border-b-2 border-purple-500 font-medium{% endif %}">🎓 学习</a>
                 <a href="/finance" class="text-gray-600 hover:text-gray-900 pb-0.5 {% if path.startswith('/finance') %}border-b-2 border-purple-500 font-medium{% endif %}">财务</a>
                 <a href="/settings" class="text-gray-600 hover:text-gray-900 pb-0.5 {% if path.startswith('/settings') %}border-b-2 border-purple-500 font-medium{% endif %}">设置</a>
+                <select onchange="setFontSize(this.value)" title="调整全站字号（看不清就调大）"
+                    class="font-size-select text-gray-600 border rounded-lg px-2 py-1 outline-none cursor-pointer" style="font-size:.8rem">
+                    <option value="16">字号·标准</option>
+                    <option value="18">字号·大</option>
+                    <option value="20">字号·特大</option>
+                    <option value="22">字号·超大</option>
+                </select>
                 <a href="/logout" class="text-xs text-gray-400 hover:text-gray-600 ml-2">退出</a>
             </div>
 
@@ -107,10 +123,35 @@
                 <a href="/finance" class="flex items-center gap-3 px-3 py-2.5 rounded-lg {% if path.startswith('/finance') %}bg-purple-50 text-purple-700 font-medium{% else %}text-gray-700 hover:bg-gray-50{% endif %}">💰 财务</a>
                 <a href="/settings" class="flex items-center gap-3 px-3 py-2.5 rounded-lg {% if path.startswith('/settings') %}bg-purple-50 text-purple-700 font-medium{% else %}text-gray-700 hover:bg-gray-50{% endif %}">⚙️ 设置</a>
                 <div class="border-t my-1"></div>
+                <div class="px-3 py-2.5">
+                    <label class="block text-xs text-gray-400 mb-1">🔠 字号（看不清就调大）</label>
+                    <select onchange="setFontSize(this.value)" class="font-size-select w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                        <option value="16">标准</option>
+                        <option value="18">大</option>
+                        <option value="20">特大</option>
+                        <option value="22">超大</option>
+                    </select>
+                </div>
+                <div class="border-t my-1"></div>
                 <a href="/logout" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-400 hover:bg-gray-50">🚪 退出登录</a>
             </div>
         </div>
     </nav>
+    <script>
+      /* 字号调整：改 html 根字号，整站 rem 等比缩放（文字+间距一起放大，布局不乱） */
+      function setFontSize(px){
+          px = parseInt(px) || 16;
+          document.documentElement.style.fontSize = px + 'px';
+          try{ localStorage.setItem('ui-font-px', px); }catch(e){}
+          document.querySelectorAll('.font-size-select').forEach(function(s){ s.value = px; });
+      }
+      /* 加载时把两个选择器同步到已保存值 */
+      (function(){
+          var saved = 16;
+          try{ saved = parseInt(localStorage.getItem('ui-font-px')) || 16; }catch(e){}
+          document.querySelectorAll('.font-size-select').forEach(function(s){ s.value = saved; });
+      })();
+    </script>
     <main class="max-w-7xl mx-auto px-4 py-4 md:py-6">
         {% block content %}{% endblock %}
     </main>
