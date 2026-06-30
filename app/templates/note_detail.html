@@ -30,7 +30,9 @@
   .nd-layout{flex-direction:column}
   .nd-side{width:100%}
   .nd-header{flex-direction:column;align-items:flex-start}
-  .nd-actions{flex-wrap:wrap}
+  /* 标题占满宽度并换行，否则长标题按内容宽撑破整页 */
+  .nd-header h1{width:100%;overflow-wrap:anywhere}
+  .nd-actions{flex-wrap:wrap;width:100%}
 }
 </style>
 <div class="mb-4 text-sm text-gray-400">
@@ -85,7 +87,7 @@
                 <div class="text-xs text-blue-700 font-medium mb-2">🔗 公开只读链接 · 凭链接可看（谁拿到都能看，请勿外传敏感内容）</div>
                 <div class="flex flex-wrap gap-2 items-center">
                     <input id="share-url" readonly onclick="this.select()"
-                        class="flex-1 text-xs bg-white border rounded px-2 py-1.5 text-gray-600" style="min-width:180px" value="">
+                        class="flex-1 text-xs bg-white border rounded px-2 py-1.5 text-gray-600" style="min-width:0;flex-basis:100%" value="">
                     <button onclick="copyShareUrl(this)" class="text-xs px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex-shrink-0">复制链接</button>
                     <form method="POST" action="/notes/{{ note.id }}/unshare" class="inline" onsubmit="return confirm('撤销后旧链接立即失效，确定？')">
                         <button class="text-xs px-3 py-1.5 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition">撤销分享</button>
