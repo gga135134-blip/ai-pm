@@ -8,6 +8,7 @@ from app.services.media_flow import (
     PLATFORMS, STAGES, STAGE_LABELS, can_transition, next_stage,
 )
 from app.services.media_ai import recommend_topics
+from app.services.media_ai import write_script
 
 log = logging.getLogger(__name__)
 
@@ -353,6 +354,96 @@ async def topics_ai_recommend():
             result = await recommend_topics(db, pid)
         except Exception as e:
             log.exception("AI 推选题失败")
+            return JSONResponse({"ok": False, "error": str(e)})
+    finally:
+        await db.close()
+    return JSONResponse(result)
+
+
+# ─────────────── 内容详情 ───────────────
+
+@router.get("/media/content/{cid}", response_class=HTMLResponse)
+async def content_detail(request: Request, cid: str):
+    db = await get_db()
+    try:
+        cur = await db.execute("SELECT * FROM media_content WHERE id=?", (cid,))
+        row = await cur.fetchone()
+        if not row:
+            return RedirectResponse("/media", status_code=302)
+        content = dict(row)
+
+        cur = await db.execute(
+            "SELECT * FROM media_persona WHERE id=?", (content["persona_id"],))
+        persona = dict(await cur.fetchone())
+
+        cur = await db.execute(
+            "SELECT * FROM media_account WHERE persona_id=? AND status='active' "
+            "ORDER BY created_at", (content["persona_id"],))
+        accounts = [dict(r) for r in await cur.fetchall()]
+
+        cur = await db.execute(
+            "SELECT * FROM media_publish WHERE content_id=?", (cid,))
+        pubs = {r["account_id"]: dict(r) for r in await cur.fetchall()}
+
+        # 每个发布记录的最新数据
+        metrics = {}
+        for aid, p in pubs.items():
+            cur = await db.execute(
+                "SELECT * FROM media_metrics WHERE publish_id=? "
+                "ORDER BY snapshot_at DESC LIMIT 1", (p["id"],))
+            m = await cur.fetchone()
+            if m:
+                metrics[p["id"]] = dict(m)
+
+        cur = await db.execute(
+            "SELECT * FROM media_review WHERE content_id=? ORDER BY created_at", (cid,))
+        reviews = [dict(r) for r in await cur.fetchall()]
+    finally:
+        await db.close()
+
+    for r in reviews:
+        try:
+            r["proposed_traits"] = json.loads(r["proposed_traits"] or "[]")
+        except (json.JSONDecodeError, TypeError):
+            r["proposed_traits"] = []
+
+    return _tpl(request, "media_content.html",
+                {"content": content, "persona": persona, "accounts": accounts,
+                 "pubs": pubs, "metrics": metrics, "reviews": reviews,
+                 "platforms": PLATFORMS, "stages": STAGES,
+                 "stage_labels": STAGE_LABELS,
+                 "next_stage": next_stage(content["stage"])})
+
+
+@router.post("/media/content/{cid}/script")
+async def content_save_script(cid: str, script: str = Form(""),
+                              edit_note: str = Form(""), cover_idea: str = Form("")):
+    db = await get_db()
+    try:
+        await db.execute(
+            "UPDATE media_content SET script=?, edit_note=?, cover_idea=?, "
+            "updated_at=CURRENT_TIMESTAMP WHERE id=?",
+            (script, edit_note, cover_idea, cid))
+        # 脚本从空变有 → 自动推进到 scripted，省一次手动点击
+        cur = await db.execute("SELECT stage FROM media_content WHERE id=?", (cid,))
+        row = await cur.fetchone()
+        if script.strip() and row and row["stage"] == "idea":
+            await db.execute(
+                "UPDATE media_content SET stage='scripted' WHERE id=?", (cid,))
+        await db.commit()
+    finally:
+        await db.close()
+    return RedirectResponse(f"/media/content/{cid}", status_code=302)
+
+
+@router.post("/media/content/{cid}/ai-script")
+async def content_ai_script(cid: str, mode: str = Form("full")):
+    db = await get_db()
+    try:
+        try:
+            result = await write_script(db, cid, mode=mode)
+        except Exception as e:
+            log.exception("AI 写脚本失败")
             return JSONResponse({"ok": False, "error": str(e)})
     finally:
         await db.close()

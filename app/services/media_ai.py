@@ -10,6 +10,7 @@ import uuid
 
 from app.services.ai_router import ask_ai
 from app.services.media_context import extract_json, log_injection
+from app.services.media_context import build_script_context
 
 log = logging.getLogger(__name__)
 
@@ -134,3 +135,72 @@ def _clamp(value, default: int) -> int:
     except (TypeError, ValueError):
         return default
     return max(1, min(5, v))
+
+
+SCRIPT_SYSTEM = """你是资深口播脚本撰稿人，为真人出镜的短视频写口播稿。
+
+铁律（必须全部满足，不超过 5 条 —— 规则多了每条都做不好）：
+1. 必须以谜题开场，3 秒内抛出，禁止任何铺垫和自我介绍。
+2. 必须植入给定的记忆点（如果提供了）。
+3. 口语化 —— 写的是说出来的话，不是书面文章。短句，能断则断。
+4. 标注时长节奏，全片控制在 60-90 秒。
+5. 结尾留钩子，引导评论互动。
+
+输出纯文本脚本，用 Markdown 分段。禁止用 ASCII 字符画（中文等宽会错位），
+需要表格就用 Markdown 表格。不要输出 JSON，不要写解释。"""
+
+
+async def write_script(db, content_id: str, mode: str = "full",
+                       model: str = "auto") -> dict:
+    """AI 写口播脚本。
+
+    mode="full"：注入完整预算内的人设资产（默认）
+    mode="lean"：只注入人设身份行 —— 用于与 full 对比，判断注入是否真的有效
+                （spec §6 兜底：人的判断本身就是最好的评估器）
+
+    看不到：数据表、话题池、财务 —— 与写脚本无关。
+    """
+    cur = await db.execute("SELECT * FROM media_content WHERE id=?", (content_id,))
+    row = await cur.fetchone()
+    if not row:
+        return {"ok": False, "error": "内容不存在", "script": "",
+                "cost": 0, "model": "", "injected_count": 0}
+    content = dict(row)
+
+    cur = await db.execute(
+        "SELECT * FROM media_persona WHERE id=?", (content["persona_id"],))
+    persona = dict(await cur.fetchone())
+
+    if mode == "lean":
+        context_text = (f"【人设】{persona['name']}｜{persona['one_liner']}"
+                        f"｜当前阶段：{persona['current_phase']}")
+        injected_ids = []
+    else:
+        cur = await db.execute(
+            "SELECT * FROM media_persona_trait WHERE persona_id=? AND status='active'",
+            (content["persona_id"],))
+        traits = [dict(r) for r in await cur.fetchall()]
+        context_text, injected_ids = build_script_context(persona, traits)
+
+    parts = [context_text, f"【本条选题】{content['title']}"]
+    if content["puzzle"]:
+        parts.append(f"【核心谜题】{content['puzzle']}")
+    if content["idea_reason"]:
+        parts.append(f"【为什么做这条】{content['idea_reason']}")
+    parts.append("请写出这条内容的口播脚本。")
+
+    prompt = "\n\n".join(parts)
+    result = await ask_ai(prompt, model=model, task_type="media_script",
+                          system_prompt=SCRIPT_SYSTEM)
+    resp = result.get("response", "")
+    if resp.startswith("[错误]") or resp.startswith("[费用保护]"):
+        return {"ok": False, "error": resp, "script": "",
+                "cost": result.get("cost", 0), "model": result.get("model", ""),
+                "injected_count": 0}
+
+    await log_injection(db, content_id, f"write_script:{mode}",
+                        injected_ids, result.get("tokens", 0))
+
+    return {"ok": True, "script": resp, "error": "",
+            "cost": result.get("cost", 0), "model": result.get("model", ""),
+            "injected_count": len(injected_ids)}

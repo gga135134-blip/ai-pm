@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}{{ content.title }}{% endblock %}
+{% block content %}
+<style>
+  .mc-steps { display: flex; gap: 0.25rem; overflow-x: auto; }
+  .mc-step { flex: 0 0 auto; font-size: 0.7rem; padding: 0.25rem 0.5rem;
+             border-radius: 999px; white-space: nowrap; }
+  .pub-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; }
+  @media (max-width: 767px) { .pub-grid { grid-template-columns: 1fr; } }
+</style>
+<div class="max-w-3xl mx-auto px-3 py-4">
+
+  <div class="text-xs text-gray-400 mb-1">
+    <a href="/media" class="hover:underline">自媒体</a> / 内容
+  </div>
+  <h1 class="text-xl font-bold mb-1">{{ content.title }}</h1>
+  {% if content.puzzle %}
+  <div class="text-sm text-violet-700 bg-violet-50 rounded px-3 py-2 mb-2">
+    ❓ {{ content.puzzle }}
+  </div>
+  {% endif %}
+  {% if content.idea_reason %}
+  <div class="text-xs text-gray-500 mb-3">选题理由：{{ content.idea_reason }}</div>
+  {% endif %}
+
+  <div class="mc-steps mb-4">
+    {% for s in stages %}
+    <span class="mc-step
+      {% if s == content.stage %}bg-blue-600 text-white
+      {% else %}bg-gray-100 text-gray-400{% endif %}">{{ stage_labels[s] }}</span>
+    {% endfor %}
+  </div>
+
+  {% if next_stage %}
+  <form method="post" action="/media/content/{{ content.id }}/stage" class="mb-4">
+    <input type="hidden" name="to" value="{{ next_stage }}">
+    <button class="bg-blue-600 text-white rounded-lg px-4 py-2 text-sm">
+      推进到「{{ stage_labels[next_stage] }}」→
+    </button>
+  </form>
+  {% endif %}
+
+  <!-- 脚本 -->
+  <div class="bg-white rounded-xl shadow-sm p-4 mb-3">
+    <div class="flex items-center justify-between mb-2">
+      <h2 class="font-semibold text-sm">口播脚本</h2>
+      <div class="flex gap-2">
+        <button onclick="aiScript('full')" id="btn-full"
+                class="bg-violet-600 text-white rounded-lg px-3 py-1.5 text-xs">
+          ✨ AI 写脚本
+        </button>
+        <button onclick="aiScript('lean')" id="btn-lean"
+                class="border border-violet-600 text-violet-600 rounded-lg px-3 py-1.5 text-xs"
+                title="只注入人设身份，用于对比注入是否真的有效">
+          精简注入
+        </button>
+      </div>
+    </div>
+    <div id="ai-status" class="hidden text-xs text-violet-600 mb-2"></div>
+    <form method="post" action="/media/content/{{ content.id }}/script">
+      <textarea name="script" id="script-box" rows="12"
+                placeholder="点「AI 写脚本」生成，或直接手写"
+                class="w-full border rounded-lg px-3 py-2 text-sm font-mono">{{ content.script }}</textarea>
+      <input name="edit_note" value="{{ content.edit_note }}" placeholder="剪辑要点"
+             class="w-full border rounded-lg px-3 py-2 text-sm mt-2">
+      <input name="cover_idea" value="{{ content.cover_idea }}" placeholder="封面思路"
+             class="w-full border rounded-lg px-3 py-2 text-sm mt-2">
+      <button class="bg-blue-600 text-white rounded-lg px-4 py-2 text-sm mt-2">
+        保存脚本
+      </button>
+    </form>
+  </div>
+
+  <!-- 三平台发布：Task 9 填充 -->
+  <div id="publish-section"></div>
+
+  <!-- 复盘：Task 11 填充 -->
+  <div id="review-section"></div>
+</div>
+
+<script>
+async function aiScript(mode) {
+  const box = document.getElementById('script-box');
+  if (box.value.trim() && !confirm('会覆盖当前脚本，继续？')) return;
+  const btns = [document.getElementById('btn-full'), document.getElementById('btn-lean')];
+  const status = document.getElementById('ai-status');
+  btns.forEach(b => b.disabled = true);
+  status.classList.remove('hidden');
+  status.textContent = mode === 'lean'
+    ? 'AI 写作中（精简注入，仅人设身份）…'
+    : 'AI 写作中（完整注入人设条目与记忆点）…';
+  try {
+    const fd = new FormData();
+    fd.append('mode', mode);
+    const r = await fetch('/media/content/{{ content.id }}/ai-script',
+                          {method: 'POST', body: fd});
+    const d = await r.json();
+    if (d.ok) {
+      box.value = d.script;
+      status.textContent = '完成（' + d.model + '，注入 ' + d.injected_count
+                         + ' 条资产，费用 $' + (d.cost || 0).toFixed(4)
+                         + '）。记得点「保存脚本」。';
+    } else {
+      status.textContent = '失败：' + (d.error || '未知错误');
+    }
+  } catch (e) {
+    status.textContent = '请求失败：' + e;
+  }
+  btns.forEach(b => b.disabled = false);
+}
+</script>
+{% endblock %}
