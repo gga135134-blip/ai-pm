@@ -1,9 +1,10 @@
 import json
 import logging
 import uuid
-from fastapi import APIRouter, Request, Form
+from fastapi import APIRouter, Request, Form, UploadFile, File
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from app.database import get_db
+from app.services.media_metrics import recognize_screenshot, save_metrics
 from app.services.media_flow import (
     PLATFORMS, STAGES, STAGE_LABELS, can_transition, next_stage, stage_index,
 )
@@ -433,6 +434,44 @@ async def content_save_script(cid: str, script: str = Form(""),
     finally:
         await db.close()
     return RedirectResponse(f"/media/content/{cid}", status_code=302)
+
+
+# ─────────────── 数据采集 ───────────────
+
+@router.post("/media/publish/{pubid}/metrics")
+async def metrics_manual(pubid: str, content_id: str = Form(...),
+                         views: str = Form("0"), likes: str = Form("0"),
+                         comments: str = Form("0"), shares: str = Form("0"),
+                         new_fans: str = Form("0")):
+    db = await get_db()
+    try:
+        await save_metrics(db, pubid, {
+            "views": views, "likes": likes, "comments": comments,
+            "shares": shares, "new_fans": new_fans}, "manual")
+    finally:
+        await db.close()
+    return RedirectResponse(f"/media/content/{content_id}", status_code=302)
+
+
+@router.post("/media/publish/{pubid}/metrics/screenshot")
+async def metrics_screenshot(pubid: str, file: UploadFile = File(...)):
+    """截图识别。识别失败时返回 ok=false，前端提示改用手填 —— 降级链的第二跳。"""
+    try:
+        raw = await file.read()
+        if not raw:
+            return JSONResponse({"ok": False, "error": "文件是空的"})
+        media_type = file.content_type or "image/png"
+        result = await recognize_screenshot(raw, media_type)
+        if result.get("ok"):
+            db = await get_db()
+            try:
+                await save_metrics(db, pubid, result["data"], "screenshot")
+            finally:
+                await db.close()
+    except Exception as e:
+        log.exception("截图识别失败")
+        return JSONResponse({"ok": False, "error": str(e)})
+    return JSONResponse(result)
 
 
 @router.post("/media/content/{cid}/ai-script")

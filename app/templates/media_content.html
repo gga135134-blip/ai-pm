@@ -135,7 +135,32 @@
           {% else %}
           <div class="text-xs text-gray-400">还没有数据</div>
           {% endif %}
-          <div id="metrics-slot-{{ p.id }}"></div>
+          <div class="mt-2">
+            <label class="block">
+              <span class="text-xs text-violet-600 cursor-pointer">📷 截图识别</span>
+              <input type="file" accept="image/*" class="hidden"
+                     onchange="uploadShot('{{ p.id }}', this)">
+            </label>
+            <div id="shot-status-{{ p.id }}" class="hidden text-xs text-violet-600"></div>
+            <details class="mt-1">
+              <summary class="text-xs text-gray-400 cursor-pointer">✍️ 手动填</summary>
+              <form method="post" action="/media/publish/{{ p.id }}/metrics"
+                    class="mt-1 space-y-1">
+                <input type="hidden" name="content_id" value="{{ content.id }}">
+                <input name="views" placeholder="播放（可填 1.2万）"
+                       class="w-full border rounded px-2 py-1 text-xs">
+                <input name="likes" placeholder="点赞"
+                       class="w-full border rounded px-2 py-1 text-xs">
+                <input name="comments" placeholder="评论"
+                       class="w-full border rounded px-2 py-1 text-xs">
+                <input name="shares" placeholder="转发"
+                       class="w-full border rounded px-2 py-1 text-xs">
+                <input name="new_fans" placeholder="涨粉"
+                       class="w-full border rounded px-2 py-1 text-xs">
+                <button class="w-full bg-gray-100 rounded py-1 text-xs">保存数据</button>
+              </form>
+            </details>
+          </div>
         </div>
         {% endif %}
       </div>
@@ -203,6 +228,29 @@ async function aiCopy(accountId) {
   }
   btn.disabled = false;
   btn.textContent = '✨ 生成文案';
+}
+
+async function uploadShot(pubId, input) {
+  if (!input.files || !input.files[0]) return;
+  const status = document.getElementById('shot-status-' + pubId);
+  status.classList.remove('hidden');
+  status.textContent = 'AI 识别中…';
+  const fd = new FormData();
+  fd.append('file', input.files[0]);
+  try {
+    const r = await fetch('/media/publish/' + pubId + '/metrics/screenshot',
+                          {method: 'POST', body: fd});
+    const d = await r.json();
+    if (d.ok) {
+      status.textContent = '已录入，刷新中…';
+      location.reload();
+    } else {
+      status.textContent = '识别失败：' + (d.error || '') + ' 请用下面的手动填写。';
+    }
+  } catch (e) {
+    status.textContent = '上传失败：' + e + ' 请用手动填写。';
+  }
+  input.value = '';
 }
 </script>
 {% endblock %}
