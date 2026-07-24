@@ -1,11 +1,15 @@
 import json
+import logging
 import uuid
 from fastapi import APIRouter, Request, Form
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from app.database import get_db
 from app.services.media_flow import (
     PLATFORMS, STAGES, STAGE_LABELS, can_transition, next_stage,
 )
+from app.services.media_ai import recommend_topics
+
+log = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -336,3 +340,20 @@ async def content_stage(cid: str, to: str = Form(...), back: str = Form("")):
         await db.close()
     target = "/media" if back == "board" else f"/media/content/{cid}"
     return RedirectResponse(target, status_code=302)
+
+
+@router.post("/media/topics/ai-recommend")
+async def topics_ai_recommend():
+    db = await get_db()
+    try:
+        pid = await _first_persona_id(db)
+        if not pid:
+            return JSONResponse({"ok": False, "error": "请先创建人设"})
+        try:
+            result = await recommend_topics(db, pid)
+        except Exception as e:
+            log.exception("AI 推选题失败")
+            return JSONResponse({"ok": False, "error": str(e)})
+    finally:
+        await db.close()
+    return JSONResponse(result)

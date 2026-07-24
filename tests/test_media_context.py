@@ -171,3 +171,13 @@ def test_extract_json_failure_returns_empty_array_when_array_expected():
 
 def test_extract_json_empty_input():
     assert extract_json("") == {}
+
+
+def test_clamp_rating_handles_ai_garbage():
+    from app.services.media_ai import _clamp
+    assert _clamp(3, 3) == 3
+    assert _clamp(0, 3) == 1        # AI 给 0 → 夹到 1
+    assert _clamp(10, 3) == 5       # AI 给 10 → 夹到 5
+    assert _clamp("4", 3) == 4      # AI 给字符串
+    assert _clamp(None, 3) == 3     # AI 没给
+    assert _clamp("很高", 3) == 3   # AI 给中文
