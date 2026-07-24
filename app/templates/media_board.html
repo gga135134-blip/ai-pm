@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}内容看板{% endblock %}
+{% block content %}
+<style>
+  .kb { display: flex; gap: 0.75rem; overflow-x: auto; padding-bottom: 1rem; }
+  .kb-col { flex: 0 0 240px; }
+  @media (max-width: 767px) {
+    .kb-col { flex: 0 0 200px; }
+    .fab { bottom: 80px !important; }
+  }
+  .fab { position: fixed; right: 1.25rem; bottom: 1.5rem; z-index: 40; }
+</style>
+<div class="px-3 py-4">
+  <div class="flex items-center justify-between mb-4 max-w-6xl mx-auto">
+    <div>
+      <h1 class="text-xl font-bold">{{ persona.name }}</h1>
+      <div class="text-sm text-gray-500">
+        {{ persona.one_liner }}
+        <span class="ml-1 px-2 py-0.5 bg-blue-50 text-blue-600 rounded text-xs">
+          {{ persona.current_phase }}期
+        </span>
+        <span class="ml-1 text-xs text-gray-400">{{ total }} 条内容</span>
+      </div>
+    </div>
+    <div class="flex gap-2 text-sm">
+      <a href="/media/topics" class="text-blue-600">
+        话题库{% if pool_count %} ({{ pool_count }}){% endif %}
+      </a>
+      <a href="/media/persona/{{ persona.id }}" class="text-blue-600">人设档案</a>
+    </div>
+  </div>
+
+  <div class="kb">
+    {% for col in columns %}
+    <div class="kb-col">
+      <div class="text-xs font-medium text-gray-500 mb-2 px-1">
+        {{ col.label }}
+        <span class="text-gray-300">{{ col.items|length }}</span>
+      </div>
+      {% for c in col.items %}
+      <a href="/media/content/{{ c.id }}"
+         class="block bg-white rounded-xl shadow-sm p-3 mb-2 hover:shadow">
+        <div class="text-sm font-medium">{{ c.title }}</div>
+        {% if c.puzzle %}
+        <div class="text-xs text-violet-600 mt-1">❓ {{ c.puzzle }}</div>
+        {% endif %}
+        {% if c.publishes %}
+        <div class="flex flex-wrap gap-1 mt-2">
+          {% for p in c.publishes %}
+          <span class="text-xs px-1.5 py-0.5 rounded
+            {% if p.status == 'published' %}bg-green-50 text-green-600
+            {% else %}bg-gray-100 text-gray-400{% endif %}">
+            {{ platforms.get(p.platform, p.platform) }}{% if p.views %} {{ p.views }}{% endif %}
+          </span>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </a>
+      {% endfor %}
+      {% if not col.items %}
+      <div class="text-xs text-gray-300 px-1 py-3">—</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="fab">
+  <button onclick="document.getElementById('new-overlay').classList.remove('hidden')"
+          class="bg-blue-600 text-white rounded-full w-14 h-14 text-2xl shadow-lg">+</button>
+</div>
+
+<div id="new-overlay" class="hidden fixed inset-0 bg-black bg-opacity-40 z-50 flex items-center justify-center p-4"
+     onclick="if(event.target===this) this.classList.add('hidden')">
+  <div class="bg-white rounded-xl p-4 w-full max-w-sm">
+    <h2 class="font-semibold mb-1">新建内容</h2>
+    <p class="text-xs text-gray-400 mb-3">
+      建议先去话题库让 AI 推选题 —— 有谜题的选题才算想透了。
+    </p>
+    <form method="post" action="/media/content" class="space-y-2">
+      <input type="hidden" name="persona_id" value="{{ persona.id }}">
+      <input name="title" required placeholder="选题"
+             class="w-full border rounded-lg px-3 py-2 text-sm">
+      <input name="puzzle" placeholder="核心谜题"
+             class="w-full border rounded-lg px-3 py-2 text-sm">
+      <div class="flex gap-2">
+        <button class="flex-1 bg-blue-600 text-white rounded-lg py-2 text-sm">创建</button>
+        <button type="button" class="px-4 text-sm text-gray-500"
+                onclick="document.getElementById('new-overlay').classList.add('hidden')">
+          取消
+        </button>
+      </div>
+    </form>
+    <a href="/media/topics" class="block text-center text-sm text-violet-600 mt-3">
+      → 去话题库
+    </a>
+  </div>
+</div>
+{% endblock %}

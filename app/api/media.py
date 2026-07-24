@@ -3,7 +3,9 @@ import uuid
 from fastapi import APIRouter, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from app.database import get_db
-from app.services.media_flow import PLATFORMS, STAGES, STAGE_LABELS
+from app.services.media_flow import (
+    PLATFORMS, STAGES, STAGE_LABELS, can_transition, next_stage,
+)
 
 router = APIRouter()
 
@@ -253,3 +255,84 @@ async def topic_reject(tid: str, rejected_reason: str = Form("")):
     finally:
         await db.close()
     return RedirectResponse("/media/topics", status_code=302)
+
+
+# ─────────────── 内容看板 ───────────────
+
+@router.get("/media", response_class=HTMLResponse)
+async def board(request: Request):
+    db = await get_db()
+    try:
+        pid = await _first_persona_id(db)
+        if not pid:
+            return RedirectResponse("/media/persona", status_code=302)
+        cur = await db.execute("SELECT * FROM media_persona WHERE id=?", (pid,))
+        persona = dict(await cur.fetchone())
+
+        cur = await db.execute(
+            "SELECT * FROM media_content WHERE persona_id=? "
+            "ORDER BY updated_at DESC, created_at DESC", (pid,))
+        contents = [dict(r) for r in await cur.fetchall()]
+
+        # 每条内容的三平台发布状态 + 最新播放量，看板卡片上直接显示
+        cur = await db.execute(
+            "SELECT p.content_id, p.id AS publish_id, a.platform, p.status, "
+            "  (SELECT views FROM media_metrics m WHERE m.publish_id=p.id "
+            "   ORDER BY snapshot_at DESC LIMIT 1) AS views "
+            "FROM media_publish p JOIN media_account a ON a.id=p.account_id "
+            "JOIN media_content c ON c.id=p.content_id WHERE c.persona_id=?", (pid,))
+        pubs = [dict(r) for r in await cur.fetchall()]
+
+        cur = await db.execute(
+            "SELECT COUNT(*) c FROM media_topic WHERE persona_id=? AND status='pool'",
+            (pid,))
+        pool_count = (await cur.fetchone())["c"]
+    finally:
+        await db.close()
+
+    by_content = {}
+    for p in pubs:
+        by_content.setdefault(p["content_id"], []).append(p)
+    for c in contents:
+        c["publishes"] = by_content.get(c["id"], [])
+
+    columns = [{"stage": s, "label": STAGE_LABELS[s],
+                "items": [c for c in contents if c["stage"] == s]} for s in STAGES]
+
+    return _tpl(request, "media_board.html",
+                {"persona": persona, "columns": columns, "platforms": PLATFORMS,
+                 "pool_count": pool_count, "total": len(contents)})
+
+
+@router.post("/media/content")
+async def content_create(persona_id: str = Form(...), title: str = Form(...),
+                         puzzle: str = Form("")):
+    cid = str(uuid.uuid4())
+    db = await get_db()
+    try:
+        await db.execute(
+            "INSERT INTO media_content (id,persona_id,title,puzzle,stage,idea_source) "
+            "VALUES (?,?,?,?,'idea','manual')",
+            (cid, persona_id, title.strip(), puzzle.strip()))
+        await db.commit()
+    finally:
+        await db.close()
+    return RedirectResponse(f"/media/content/{cid}", status_code=302)
+
+
+@router.post("/media/content/{cid}/stage")
+async def content_stage(cid: str, to: str = Form(...), back: str = Form("")):
+    """推进或退回阶段。非法流转静默忽略，不报错打断用户。"""
+    db = await get_db()
+    try:
+        cur = await db.execute("SELECT stage FROM media_content WHERE id=?", (cid,))
+        row = await cur.fetchone()
+        if row and can_transition(row["stage"], to):
+            await db.execute(
+                "UPDATE media_content SET stage=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                (to, cid))
+            await db.commit()
+    finally:
+        await db.close()
+    target = "/media" if back == "board" else f"/media/content/{cid}"
+    return RedirectResponse(target, status_code=302)
