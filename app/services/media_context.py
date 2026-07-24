@@ -1,0 +1,136 @@
+"""media 模块的 AI 输入输出管道：注入预算控制、上下文拼装、AI 输出解析。
+
+设计约束（spec §6）：体系重在库里，不在提示词里。
+任何一次 AI 调用看到的资产不超过 INJECTION_BUDGET 的总和。
+体系涨到 500 条资产，注入量恒定不变 —— 这是"体系可以无限重"的前提。
+"""
+import json
+import logging
+import re
+import uuid
+
+log = logging.getLogger(__name__)
+
+# 各注入槽位的硬上限。改动这里需同步更新 spec §6。
+INJECTION_BUDGET = {
+    "trait": 8,       # 人设条目，按 confidence 降序
+    "signature": 3,   # 记忆点，单独占槽，少而硬
+    "playbook": 2,    # 二期：只给最匹配的已验证打法
+    "material": 3,    # 二期：只给未用过且最匹配的原料
+    "lesson": 3,      # 二期：只给 trigger_context 命中的
+    "audience": 1,    # 二期：只注本条瞄准的那个 segment
+}
+
+# 没有 brief 时，content 的截断长度
+_BRIEF_FALLBACK_CHARS = 40
+
+
+def select_by_budget(items: list[dict], slot: str,
+                     score_key: str = "confidence") -> list[dict]:
+    """按分数降序取前 N 条，N 由 INJECTION_BUDGET[slot] 决定。
+
+    未在预算表中登记的槽位一律返回空 —— 防止新增注入点时绕过预算。
+    """
+    cap = INJECTION_BUDGET.get(slot)
+    if not cap:
+        log.warning("select_by_budget: 未登记的注入槽位 %s，拒绝注入", slot)
+        return []
+    ranked = sorted(items, key=lambda i: i.get(score_key) or 0, reverse=True)
+    return ranked[:cap]
+
+
+def render_brief_list(items: list[dict], label: str) -> str:
+    """渲染成 brief 清单。只放 brief，detail 留给 AI 按需读取。"""
+    if not items:
+        return ""
+    lines = [f"【{label}】"]
+    for i in items:
+        brief = (i.get("brief") or "").strip()
+        if not brief:
+            brief = (i.get("content") or "").strip()[:_BRIEF_FALLBACK_CHARS]
+        if brief:
+            lines.append(f"- {brief}")
+    return "\n".join(lines) if len(lines) > 1 else ""
+
+
+def build_script_context(persona: dict, traits: list[dict]) -> tuple[str, list[str]]:
+    """拼装写脚本用的上下文。返回 (注入文本, 注入的资产 id 列表)。
+
+    signature（记忆点）单独占预算槽，不与普通条目竞争 ——
+    记忆点是 IP 资产的核心，绝不能被高置信度的普通条目挤掉。
+    """
+    active = [t for t in traits if (t.get("status") or "active") == "active"]
+    signatures = [t for t in active if t.get("dimension") == "signature"]
+    others = [t for t in active if t.get("dimension") != "signature"]
+
+    picked_sig = select_by_budget(signatures, "signature")
+    picked_other = select_by_budget(others, "trait")
+
+    parts = [
+        f"【人设】{persona.get('name', '')}｜{persona.get('one_liner', '')}"
+        f"｜当前阶段：{persona.get('current_phase', '')}"
+    ]
+    other_text = render_brief_list(picked_other, "人设条目")
+    if other_text:
+        parts.append(other_text)
+    sig_text = render_brief_list(picked_sig, "记忆点（必须植入）")
+    if sig_text:
+        parts.append(sig_text)
+
+    ids = [t["id"] for t in picked_other] + [t["id"] for t in picked_sig]
+    return "\n\n".join(parts), ids
+
+
+def extract_json(text: str, expect: str = "object"):
+    """从 AI 回复里稳健提取 JSON。解析失败返回空容器，绝不抛异常。
+
+    绝不做 unicode_escape —— 会把中文搅成乱码（项目历史坑）。
+    """
+    empty = [] if expect == "array" else {}
+    raw = (text or "").strip()
+    if not raw:
+        return empty
+
+    candidate = raw
+    m = re.search(r"```(?:json)?\s*(.+?)```", candidate, re.DOTALL)
+    if m:
+        candidate = m.group(1).strip()
+
+    # strict=False 允许字符串里有真实换行符，DeepSeek 常这么返回
+    try:
+        obj = json.loads(candidate, strict=False)
+        if (expect == "array" and isinstance(obj, list)) or \
+           (expect == "object" and isinstance(obj, dict)):
+            return obj
+    except json.JSONDecodeError:
+        pass
+
+    open_c, close_c = ("[", "]") if expect == "array" else ("{", "}")
+    start, end = candidate.find(open_c), candidate.rfind(close_c)
+    if start != -1 and end > start:
+        try:
+            obj = json.loads(candidate[start:end + 1], strict=False)
+            if (expect == "array" and isinstance(obj, list)) or \
+               (expect == "object" and isinstance(obj, dict)):
+                return obj
+        except json.JSONDecodeError:
+            pass
+
+    log.warning("extract_json 解析失败，raw[:120]=%s", raw[:120])
+    return empty
+
+
+async def log_injection(db, content_id: str, ai_type: str,
+                        asset_ids: list[str], token_count: int) -> None:
+    """记录本次 AI 调用注入了什么。三期据此分析哪些注入真的有效。
+
+    一期就写入，避免三期开工时从零等待数据积累。
+    """
+    await db.execute(
+        "INSERT INTO media_injection_log "
+        "(id, content_id, ai_type, injected_asset_ids, token_count) "
+        "VALUES (?,?,?,?,?)",
+        (str(uuid.uuid4()), content_id or "", ai_type,
+         json.dumps(asset_ids, ensure_ascii=False), token_count),
+    )
+    await db.commit()
