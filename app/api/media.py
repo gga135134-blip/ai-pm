@@ -297,7 +297,7 @@ async def board(request: Request):
         c["publishes"] = by_content.get(c["id"], [])
 
     columns = [{"stage": s, "label": STAGE_LABELS[s],
-                "items": [c for c in contents if c["stage"] == s]} for s in STAGES]
+                "cards": [c for c in contents if c["stage"] == s]} for s in STAGES]
 
     return _tpl(request, "media_board.html",
                 {"persona": persona, "columns": columns, "platforms": PLATFORMS,
