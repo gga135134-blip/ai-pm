@@ -103,8 +103,8 @@ templates/media_*.html        # 页面
 | 13 | `media_metrics` | 内容流转 | 一期 |
 | 14 | `media_review` | 复盘 | 一期 |
 | 15 | `media_review_cycle` | 复盘 | 三期 |
-| 16 | `media_case` | 复盘 | 三期 |
-| 17 | `media_injection_log` | 复盘 | 三期 |
+| 16 | `media_case` | 复盘 | 一期建表写入 / 三期分析 |
+| 17 | `media_injection_log` | 复盘 | 一期建表写入 / 三期分析 |
 
 ### 3.1 人设层
 
@@ -634,22 +634,41 @@ INJECTION_BUDGET = {
 
 本设计范围较大，建议分三期实施，每期独立可用：
 
-**一期（闭环骨架）** —— 让内容能跑完一圈
-`persona` / `persona_trait` / `account` / `topic` / `content` / `publish` / `metrics` / `review`(L1)
+### 分期原则：「写入」与「分析」拆开
+
+三期的分析能力必须等内容积累，但**三期的数据记录不能等**。若一期不记 `injection_log`，等三期才开始记，还要再空等数月才有数据可分析，飞轮起步白慢一轮。
+
+因此：**凡是"记录"，一律前置到一期（成本极低）；只有"分析"才留到三期。**
+
+| 能力 | 写入 | 分析 |
+|---|---|---|
+| `injection_log` | **一期**（每次 AI 调用顺手记，几行代码） | 三期（算哪些注入真有效） |
+| `media_case` | **一期**（复盘时顺手填归因字段） | 三期（爆款/失败对比、`replicable` 统计） |
+| `media_review_cycle` | 三期 | 三期（确需 10+ 条内容才有规律可谈） |
+
+### 一期（闭环骨架）—— 让内容能跑完一圈
+
+表：`persona` / `persona_trait` / `account` / `topic` / `content` / `publish` / `metrics` / `review`(L1) / **`injection_log`(仅写入)** / **`case`(仅写入)**
+
 页面：内容看板、内容详情、人设档案（条目 Tab）、话题库
 AI：#1 推选题、#2 写脚本、#3 生成文案、#4 截图识别、#5 L1 复盘
-注入预算机制从一期就实施（brief 字段、INJECTION_BUDGET）
+注入预算机制从一期就实施（brief 字段、`INJECTION_BUDGET`）
 
-**二期（资产与决策）** —— 让飞轮开始转
-`audience` / `anchor` / `material` / `playbook` / `lesson` / `redline`
+### 二期（资产与决策）—— 让飞轮开始转
+
+表：`audience` / `anchor` / `material` / `playbook` / `lesson` / `redline`
 决策引擎 `media_decision.py`（11 项打分 + 查重）
 AI：#6 提炼候选资产
 人设档案补齐全部 Tab
 
-**三期（规律与验证）** —— 让飞轮科学地转
-`review_cycle`(L2/L3) / `case`(爆款失败库) / `injection_log`
+### 三期（规律与验证）—— 让飞轮科学地转
+
+表：`review_cycle`(L2/L3)
+分析能力：`case` 对比分析、`injection_log` 有效性分析
 数据面板 + 飞轮健康度指标
 假设-验证机制、权重按 phase 自动切换
+
+> 三期开工时，一期二期积累的 `injection_log` 和 `case` 数据已就位，分析可立即产出结论，无需从零等待。
 
 ---
 
