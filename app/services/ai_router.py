@@ -312,7 +312,7 @@ async def _call_deepseek(prompt: str, system_prompt: str, config: dict, json_mod
         messages.append({"role": "system", "content": system_prompt})
     messages.append({"role": "user", "content": prompt})
 
-    kwargs = dict(model="deepseek-chat", messages=messages, max_tokens=4096)
+    kwargs = dict(model="deepseek-v4-flash", messages=messages, max_tokens=4096)
     if json_mode:
         kwargs["response_format"] = {"type": "json_object"}
     resp = await client.chat.completions.create(**kwargs)
