@@ -106,8 +106,8 @@ async def recommend_topics(db, persona_id: str, model: str = "auto") -> dict:
     for it in items:
         if not isinstance(it, dict):
             continue
-        title = (it.get("title") or "").strip()
-        puzzle = (it.get("puzzle") or "").strip()
+        title = _txt(it.get("title"))
+        puzzle = _txt(it.get("puzzle"))
         if not title or not puzzle:
             continue  # 铁律 2：没谜题的不入库
         await db.execute(
@@ -115,7 +115,7 @@ async def recommend_topics(db, persona_id: str, model: str = "auto") -> dict:
             "(id,persona_id,title,puzzle,source,reason,angle,heat,fit_score,"
             " related_trait_ids) VALUES (?,?,?,?,'ai_rec',?,?,?,?,?)",
             (str(uuid.uuid4()), persona_id, title, puzzle,
-             (it.get("reason") or "").strip(), (it.get("angle") or "").strip(),
+             _txt(it.get("reason")), _txt(it.get("angle")),
              _clamp(it.get("heat"), 3), _clamp(it.get("fit_score"), 3),
              json.dumps(trait_ids, ensure_ascii=False)))
         count += 1
@@ -135,6 +135,20 @@ def _clamp(value, default: int) -> int:
     except (TypeError, ValueError):
         return default
     return max(1, min(5, v))
+
+
+def _txt(value) -> str:
+    """把 AI 返回的字段安全转成去空白的字符串。
+
+    AI（尤其 DeepSeek）会不按约定返回类型：本该是文字的字段可能给成数字、
+    列表或 None。`(x or "").strip()` 对非空非字符串会崩（int 没有 .strip()）。
+    这里统一兜底：字符串照常 strip；数字转字符串；其余（list/dict/None）→ ""。
+    """
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return str(value)
+    return ""
 
 
 SCRIPT_SYSTEM = """你是资深口播脚本撰稿人，为真人出镜的短视频写口播稿。
@@ -276,8 +290,8 @@ async def generate_platform_copy(db, content_id: str, account_id: str,
         tags = obj.get("tags") or []
         tag_line = " ".join(f"#{t.lstrip('#')}" for t in tags if t)
         text = "\n\n".join(x for x in [
-            (obj.get("title") or "").strip(),
-            (obj.get("body") or "").strip(),
+            _txt(obj.get("title")),
+            _txt(obj.get("body")),
             tag_line,
         ] if x)
 
@@ -405,9 +419,9 @@ async def review_content(db, content_id: str, model: str = "auto") -> dict:
             "(id,content_id,scope,account_id,what_worked,what_failed,next_action) "
             "VALUES (?,?,'platform',?,?,?,?)",
             (str(uuid.uuid4()), content_id, aid,
-             (pr.get("what_worked") or "").strip(),
-             (pr.get("what_failed") or "").strip(),
-             (pr.get("next_action") or "").strip()))
+             _txt(pr.get("what_worked")),
+             _txt(pr.get("what_failed")),
+             _txt(pr.get("next_action"))))
         count += 1
 
     ov = obj.get("overall") or {}
@@ -417,9 +431,9 @@ async def review_content(db, content_id: str, model: str = "auto") -> dict:
         "(id,content_id,scope,what_worked,what_failed,next_action,proposed_traits) "
         "VALUES (?,?,'overall',?,?,?,?)",
         (str(uuid.uuid4()), content_id,
-         (ov.get("what_worked") or "").strip(),
-         (ov.get("what_failed") or "").strip(),
-         (ov.get("next_action") or "").strip(),
+         _txt(ov.get("what_worked")),
+         _txt(ov.get("what_failed")),
+         _txt(ov.get("next_action")),
          json.dumps(traits, ensure_ascii=False)))
     count += 1
 
@@ -433,20 +447,20 @@ async def review_content(db, content_id: str, model: str = "auto") -> dict:
         " platform_factor,external_factor,replicable,conclusion) "
         "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (str(uuid.uuid4()), content["persona_id"], content_id, case_type,
-         (case.get("threshold_basis") or "").strip(),
-         (case.get("topic_factor") or "").strip(),
-         (case.get("hook_factor") or "").strip(),
-         (case.get("structure_factor") or "").strip(),
-         (case.get("material_factor") or "").strip(),
-         (case.get("emotion_factor") or "").strip(),
-         (case.get("platform_factor") or "").strip(),
-         (case.get("external_factor") or "").strip(),
+         _txt(case.get("threshold_basis")),
+         _txt(case.get("topic_factor")),
+         _txt(case.get("hook_factor")),
+         _txt(case.get("structure_factor")),
+         _txt(case.get("material_factor")),
+         _txt(case.get("emotion_factor")),
+         _txt(case.get("platform_factor")),
+         _txt(case.get("external_factor")),
          _clamp(case.get("replicable"), 3),
-         (case.get("conclusion") or "").strip()))
+         _txt(case.get("conclusion"))))
 
     # outcome + fingerprint 供三期查重用：以后撞到同方向的 flop 会强提示。
     # 一期就写入，否则三期开工时历史内容全是空指纹，查重形同虚设。
-    fingerprint = (obj.get("topic_fingerprint") or "").strip()[:200]
+    fingerprint = _txt(obj.get("topic_fingerprint"))[:200]
     await db.execute(
         "UPDATE media_content SET outcome=?, topic_fingerprint=?, stage='reviewed', "
         "updated_at=CURRENT_TIMESTAMP WHERE id=?",
