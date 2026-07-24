@@ -287,8 +287,14 @@ async def generate_platform_copy(db, content_id: str, account_id: str,
         # 解析不了就把原文给用户，总比丢掉强
         text = resp.strip()
     else:
-        tags = obj.get("tags") or []
-        tag_line = " ".join(f"#{t.lstrip('#')}" for t in tags if t)
+        raw_tags = obj.get("tags")
+        # AI 可能把 tags 返回成字符串、含非字符串元素、或 None —— 统一兜底
+        if isinstance(raw_tags, str):
+            raw_tags = [raw_tags]
+        elif not isinstance(raw_tags, list):
+            raw_tags = []
+        tag_line = " ".join(f"#{s.lstrip('#')}"
+                            for s in (_txt(t) for t in raw_tags) if s)
         text = "\n\n".join(x for x in [
             _txt(obj.get("title")),
             _txt(obj.get("body")),
