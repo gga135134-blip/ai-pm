@@ -184,6 +184,155 @@ CREATE TABLE IF NOT EXISTS study_settings (
     reminded_evening DATE DEFAULT NULL,
     reminded_night DATE DEFAULT NULL
 );
+
+CREATE TABLE IF NOT EXISTS media_persona (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    one_liner TEXT DEFAULT '',
+    current_phase TEXT DEFAULT '冷启动',
+    status TEXT DEFAULT 'active',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS media_persona_trait (
+    id TEXT PRIMARY KEY,
+    persona_id TEXT NOT NULL,
+    dimension TEXT DEFAULT 'positioning',
+    content TEXT DEFAULT '',
+    brief TEXT DEFAULT '',
+    source TEXT DEFAULT 'manual',
+    source_content_id TEXT DEFAULT '',
+    evidence TEXT DEFAULT '',
+    confidence INTEGER DEFAULT 3,
+    phase_tag TEXT DEFAULT '',
+    status TEXT DEFAULT 'active',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (persona_id) REFERENCES media_persona(id)
+);
+
+CREATE TABLE IF NOT EXISTS media_account (
+    id TEXT PRIMARY KEY,
+    persona_id TEXT NOT NULL,
+    platform TEXT NOT NULL,
+    account_name TEXT DEFAULT '',
+    account_url TEXT DEFAULT '',
+    fans_count INTEGER DEFAULT 0,
+    platform_note TEXT DEFAULT '',
+    status TEXT DEFAULT 'active',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (persona_id) REFERENCES media_persona(id)
+);
+
+CREATE TABLE IF NOT EXISTS media_topic (
+    id TEXT PRIMARY KEY,
+    persona_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    puzzle TEXT DEFAULT '',
+    source TEXT DEFAULT 'manual',
+    reason TEXT DEFAULT '',
+    angle TEXT DEFAULT '',
+    heat INTEGER DEFAULT 3,
+    fit_score INTEGER DEFAULT 3,
+    decision_score REAL DEFAULT 0,
+    decision_report TEXT DEFAULT '',
+    related_trait_ids TEXT DEFAULT '[]',
+    status TEXT DEFAULT 'pool',
+    adopted_content_id TEXT DEFAULT '',
+    rejected_reason TEXT DEFAULT '',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    expires_at DATETIME,
+    FOREIGN KEY (persona_id) REFERENCES media_persona(id)
+);
+
+CREATE TABLE IF NOT EXISTS media_content (
+    id TEXT PRIMARY KEY,
+    persona_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    puzzle TEXT DEFAULT '',
+    stage TEXT DEFAULT 'idea',
+    idea_source TEXT DEFAULT 'manual',
+    idea_reason TEXT DEFAULT '',
+    script TEXT DEFAULT '',
+    edit_note TEXT DEFAULT '',
+    cover_idea TEXT DEFAULT '',
+    used_material_ids TEXT DEFAULT '[]',
+    used_playbook_ids TEXT DEFAULT '[]',
+    topic_fingerprint TEXT DEFAULT '',
+    outcome TEXT DEFAULT '',
+    archived_status TEXT DEFAULT '',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (persona_id) REFERENCES media_persona(id)
+);
+
+CREATE TABLE IF NOT EXISTS media_publish (
+    id TEXT PRIMARY KEY,
+    content_id TEXT NOT NULL,
+    account_id TEXT NOT NULL,
+    publish_text TEXT DEFAULT '',
+    published_at DATETIME,
+    post_url TEXT DEFAULT '',
+    status TEXT DEFAULT 'pending',
+    FOREIGN KEY (content_id) REFERENCES media_content(id),
+    FOREIGN KEY (account_id) REFERENCES media_account(id)
+);
+
+CREATE TABLE IF NOT EXISTS media_metrics (
+    id TEXT PRIMARY KEY,
+    publish_id TEXT NOT NULL,
+    views INTEGER DEFAULT 0,
+    likes INTEGER DEFAULT 0,
+    comments INTEGER DEFAULT 0,
+    shares INTEGER DEFAULT 0,
+    new_fans INTEGER DEFAULT 0,
+    collected_by TEXT DEFAULT 'manual',
+    snapshot_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (publish_id) REFERENCES media_publish(id)
+);
+
+CREATE TABLE IF NOT EXISTS media_review (
+    id TEXT PRIMARY KEY,
+    content_id TEXT NOT NULL,
+    scope TEXT DEFAULT 'overall',
+    account_id TEXT DEFAULT '',
+    what_worked TEXT DEFAULT '',
+    what_failed TEXT DEFAULT '',
+    next_action TEXT DEFAULT '',
+    proposed_traits TEXT DEFAULT '[]',
+    generated_by TEXT DEFAULT 'ai',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (content_id) REFERENCES media_content(id)
+);
+
+CREATE TABLE IF NOT EXISTS media_case (
+    id TEXT PRIMARY KEY,
+    persona_id TEXT NOT NULL,
+    content_id TEXT NOT NULL,
+    case_type TEXT DEFAULT 'normal',
+    threshold_basis TEXT DEFAULT '',
+    topic_factor TEXT DEFAULT '',
+    hook_factor TEXT DEFAULT '',
+    structure_factor TEXT DEFAULT '',
+    material_factor TEXT DEFAULT '',
+    emotion_factor TEXT DEFAULT '',
+    platform_factor TEXT DEFAULT '',
+    external_factor TEXT DEFAULT '',
+    replicable INTEGER DEFAULT 3,
+    conclusion TEXT DEFAULT '',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (content_id) REFERENCES media_content(id)
+);
+
+CREATE TABLE IF NOT EXISTS media_injection_log (
+    id TEXT PRIMARY KEY,
+    content_id TEXT DEFAULT '',
+    ai_type TEXT NOT NULL,
+    injected_asset_ids TEXT DEFAULT '[]',
+    token_count INTEGER DEFAULT 0,
+    output_quality REAL DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
 """
 
 
