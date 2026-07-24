@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% block title %}话题库{% endblock %}
+{% block content %}
+<style>
+  .tp-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.75rem; }
+  @media (max-width: 767px) { .tp-grid { grid-template-columns: 1fr; } }
+</style>
+<div class="max-w-5xl mx-auto px-3 py-4">
+  <div class="flex items-center justify-between mb-3">
+    <div>
+      <div class="text-xs text-gray-400">
+        <a href="/media" class="hover:underline">自媒体</a> / 话题库
+      </div>
+      <h1 class="text-xl font-bold">话题库 <span class="text-sm text-gray-400 font-normal">{{ topics|length }} 条待选</span></h1>
+    </div>
+    <button onclick="aiRecommend()" id="ai-btn"
+            class="bg-violet-600 text-white rounded-lg px-4 py-2 text-sm">
+      ✨ AI 推选题
+    </button>
+  </div>
+
+  <div class="flex gap-2 mb-3 text-xs overflow-x-auto">
+    <a href="/media/topics" class="px-3 py-1 rounded-full whitespace-nowrap
+       {% if not cur_source %}bg-blue-600 text-white{% else %}bg-white text-gray-600{% endif %}">全部</a>
+    {% for code, label in sources.items() %}
+    <a href="/media/topics?source={{ code }}" class="px-3 py-1 rounded-full whitespace-nowrap
+       {% if cur_source == code %}bg-blue-600 text-white{% else %}bg-white text-gray-600{% endif %}">{{ label }}</a>
+    {% endfor %}
+  </div>
+
+  <div id="ai-status" class="hidden text-sm text-violet-600 mb-3"></div>
+
+  <div class="tp-grid mb-4">
+    {% for t in topics %}
+    <div class="bg-white rounded-xl shadow-sm p-3">
+      <div class="flex items-start justify-between gap-2">
+        <div class="text-sm font-medium flex-1">{{ t.title }}</div>
+        <span class="text-xs text-gray-400 whitespace-nowrap">
+          {{ sources.get(t.source, t.source) }}
+        </span>
+      </div>
+      {% if t.puzzle %}
+      <div class="text-sm text-violet-700 mt-1.5 bg-violet-50 rounded px-2 py-1">
+        ❓ {{ t.puzzle }}
+      </div>
+      {% endif %}
+      {% if t.reason %}
+      <div class="text-xs text-gray-500 mt-1.5">{{ t.reason }}</div>
+      {% endif %}
+      {% if t.angle %}
+      <div class="text-xs text-gray-400 mt-1">切入角度：{{ t.angle }}</div>
+      {% endif %}
+      <div class="text-xs text-amber-600 mt-1.5">
+        契合 {{ '★' * t.fit_score }}　热度 {{ '★' * t.heat }}
+      </div>
+      <div class="flex gap-2 mt-2">
+        <form method="post" action="/media/topic/{{ t.id }}/adopt" class="flex-1">
+          <button class="w-full bg-blue-600 text-white rounded-lg py-1.5 text-xs">采用</button>
+        </form>
+        <button onclick="rejectTopic('{{ t.id }}')"
+                class="px-3 text-xs text-gray-400 hover:text-red-500">弃</button>
+      </div>
+    </div>
+    {% else %}
+    <p class="text-sm text-gray-400 py-8 text-center col-span-2">
+      话题池是空的。点右上「AI 推选题」，或手动加一条。
+    </p>
+    {% endfor %}
+  </div>
+
+  <details class="bg-white rounded-xl shadow-sm p-4 mb-4">
+    <summary class="font-semibold text-sm cursor-pointer">+ 手动加话题</summary>
+    <form method="post" action="/media/topics" class="space-y-2 mt-3">
+      <input type="hidden" name="persona_id" value="{{ persona_id }}">
+      <input name="title" required placeholder="话题"
+             class="w-full border rounded-lg px-3 py-2 text-sm">
+      <input name="puzzle" placeholder="核心谜题（受众想解开的疑问，如&quot;为什么越努力越叛逆？&quot;）"
+             class="w-full border rounded-lg px-3 py-2 text-sm">
+      <input name="reason" placeholder="为什么值得做"
+             class="w-full border rounded-lg px-3 py-2 text-sm">
+      <input name="angle" placeholder="切入角度"
+             class="w-full border rounded-lg px-3 py-2 text-sm">
+      <button class="bg-blue-600 text-white rounded-lg px-4 py-2 text-sm">加入话题池</button>
+    </form>
+  </details>
+
+  {% if rejected %}
+  <details class="bg-white rounded-xl shadow-sm p-4">
+    <summary class="font-semibold text-sm cursor-pointer text-gray-500">
+      已弃（{{ rejected|length }}）—— 这些原因会喂给 AI，避免重复推荐
+    </summary>
+    <div class="mt-3">
+      {% for t in rejected %}
+      <div class="py-1.5 border-b border-gray-50 text-sm text-gray-400">
+        {{ t.title }}
+        {% if t.rejected_reason %}
+          <span class="text-xs">— {{ t.rejected_reason }}</span>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </details>
+  {% endif %}
+</div>
+
+<script>
+function rejectTopic(id) {
+  const reason = prompt("为什么弃这个选题？（会喂给 AI 避免重复推荐）");
+  if (reason === null) return;
+  const f = document.createElement('form');
+  f.method = 'post';
+  f.action = '/media/topic/' + id + '/reject';
+  const i = document.createElement('input');
+  i.name = 'rejected_reason';
+  i.value = reason;
+  f.appendChild(i);
+  document.body.appendChild(f);
+  f.submit();
+}
+
+async function aiRecommend() {
+  const btn = document.getElementById('ai-btn');
+  const status = document.getElementById('ai-status');
+  btn.disabled = true;
+  btn.textContent = '思考中…';
+  status.classList.remove('hidden');
+  status.textContent = 'AI 正在基于人设和历史表现推选题…';
+  try {
+    const r = await fetch('/media/topics/ai-recommend', {method: 'POST'});
+    const d = await r.json();
+    if (d.ok) {
+      status.textContent = '已加入 ' + d.count + ' 条，刷新中…';
+      location.reload();
+    } else {
+      status.textContent = '失败：' + (d.error || '未知错误');
+      btn.disabled = false;
+      btn.textContent = '✨ AI 推选题';
+    }
+  } catch (e) {
+    status.textContent = '请求失败：' + e;
+    btn.disabled = false;
+    btn.textContent = '✨ AI 推选题';
+  }
+}
+</script>
+{% endblock %}

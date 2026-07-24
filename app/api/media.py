@@ -154,3 +154,102 @@ async def account_create(pid: str, platform: str = Form(...),
     finally:
         await db.close()
     return RedirectResponse(f"/media/persona/{pid}", status_code=302)
+
+
+# ─────────────── 话题库 ───────────────
+
+TOPIC_SOURCES = {
+    "manual": "人工", "ai_rec": "AI推荐", "hot": "热点",
+    "comment": "评论区", "competitor": "对标", "review": "复盘衍生",
+}
+
+
+@router.get("/media/topics", response_class=HTMLResponse)
+async def topics_home(request: Request, source: str = ""):
+    db = await get_db()
+    try:
+        pid = await _first_persona_id(db)
+        if not pid:
+            return RedirectResponse("/media/persona", status_code=302)
+        sql = ("SELECT * FROM media_topic WHERE persona_id=? AND status='pool'")
+        args = [pid]
+        if source:
+            sql += " AND source=?"
+            args.append(source)
+        sql += " ORDER BY decision_score DESC, fit_score DESC, heat DESC, created_at DESC"
+        cur = await db.execute(sql, tuple(args))
+        topics = [dict(r) for r in await cur.fetchall()]
+        cur = await db.execute(
+            "SELECT * FROM media_topic WHERE persona_id=? AND status='rejected' "
+            "ORDER BY created_at DESC LIMIT 20", (pid,))
+        rejected = [dict(r) for r in await cur.fetchall()]
+    finally:
+        await db.close()
+    return _tpl(request, "media_topics.html",
+                {"topics": topics, "rejected": rejected, "persona_id": pid,
+                 "sources": TOPIC_SOURCES, "cur_source": source})
+
+
+@router.post("/media/topics")
+async def topic_create(persona_id: str = Form(...), title: str = Form(...),
+                       puzzle: str = Form(""), reason: str = Form(""),
+                       angle: str = Form(""), heat: int = Form(3),
+                       fit_score: int = Form(3)):
+    db = await get_db()
+    try:
+        await db.execute(
+            "INSERT INTO media_topic "
+            "(id,persona_id,title,puzzle,source,reason,angle,heat,fit_score) "
+            "VALUES (?,?,?,?,'manual',?,?,?,?)",
+            (str(uuid.uuid4()), persona_id, title.strip(), puzzle.strip(),
+             reason.strip(), angle.strip(), heat, fit_score))
+        await db.commit()
+    finally:
+        await db.close()
+    return RedirectResponse("/media/topics", status_code=302)
+
+
+async def _adopt_topic(db, topic_id: str) -> str | None:
+    """话题 → 内容。把谜题和理由一起带过去，开工时不用重新想。"""
+    cur = await db.execute("SELECT * FROM media_topic WHERE id=?", (topic_id,))
+    row = await cur.fetchone()
+    if not row or row["status"] != "pool":
+        return None
+    t = dict(row)
+    cid = str(uuid.uuid4())
+    await db.execute(
+        "INSERT INTO media_content "
+        "(id,persona_id,title,puzzle,stage,idea_source,idea_reason) "
+        "VALUES (?,?,?,?,'idea',?,?)",
+        (cid, t["persona_id"], t["title"], t["puzzle"], t["source"], t["reason"]))
+    await db.execute(
+        "UPDATE media_topic SET status='adopted', adopted_content_id=? WHERE id=?",
+        (cid, topic_id))
+    await db.commit()
+    return cid
+
+
+@router.post("/media/topic/{tid}/adopt")
+async def topic_adopt(tid: str):
+    db = await get_db()
+    try:
+        cid = await _adopt_topic(db, tid)
+    finally:
+        await db.close()
+    if not cid:
+        return RedirectResponse("/media/topics", status_code=302)
+    return RedirectResponse(f"/media/content/{cid}", status_code=302)
+
+
+@router.post("/media/topic/{tid}/reject")
+async def topic_reject(tid: str, rejected_reason: str = Form("")):
+    """弃单必须留原因 —— 下次 AI 推荐时带上，防止重复推同类垃圾。"""
+    db = await get_db()
+    try:
+        await db.execute(
+            "UPDATE media_topic SET status='rejected', rejected_reason=? WHERE id=?",
+            (rejected_reason.strip(), tid))
+        await db.commit()
+    finally:
+        await db.close()
+    return RedirectResponse("/media/topics", status_code=302)
