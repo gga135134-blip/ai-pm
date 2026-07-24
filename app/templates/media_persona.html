@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% block title %}人设档案{% endblock %}
+{% block content %}
+<style>
+  .mp-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 1rem; }
+  @media (max-width: 767px) { .mp-grid { grid-template-columns: 1fr; } }
+</style>
+<div class="max-w-5xl mx-auto px-3 py-4">
+
+{% if not persona %}
+  <div class="bg-white rounded-xl shadow-sm p-6 max-w-md mx-auto">
+    <h1 class="text-lg font-bold mb-1">建立第一个人设</h1>
+    <p class="text-sm text-gray-500 mb-4">
+      人设不用一次写全 —— 先起个名，条目会在后续内容和复盘里慢慢长出来。
+    </p>
+    <form method="post" action="/media/persona" class="space-y-3">
+      <input name="name" required placeholder="IP 名"
+             class="w-full border rounded-lg px-3 py-2 text-sm">
+      <input name="one_liner" placeholder="一句话定位（可留空）"
+             class="w-full border rounded-lg px-3 py-2 text-sm">
+      <select name="current_phase" class="w-full border rounded-lg px-3 py-2 text-sm">
+        <option>冷启动</option><option>涨粉</option><option>转化</option>
+      </select>
+      <button class="w-full bg-blue-600 text-white rounded-lg py-2 text-sm">创建</button>
+    </form>
+  </div>
+{% else %}
+  <div class="flex items-center justify-between mb-4">
+    <div>
+      <div class="text-xs text-gray-400">
+        <a href="/media" class="hover:underline">自媒体</a> / 人设档案
+      </div>
+      <h1 class="text-xl font-bold">{{ persona.name }}</h1>
+      <div class="text-sm text-gray-500">
+        {{ persona.one_liner }}
+        <span class="ml-2 px-2 py-0.5 bg-blue-50 text-blue-600 rounded text-xs">
+          {{ persona.current_phase }}期
+        </span>
+      </div>
+    </div>
+    <a href="/media" class="text-sm text-blue-600">← 看板</a>
+  </div>
+
+  <div class="mp-grid">
+    <div>
+      <div class="bg-white rounded-xl shadow-sm p-4 mb-4">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="font-semibold text-sm">人设条目</h2>
+          <span class="text-xs text-gray-400">置信度越高越优先注入 AI</span>
+        </div>
+
+        {% if not traits_by_dim %}
+          <p class="text-sm text-gray-400 py-4 text-center">
+            还没有条目。先手动加两条，剩下的让 AI 从内容里总结。
+          </p>
+        {% endif %}
+
+        {% for dim, label in dimensions.items() %}
+          {% if traits_by_dim.get(dim) %}
+          <div class="mb-3">
+            <div class="text-xs font-medium text-gray-500 mb-1">
+              {{ label }}{% if dim == 'signature' %} ⭐{% endif %}
+            </div>
+            {% for t in traits_by_dim[dim] %}
+            <div class="flex items-start gap-2 py-1.5 border-b border-gray-50">
+              <div class="flex-1">
+                <div class="text-sm">{{ t.content }}</div>
+                {% if t.brief %}
+                  <div class="text-xs text-violet-600 mt-0.5">注入用：{{ t.brief }}</div>
+                {% endif %}
+                {% if t.evidence %}
+                  <div class="text-xs text-gray-400 mt-0.5">依据：{{ t.evidence }}</div>
+                {% endif %}
+              </div>
+              <div class="text-xs text-amber-600 whitespace-nowrap">
+                {{ '★' * t.confidence }}
+              </div>
+              <form method="post" action="/media/trait/{{ t.id }}/archive">
+                <button class="text-xs text-gray-400 hover:text-red-500"
+                        title="归档（保留演化史）">归档</button>
+              </form>
+            </div>
+            {% endfor %}
+          </div>
+          {% endif %}
+        {% endfor %}
+      </div>
+
+      <details class="bg-white rounded-xl shadow-sm p-4 mb-4">
+        <summary class="font-semibold text-sm cursor-pointer">+ 新增条目</summary>
+        <form method="post" action="/media/persona/{{ persona.id }}/trait"
+              class="space-y-2 mt-3">
+          <select name="dimension" class="w-full border rounded-lg px-3 py-2 text-sm">
+            {% for dim, label in dimensions.items() %}
+            <option value="{{ dim }}">{{ label }}</option>
+            {% endfor %}
+          </select>
+          <textarea name="content" required rows="2" placeholder="条目内容"
+                    class="w-full border rounded-lg px-3 py-2 text-sm"></textarea>
+          <input name="brief" maxlength="30" placeholder="注入用精简版（≤30字，留空则自动截断）"
+                 class="w-full border rounded-lg px-3 py-2 text-sm">
+          <input name="evidence" placeholder="依据（可留空）"
+                 class="w-full border rounded-lg px-3 py-2 text-sm">
+          <select name="confidence" class="w-full border rounded-lg px-3 py-2 text-sm">
+            <option value="5">★★★★★ 被数据反复验证</option>
+            <option value="4">★★★★ 比较确定</option>
+            <option value="3" selected>★★★ 一般</option>
+            <option value="2">★★ 待验证</option>
+            <option value="1">★ 只是猜测</option>
+          </select>
+          <button class="bg-blue-600 text-white rounded-lg px-4 py-2 text-sm">保存</button>
+        </form>
+      </details>
+
+      {% if archived %}
+      <details class="bg-white rounded-xl shadow-sm p-4">
+        <summary class="font-semibold text-sm cursor-pointer text-gray-500">
+          演化史（已归档 {{ archived|length }} 条）
+        </summary>
+        <div class="mt-3">
+          {% for t in archived %}
+          <div class="py-1.5 border-b border-gray-50 text-sm text-gray-400">
+            <span class="text-xs">{{ dimensions.get(t.dimension, t.dimension) }}</span>
+            · {{ t.content }}
+            <span class="text-xs">（{{ t.phase_tag }}期）</span>
+          </div>
+          {% endfor %}
+        </div>
+      </details>
+      {% endif %}
+    </div>
+
+    <div>
+      <div class="bg-white rounded-xl shadow-sm p-4">
+        <h2 class="font-semibold text-sm mb-3">平台账号</h2>
+        {% for a in accounts %}
+        <div class="py-2 border-b border-gray-50">
+          <div class="text-sm font-medium">{{ platforms.get(a.platform, a.platform) }}</div>
+          <div class="text-xs text-gray-500">{{ a.account_name }}</div>
+          {% if a.platform_note %}
+            <div class="text-xs text-gray-400 mt-0.5">{{ a.platform_note }}</div>
+          {% endif %}
+        </div>
+        {% else %}
+        <p class="text-sm text-gray-400 mb-2">还没有账号。至少加一个才能发布。</p>
+        {% endfor %}
+
+        <details class="mt-3">
+          <summary class="text-sm text-blue-600 cursor-pointer">+ 添加平台</summary>
+          <form method="post" action="/media/persona/{{ persona.id }}/account"
+                class="space-y-2 mt-2">
+            <select name="platform" class="w-full border rounded-lg px-3 py-2 text-sm">
+              {% for code, label in platforms.items() %}
+              <option value="{{ code }}">{{ label }}</option>
+              {% endfor %}
+            </select>
+            <input name="account_name" placeholder="账号名"
+                   class="w-full border rounded-lg px-3 py-2 text-sm">
+            <input name="account_url" placeholder="主页链接（可留空）"
+                   class="w-full border rounded-lg px-3 py-2 text-sm">
+            <input name="platform_note" placeholder="该平台差异化策略（可留空）"
+                   class="w-full border rounded-lg px-3 py-2 text-sm">
+            <button class="bg-blue-600 text-white rounded-lg px-4 py-2 text-sm w-full">
+              添加
+            </button>
+          </form>
+        </details>
+      </div>
+    </div>
+  </div>
+{% endif %}
+</div>
+{% endblock %}
