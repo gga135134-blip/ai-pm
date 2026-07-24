@@ -204,3 +204,85 @@ async def write_script(db, content_id: str, mode: str = "full",
     return {"ok": True, "script": resp, "error": "",
             "cost": result.get("cost", 0), "model": result.get("model", ""),
             "injected_count": len(injected_ids)}
+
+
+PLATFORM_STYLE = {
+    "douyin": "抖音：标题要短要炸，前 10 个字决定点开率。3-5 个话题标签。",
+    "xhs": "小红书：标题带 emoji，正文分点排版，口语化像跟朋友说话。"
+           "正文控制在 600 字内（超过阅读完成率骤降）。5-8 个话题标签。",
+    "shipinhao": "视频号：受众年龄偏大，标题直白讲清价值，少用网络黑话。"
+                 "2-3 个话题标签。",
+}
+
+COPY_SYSTEM = """你是自媒体平台文案专家。根据口播脚本，为指定平台写发布文案。
+
+铁律：
+1. 标题必须承接脚本的核心谜题，保留悬念。
+2. 严格遵守该平台的字数和风格要求。
+3. 话题标签用该平台真实存在的通用标签，不要造词。
+4. 只输出 JSON，不要解释。
+
+输出格式：{"title":"标题","body":"正文","tags":["标签1","标签2"]}"""
+
+
+async def generate_platform_copy(db, content_id: str, account_id: str,
+                                 model: str = "auto") -> dict:
+    """为单个平台生成发布文案。
+
+    看不到：人设全档、原料库、历史数据 —— 有脚本和平台特性就够了。
+    """
+    cur = await db.execute(
+        "SELECT title, puzzle, script FROM media_content WHERE id=?", (content_id,))
+    row = await cur.fetchone()
+    if not row:
+        return {"ok": False, "error": "内容不存在", "publish_text": "",
+                "cost": 0, "model": ""}
+    content = dict(row)
+    if not (content["script"] or "").strip():
+        return {"ok": False, "error": "请先写脚本，文案是从脚本来的",
+                "publish_text": "", "cost": 0, "model": ""}
+
+    cur = await db.execute(
+        "SELECT platform, platform_note FROM media_account WHERE id=?", (account_id,))
+    row = await cur.fetchone()
+    if not row:
+        return {"ok": False, "error": "账号不存在", "publish_text": "",
+                "cost": 0, "model": ""}
+    account = dict(row)
+
+    parts = [
+        f"【平台要求】{PLATFORM_STYLE.get(account['platform'], account['platform'])}",
+    ]
+    if account["platform_note"]:
+        parts.append(f"【本账号在该平台的策略】{account['platform_note']}")
+    parts.append(f"【选题】{content['title']}")
+    if content["puzzle"]:
+        parts.append(f"【核心谜题】{content['puzzle']}")
+    parts.append(f"【口播脚本】\n{content['script'][:4000]}")
+    parts.append("请生成该平台的发布文案。")
+
+    result = await ask_ai("\n\n".join(parts), model=model, task_type="media_copy",
+                          system_prompt=COPY_SYSTEM, json_mode=True)
+    resp = result.get("response", "")
+    if resp.startswith("[错误]") or resp.startswith("[费用保护]"):
+        return {"ok": False, "error": resp, "publish_text": "",
+                "cost": result.get("cost", 0), "model": result.get("model", "")}
+
+    obj = extract_json(resp, expect="object")
+    if not obj:
+        # 解析不了就把原文给用户，总比丢掉强
+        text = resp.strip()
+    else:
+        tags = obj.get("tags") or []
+        tag_line = " ".join(f"#{t.lstrip('#')}" for t in tags if t)
+        text = "\n\n".join(x for x in [
+            (obj.get("title") or "").strip(),
+            (obj.get("body") or "").strip(),
+            tag_line,
+        ] if x)
+
+    await log_injection(db, content_id, f"platform_copy:{account['platform']}",
+                        [], result.get("tokens", 0))
+
+    return {"ok": True, "publish_text": text, "error": "",
+            "cost": result.get("cost", 0), "model": result.get("model", "")}

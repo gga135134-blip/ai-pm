@@ -5,10 +5,9 @@ from fastapi import APIRouter, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from app.database import get_db
 from app.services.media_flow import (
-    PLATFORMS, STAGES, STAGE_LABELS, can_transition, next_stage,
+    PLATFORMS, STAGES, STAGE_LABELS, can_transition, next_stage, stage_index,
 )
-from app.services.media_ai import recommend_topics
-from app.services.media_ai import write_script
+from app.services.media_ai import recommend_topics, write_script, generate_platform_copy
 
 log = logging.getLogger(__name__)
 
@@ -448,3 +447,75 @@ async def content_ai_script(cid: str, mode: str = Form("full")):
     finally:
         await db.close()
     return JSONResponse(result)
+
+
+# ─────────────── 三平台发布 ───────────────
+
+async def _ensure_publish(db, content_id: str, account_id: str) -> str:
+    """取或建该内容在该平台的发布记录。"""
+    cur = await db.execute(
+        "SELECT id FROM media_publish WHERE content_id=? AND account_id=?",
+        (content_id, account_id))
+    row = await cur.fetchone()
+    if row:
+        return row["id"]
+    pubid = str(uuid.uuid4())
+    await db.execute(
+        "INSERT INTO media_publish (id,content_id,account_id) VALUES (?,?,?)",
+        (pubid, content_id, account_id))
+    await db.commit()
+    return pubid
+
+
+@router.post("/media/content/{cid}/publish/{aid}/copy")
+async def publish_ai_copy(cid: str, aid: str):
+    db = await get_db()
+    try:
+        try:
+            result = await generate_platform_copy(db, cid, aid)
+            if result.get("ok"):
+                pubid = await _ensure_publish(db, cid, aid)
+                await db.execute(
+                    "UPDATE media_publish SET publish_text=? WHERE id=?",
+                    (result["publish_text"], pubid))
+                await db.commit()
+        except Exception as e:
+            log.exception("AI 生成平台文案失败")
+            return JSONResponse({"ok": False, "error": str(e)})
+    finally:
+        await db.close()
+    return JSONResponse(result)
+
+
+@router.post("/media/content/{cid}/publish/{aid}/save")
+async def publish_save(cid: str, aid: str, publish_text: str = Form(""),
+                       post_url: str = Form(""), mark_published: str = Form("")):
+    db = await get_db()
+    try:
+        pubid = await _ensure_publish(db, cid, aid)
+        if mark_published:
+            await db.execute(
+                "UPDATE media_publish SET publish_text=?, post_url=?, "
+                "status='published', published_at=CURRENT_TIMESTAMP WHERE id=?",
+                (publish_text, post_url.strip(), pubid))
+        else:
+            await db.execute(
+                "UPDATE media_publish SET publish_text=?, post_url=? WHERE id=?",
+                (publish_text, post_url.strip(), pubid))
+        await db.commit()
+
+        # 任一平台已发 → 内容自动进入 published 阶段
+        cur = await db.execute(
+            "SELECT COUNT(*) c FROM media_publish "
+            "WHERE content_id=? AND status='published'", (cid,))
+        if (await cur.fetchone())["c"] > 0:
+            cur = await db.execute("SELECT stage FROM media_content WHERE id=?", (cid,))
+            row = await cur.fetchone()
+            if row and stage_index(row["stage"]) < stage_index("published"):
+                await db.execute(
+                    "UPDATE media_content SET stage='published', "
+                    "updated_at=CURRENT_TIMESTAMP WHERE id=?", (cid,))
+                await db.commit()
+    finally:
+        await db.close()
+    return RedirectResponse(f"/media/content/{cid}", status_code=302)

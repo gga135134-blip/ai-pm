@@ -72,7 +72,77 @@
   </div>
 
   <!-- 三平台发布：Task 9 填充 -->
-  <div id="publish-section"></div>
+  <div class="bg-white rounded-xl shadow-sm p-4 mb-3">
+    <h2 class="font-semibold text-sm mb-3">三平台发布</h2>
+    {% if not accounts %}
+      <p class="text-sm text-gray-400">
+        还没有平台账号，
+        <a href="/media/persona/{{ persona.id }}" class="text-blue-600">先去人设档案添加</a>。
+      </p>
+    {% else %}
+    <div class="pub-grid">
+      {% for a in accounts %}
+      {% set p = pubs.get(a.id) %}
+      <div class="border rounded-lg p-3
+        {% if p and p.status == 'published' %}border-green-200 bg-green-50{% endif %}">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-sm font-medium">
+            {{ platforms.get(a.platform, a.platform) }}
+          </span>
+          {% if p and p.status == 'published' %}
+            <span class="text-xs text-green-600">已发</span>
+          {% else %}
+            <span class="text-xs text-gray-400">待发</span>
+          {% endif %}
+        </div>
+        <button onclick="aiCopy('{{ a.id }}')" id="copy-btn-{{ a.id }}"
+                class="w-full border border-violet-600 text-violet-600 rounded-lg py-1.5 text-xs mb-2">
+          ✨ 生成文案
+        </button>
+        <div id="copy-status-{{ a.id }}" class="hidden text-xs text-violet-600 mb-1"></div>
+        <form method="post"
+              action="/media/content/{{ content.id }}/publish/{{ a.id }}/save">
+          <textarea name="publish_text" id="copy-box-{{ a.id }}" rows="6"
+                    placeholder="该平台文案"
+                    class="w-full border rounded-lg px-2 py-1.5 text-xs">{{ p.publish_text if p else '' }}</textarea>
+          <input name="post_url" value="{{ p.post_url if p else '' }}"
+                 placeholder="发布后的链接"
+                 class="w-full border rounded-lg px-2 py-1.5 text-xs mt-1">
+          <div class="flex gap-1 mt-1">
+            <button class="flex-1 bg-gray-100 text-gray-700 rounded-lg py-1.5 text-xs">
+              保存
+            </button>
+            {% if not p or p.status != 'published' %}
+            <button name="mark_published" value="1"
+                    class="flex-1 bg-blue-600 text-white rounded-lg py-1.5 text-xs">
+              标记已发
+            </button>
+            {% endif %}
+          </div>
+        </form>
+
+        {% if p and p.status == 'published' %}
+        {% set m = metrics.get(p.id) %}
+        <div class="mt-2 pt-2 border-t border-green-200">
+          {% if m %}
+          <div class="text-xs text-gray-600">
+            播放 {{ m.views }}　赞 {{ m.likes }}<br>
+            评 {{ m.comments }}　转 {{ m.shares }}　粉 +{{ m.new_fans }}
+          </div>
+          <div class="text-xs text-gray-400 mt-0.5">
+            {{ m.collected_by }}　{{ m.snapshot_at[:16] }}
+          </div>
+          {% else %}
+          <div class="text-xs text-gray-400">还没有数据</div>
+          {% endif %}
+          <div id="metrics-slot-{{ p.id }}"></div>
+        </div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
 
   <!-- 复盘：Task 11 填充 -->
   <div id="review-section"></div>
@@ -107,6 +177,32 @@ async function aiScript(mode) {
     status.textContent = '请求失败：' + e;
   }
   btns.forEach(b => b.disabled = false);
+}
+
+async function aiCopy(accountId) {
+  const btn = document.getElementById('copy-btn-' + accountId);
+  const status = document.getElementById('copy-status-' + accountId);
+  const box = document.getElementById('copy-box-' + accountId);
+  btn.disabled = true;
+  btn.textContent = '生成中…';
+  status.classList.remove('hidden');
+  status.textContent = '正在按该平台特性改写…';
+  try {
+    const r = await fetch('/media/content/{{ content.id }}/publish/'
+                          + accountId + '/copy', {method: 'POST'});
+    const d = await r.json();
+    if (d.ok) {
+      box.value = d.publish_text;
+      status.textContent = '完成（' + d.model + '，$'
+                         + (d.cost || 0).toFixed(4) + '）。记得点保存。';
+    } else {
+      status.textContent = '失败：' + (d.error || '未知错误');
+    }
+  } catch (e) {
+    status.textContent = '请求失败：' + e;
+  }
+  btn.disabled = false;
+  btn.textContent = '✨ 生成文案';
 }
 </script>
 {% endblock %}
