@@ -286,3 +286,175 @@ async def generate_platform_copy(db, content_id: str, account_id: str,
 
     return {"ok": True, "publish_text": text, "error": "",
             "cost": result.get("cost", 0), "model": result.get("model", "")}
+
+
+REVIEW_SYSTEM = """你是自媒体数据复盘专家。基于真实数据分析一条内容的表现。
+
+铁律：
+1. 结论必须基于给定数据，不许编造没给你的数字。
+2. 区分「可复制的方法论」和「运气/热点」—— replicable 打分要诚实，
+   蹭上热点的爆款打 1-2 分，方法论过硬的打 4-5 分。把运气当能力会让人学错。
+3. 提炼人设条目时必须给证据，证据不足就少提甚至不提。
+4. 只输出 JSON，不要解释。
+
+输出格式：
+{
+  "platform_reviews": [
+    {"platform":"douyin","what_worked":"","what_failed":"","next_action":""}
+  ],
+  "overall": {"what_worked":"","what_failed":"","next_action":""},
+  "case": {
+    "case_type":"hit|flop|normal",
+    "threshold_basis":"判定依据",
+    "topic_factor":"选题层归因","hook_factor":"开场钩子归因",
+    "structure_factor":"结构归因","material_factor":"原料归因",
+    "emotion_factor":"情绪曲线归因","platform_factor":"平台适配归因",
+    "external_factor":"外部因素与运气成分",
+    "replicable":3,
+    "conclusion":"一句话结论"
+  },
+  "proposed_traits": [
+    {"dimension":"positioning|audience|tone|topics|taboo|signature|differentiator",
+     "content":"条目内容","brief":"≤30字精简版","evidence":"证据","confidence":3}
+  ],
+  "topic_fingerprint": "3-6个核心语义标签，逗号分隔，用于以后查重"
+}
+
+关于 topic_fingerprint：写这条内容"讲的是什么"的语义标签，不是标题复述。
+例："职场妈妈,时间管理,愧疚感,边界感"。以后做同方向选题时靠它查重。"""
+
+
+async def review_content(db, content_id: str, model: str = "auto") -> dict:
+    """L1 单条复盘：N 份平台复盘 + 1 份总复盘 + 1 份归因 + 候选人设条目。
+
+    候选条目绝不自动写入 trait 表 —— AI 提炼，人拍板。
+    防止 AI 把偶然当规律污染人设（spec §5.2 关键设计）。
+
+    看不到：原料库、话题池 —— 与复盘无关。
+    """
+    cur = await db.execute("SELECT * FROM media_content WHERE id=?", (content_id,))
+    row = await cur.fetchone()
+    if not row:
+        return {"ok": False, "error": "内容不存在", "review_count": 0,
+                "cost": 0, "model": ""}
+    content = dict(row)
+
+    cur = await db.execute(
+        "SELECT p.id AS publish_id, p.account_id, p.publish_text, a.platform, "
+        "  m.views, m.likes, m.comments, m.shares, m.new_fans "
+        "FROM media_publish p JOIN media_account a ON a.id=p.account_id "
+        "LEFT JOIN media_metrics m ON m.id = ("
+        "  SELECT id FROM media_metrics WHERE publish_id=p.id "
+        "  ORDER BY snapshot_at DESC LIMIT 1) "
+        "WHERE p.content_id=? AND p.status='published'", (content_id,))
+    pubs = [dict(r) for r in await cur.fetchall()]
+    if not pubs:
+        return {"ok": False, "error": "还没有已发布的平台，无法复盘",
+                "review_count": 0, "cost": 0, "model": ""}
+    if not any(p["views"] for p in pubs):
+        return {"ok": False, "error": "还没有采集到数据，先录入播放量再复盘",
+                "review_count": 0, "cost": 0, "model": ""}
+
+    # 账号历史中位播放量 —— 判定爆款/失败的基准
+    cur = await db.execute(
+        "SELECT MAX(m.views) v FROM media_content c "
+        "JOIN media_publish p ON p.content_id=c.id "
+        "JOIN media_metrics m ON m.publish_id=p.id "
+        "WHERE c.persona_id=? AND c.id != ? GROUP BY c.id",
+        (content["persona_id"], content_id))
+    history = sorted(r["v"] or 0 for r in await cur.fetchall())
+    median = history[len(history) // 2] if history else 0
+
+    parts = [f"【选题】{content['title']}"]
+    if content["puzzle"]:
+        parts.append(f"【核心谜题】{content['puzzle']}")
+    if content["script"]:
+        parts.append(f"【口播脚本】\n{content['script'][:3000]}")
+    parts.append("【各平台数据】\n" + "\n".join(
+        f"- {p['platform']}：播放 {p['views'] or 0}，赞 {p['likes'] or 0}，"
+        f"评 {p['comments'] or 0}，转 {p['shares'] or 0}，粉 +{p['new_fans'] or 0}"
+        for p in pubs))
+    parts.append(f"【账号历史中位播放量】{median}"
+                 f"（用于判定 case_type：显著高于为 hit，显著低于为 flop）")
+    parts.append("请复盘这条内容。")
+
+    result = await ask_ai("\n\n".join(parts), model=model, task_type="media_review",
+                          system_prompt=REVIEW_SYSTEM, json_mode=True)
+    resp = result.get("response", "")
+    if resp.startswith("[错误]") or resp.startswith("[费用保护]"):
+        return {"ok": False, "error": resp, "review_count": 0,
+                "cost": result.get("cost", 0), "model": result.get("model", "")}
+
+    obj = extract_json(resp, expect="object")
+    if not obj:
+        return {"ok": False, "error": "复盘结果无法解析", "review_count": 0,
+                "cost": result.get("cost", 0), "model": result.get("model", "")}
+
+    # 重跑复盘时清掉旧的，避免堆积
+    await db.execute("DELETE FROM media_review WHERE content_id=?", (content_id,))
+    await db.execute("DELETE FROM media_case WHERE content_id=?", (content_id,))
+
+    by_platform = {p["platform"]: p["account_id"] for p in pubs}
+    count = 0
+    for pr in obj.get("platform_reviews") or []:
+        if not isinstance(pr, dict):
+            continue
+        aid = by_platform.get(pr.get("platform", ""), "")
+        await db.execute(
+            "INSERT INTO media_review "
+            "(id,content_id,scope,account_id,what_worked,what_failed,next_action) "
+            "VALUES (?,?,'platform',?,?,?,?)",
+            (str(uuid.uuid4()), content_id, aid,
+             (pr.get("what_worked") or "").strip(),
+             (pr.get("what_failed") or "").strip(),
+             (pr.get("next_action") or "").strip()))
+        count += 1
+
+    ov = obj.get("overall") or {}
+    traits = [t for t in (obj.get("proposed_traits") or []) if isinstance(t, dict)]
+    await db.execute(
+        "INSERT INTO media_review "
+        "(id,content_id,scope,what_worked,what_failed,next_action,proposed_traits) "
+        "VALUES (?,?,'overall',?,?,?,?)",
+        (str(uuid.uuid4()), content_id,
+         (ov.get("what_worked") or "").strip(),
+         (ov.get("what_failed") or "").strip(),
+         (ov.get("next_action") or "").strip(),
+         json.dumps(traits, ensure_ascii=False)))
+    count += 1
+
+    case = obj.get("case") or {}
+    case_type = case.get("case_type") if case.get("case_type") in \
+        ("hit", "flop", "normal") else "normal"
+    await db.execute(
+        "INSERT INTO media_case "
+        "(id,persona_id,content_id,case_type,threshold_basis,topic_factor,"
+        " hook_factor,structure_factor,material_factor,emotion_factor,"
+        " platform_factor,external_factor,replicable,conclusion) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        (str(uuid.uuid4()), content["persona_id"], content_id, case_type,
+         (case.get("threshold_basis") or "").strip(),
+         (case.get("topic_factor") or "").strip(),
+         (case.get("hook_factor") or "").strip(),
+         (case.get("structure_factor") or "").strip(),
+         (case.get("material_factor") or "").strip(),
+         (case.get("emotion_factor") or "").strip(),
+         (case.get("platform_factor") or "").strip(),
+         (case.get("external_factor") or "").strip(),
+         _clamp(case.get("replicable"), 3),
+         (case.get("conclusion") or "").strip()))
+
+    # outcome + fingerprint 供三期查重用：以后撞到同方向的 flop 会强提示。
+    # 一期就写入，否则三期开工时历史内容全是空指纹，查重形同虚设。
+    fingerprint = (obj.get("topic_fingerprint") or "").strip()[:200]
+    await db.execute(
+        "UPDATE media_content SET outcome=?, topic_fingerprint=?, stage='reviewed', "
+        "updated_at=CURRENT_TIMESTAMP WHERE id=?",
+        (case_type, fingerprint, content_id))
+    await db.commit()
+
+    await log_injection(db, content_id, "review_content", [],
+                        result.get("tokens", 0))
+
+    return {"ok": True, "review_count": count, "error": "",
+            "cost": result.get("cost", 0), "model": result.get("model", "")}

@@ -8,7 +8,9 @@ from app.services.media_metrics import recognize_screenshot, save_metrics
 from app.services.media_flow import (
     PLATFORMS, STAGES, STAGE_LABELS, can_transition, next_stage, stage_index,
 )
-from app.services.media_ai import recommend_topics, write_script, generate_platform_copy
+from app.services.media_ai import (
+    recommend_topics, write_script, generate_platform_copy, review_content,
+)
 
 log = logging.getLogger(__name__)
 
@@ -555,6 +557,51 @@ async def publish_save(cid: str, aid: str, publish_text: str = Form(""),
                     "UPDATE media_content SET stage='published', "
                     "updated_at=CURRENT_TIMESTAMP WHERE id=?", (cid,))
                 await db.commit()
+    finally:
+        await db.close()
+    return RedirectResponse(f"/media/content/{cid}", status_code=302)
+
+
+# ─────────────── 复盘 ───────────────
+
+@router.post("/media/content/{cid}/ai-review")
+async def content_ai_review(cid: str):
+    db = await get_db()
+    try:
+        try:
+            result = await review_content(db, cid)
+        except Exception as e:
+            log.exception("AI 复盘失败")
+            return JSONResponse({"ok": False, "error": str(e)})
+    finally:
+        await db.close()
+    return JSONResponse(result)
+
+
+@router.post("/media/content/{cid}/adopt-trait")
+async def adopt_trait(cid: str, dimension: str = Form(...), content: str = Form(...),
+                      brief: str = Form(""), evidence: str = Form(""),
+                      confidence: int = Form(3)):
+    """把 AI 提炼的候选条目写入人设 —— 人拍板这一步是故意保留的。"""
+    db = await get_db()
+    try:
+        cur = await db.execute(
+            "SELECT persona_id FROM media_content WHERE id=?", (cid,))
+        row = await cur.fetchone()
+        if row:
+            pid = row["persona_id"]
+            cur = await db.execute(
+                "SELECT current_phase FROM media_persona WHERE id=?", (pid,))
+            prow = await cur.fetchone()
+            await db.execute(
+                "INSERT INTO media_persona_trait "
+                "(id,persona_id,dimension,content,brief,source,source_content_id,"
+                " evidence,confidence,phase_tag) "
+                "VALUES (?,?,?,?,?,'ai_from_review',?,?,?,?)",
+                (str(uuid.uuid4()), pid, dimension, content.strip(),
+                 brief.strip()[:30], cid, evidence.strip(), confidence,
+                 prow["current_phase"] if prow else ""))
+            await db.commit()
     finally:
         await db.close()
     return RedirectResponse(f"/media/content/{cid}", status_code=302)

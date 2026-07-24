@@ -169,8 +169,67 @@
     {% endif %}
   </div>
 
-  <!-- 复盘：Task 11 填充 -->
-  <div id="review-section"></div>
+  <div class="bg-white rounded-xl shadow-sm p-4 mb-3">
+    <div class="flex items-center justify-between mb-2">
+      <h2 class="font-semibold text-sm">复盘</h2>
+      <button onclick="aiReview()" id="review-btn"
+              class="bg-violet-600 text-white rounded-lg px-3 py-1.5 text-xs">
+        ✨ AI 复盘
+      </button>
+    </div>
+    <div id="review-status" class="hidden text-xs text-violet-600 mb-2"></div>
+
+    {% if not reviews %}
+      <p class="text-sm text-gray-400">
+        发布并录入数据后，点「AI 复盘」——
+        复盘产出的人设条目要你确认才入库。
+      </p>
+    {% endif %}
+
+    {% for r in reviews %}
+    <div class="border-l-2 {% if r.scope == 'overall' %}border-blue-600{% else %}border-gray-200{% endif %} pl-3 py-2 mb-2">
+      <div class="text-xs font-medium text-gray-500 mb-1">
+        {% if r.scope == 'overall' %}总复盘{% else %}平台复盘{% endif %}
+      </div>
+      {% if r.what_worked %}
+      <div class="text-sm"><span class="text-green-600">✓</span> {{ r.what_worked }}</div>
+      {% endif %}
+      {% if r.what_failed %}
+      <div class="text-sm"><span class="text-amber-600">✗</span> {{ r.what_failed }}</div>
+      {% endif %}
+      {% if r.next_action %}
+      <div class="text-sm text-gray-500 mt-1">→ {{ r.next_action }}</div>
+      {% endif %}
+
+      {% if r.proposed_traits %}
+      <div class="mt-3 bg-violet-50 rounded-lg p-3">
+        <div class="text-xs font-medium text-violet-700 mb-2">
+          AI 提炼的候选人设条目（确认后才入库）
+        </div>
+        {% for t in r.proposed_traits %}
+        <div class="bg-white rounded p-2 mb-2">
+          <div class="text-sm">{{ t.content }}</div>
+          {% if t.evidence %}
+          <div class="text-xs text-gray-400 mt-0.5">依据：{{ t.evidence }}</div>
+          {% endif %}
+          <form method="post" action="/media/content/{{ content.id }}/adopt-trait"
+                class="mt-1.5">
+            <input type="hidden" name="dimension" value="{{ t.dimension }}">
+            <input type="hidden" name="content" value="{{ t.content }}">
+            <input type="hidden" name="brief" value="{{ t.brief }}">
+            <input type="hidden" name="evidence" value="{{ t.evidence }}">
+            <input type="hidden" name="confidence" value="{{ t.confidence }}">
+            <button class="bg-blue-600 text-white rounded px-3 py-1 text-xs">
+              确认加入人设
+            </button>
+          </form>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
 </div>
 
 <script>
@@ -251,6 +310,32 @@ async function uploadShot(pubId, input) {
     status.textContent = '上传失败：' + e + ' 请用手动填写。';
   }
   input.value = '';
+}
+
+async function aiReview() {
+  const btn = document.getElementById('review-btn');
+  const status = document.getElementById('review-status');
+  btn.disabled = true;
+  btn.textContent = '复盘中…';
+  status.classList.remove('hidden');
+  status.textContent = 'AI 正在对比各平台数据做归因…';
+  try {
+    const r = await fetch('/media/content/{{ content.id }}/ai-review',
+                          {method: 'POST'});
+    const d = await r.json();
+    if (d.ok) {
+      status.textContent = '完成，刷新中…';
+      location.reload();
+    } else {
+      status.textContent = '失败：' + (d.error || '未知错误');
+      btn.disabled = false;
+      btn.textContent = '✨ AI 复盘';
+    }
+  } catch (e) {
+    status.textContent = '请求失败：' + e;
+    btn.disabled = false;
+    btn.textContent = '✨ AI 复盘';
+  }
 }
 </script>
 {% endblock %}
