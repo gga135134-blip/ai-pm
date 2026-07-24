@@ -321,6 +321,7 @@ CREATE TABLE IF NOT EXISTS media_case (
     replicable INTEGER DEFAULT 3,
     conclusion TEXT DEFAULT '',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (persona_id) REFERENCES media_persona(id),
     FOREIGN KEY (content_id) REFERENCES media_content(id)
 );
 
