@@ -243,6 +243,17 @@
           .topbar .search{ display:none; }
         }
         /* real phones — sidebar collapses to a horizontal top bar */
+        /* 移动端触摸目标 ≥44px（手机是主要使用场景） */
+        @media (max-width:767px){
+          .frow, .btn, .tab, .side a, .side .tgl, .side .font-size-select{ min-height:44px; }
+          .side a{ padding-top:10px; padding-bottom:10px; }
+          /* 行内嵌链接时，让链接自己承担 44px 高度（行只出左右内边距），
+             否则可点区域只有内容盒高度，点到上下留白会落空 */
+          .frow{ padding-top:0; padding-bottom:0; }
+          .frow > a{ align-self:stretch; display:flex; align-items:center; min-height:44px; }
+          .iconbtn{ min-width:40px; min-height:40px; }
+          .kb-grp .frow.child{ min-height:40px; }
+        }
         @media (max-width:560px){
           .app-shell{ flex-direction:column; min-height:0; }
           .side{ width:100%; flex-direction:row; align-items:center; overflow-x:auto; padding:10px 12px; gap:2px; }
