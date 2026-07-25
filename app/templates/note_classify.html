@@ -13,6 +13,10 @@
 .cls-textarea{ font-family:var(--mono); tab-size:4; min-height:220px; resize:vertical; }
 .cls-grid{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
 .cls-type{ font-size:11px; font-weight:600; padding:2px 9px; border-radius:6px; display:inline-block; }
+/* 五层分类是「类别」不是「状态」——用围绕品牌色相派生的分类色板，
+   不借用 --up/--down 语义色（红只该表示出错，绿只该表示成功） */
+.cls-wrap{ --cat-knowledge:#2FD3C5; --cat-progress:#59B4E8; --cat-decision:#D8A657; --cat-status:#93A4C4; --cat-idea:#9B85FF; }
+[data-theme="light"] .cls-wrap{ --cat-knowledge:#127C77; --cat-progress:#2A6EA6; --cat-decision:#9A6B12; --cat-status:#55637F; --cat-idea:#5B4BD1; }
 .item-row{ display:flex; align-items:center; gap:10px; }
 .item-row a{ font-size:13.5px; font-weight:500; color:var(--ink-1); text-decoration:none; }
 .item-row a:hover{ color:var(--accent); }
@@ -58,12 +62,12 @@
     {% if result %}
     <div class="card" style="padding:20px;margin-top:18px">
         <div class="modhead" style="margin-bottom:14px">{{ ic.icon('check') }}提取结果（{{ result|length }} 条）<span class="rule"></span></div>
-        {% set type_colors = {'knowledge': ('var(--accent)', 'var(--accent-soft)'), 'progress': ('var(--up)', 'rgba(63,203,134,.14)'), 'decision': ('var(--warn)', 'rgba(240,168,104,.16)'), 'status': ('var(--down)', 'rgba(255,98,87,.16)'), 'idea': ('var(--ai)', 'var(--ai-soft)')} %}
+        {% set type_colors = {'knowledge': 'var(--cat-knowledge)', 'progress': 'var(--cat-progress)', 'decision': 'var(--cat-decision)', 'status': 'var(--cat-status)', 'idea': 'var(--cat-idea)'} %}
         {% set type_labels = {'knowledge': '知识', 'progress': '进度', 'decision': '决策', 'status': '状态', 'idea': '想法'} %}
         {% for item in result %}
         <div class="card item-row" style="margin-bottom:8px">
-            {% set clr = type_colors.get(item.type, ('var(--ink-3)', 'var(--panel-2)')) %}
-            <span class="cls-type" style="color:{{ clr[0] }};background:{{ clr[1] }}">{{ type_labels.get(item.type, item.type) }}</span>
+            {% set clr = type_colors.get(item.type, 'var(--ink-3)') %}
+            <span class="cls-type" style="color:{{ clr }};background:color-mix(in srgb, {{ clr }} 15%, transparent)">{{ type_labels.get(item.type, item.type) }}</span>
             <a href="/notes/{{ item.id }}">{{ item.title }}</a>
         </div>
         {% endfor %}
