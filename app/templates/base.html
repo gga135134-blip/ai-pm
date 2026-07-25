@@ -29,9 +29,6 @@
         else{ el.setAttribute('data-theme','light'); localStorage.setItem('ui-theme','light'); }
       }
     </script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@500;600;700&display=swap" rel="stylesheet">
     <link href="/static/tailwind.min.css" rel="stylesheet">
     <style>
         /* ============================================================
@@ -49,7 +46,7 @@
           --r:14px; --r-sm:9px;
           --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
           --sans:system-ui,-apple-system,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
-          --display:"Noto Serif SC",serif;
+          --display:"Songti SC",SimSun,serif;
         }
         [data-theme="light"]{
           --page:#eef2f1; --bg:#ffffff; --panel-2:#f2f6f5; --border:rgba(16,44,42,.10);
@@ -125,6 +122,11 @@
         .btn.primary:hover{ filter:brightness(1.06); }
         .btn.ai{ color:var(--ai); background:var(--ai-soft); border-color:transparent; }
         .btn.ghost{ background:transparent; }
+
+        /* tab strip */
+        .tab{ font-size:14px; font-weight:500; color:var(--ink-3); padding:8px 2px; margin-right:18px; background:none; border:none; border-bottom:2px solid transparent; cursor:pointer; }
+        .tab:hover{ color:var(--ink-1); }
+        .tab.on{ color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
 
         /* KPI */
         .kpis{ display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:26px; }
@@ -329,6 +331,8 @@
         <div class="main">
             <div class="topbar">
                 {% block topbar %}{% endblock %}
+                <span class="tb-spacer" style="flex:1"></span>
+                <span class="search">{{ ic.icon('search') }} 搜索…</span>
             </div>
             <main class="scroll">
                 {% block content %}{% endblock %}
