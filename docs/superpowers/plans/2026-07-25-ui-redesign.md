@@ -19,6 +19,7 @@
 - **Jinja2 坑**：`TemplateResponse` 三参数 `(request, "x.html", ctx)`；无 `tojson`（用 `json.dumps()+|safe`）；模板 dict 键别用 `items/keys/values/get`。
 - **颜色 token（深色默认，落 base.html）**：`--page:#0a0e0f --bg:#12181a --panel-2:#192124 --border:rgba(255,255,255,.08) --ink-1:#e8f0f1 --ink-2:#a6b3b5 --ink-3:#7e8c8f --accent:#2FD3C5 --accent-soft:rgba(47,211,197,.14) --on-accent:#06110f --ai:#9B85FF --ai-soft:rgba(155,133,255,.15) --up:#3FCB86 --down:#FF6257 --warn:#F0A868 --glow:rgba(47,211,197,.28)`。浅色见 spec §3.1。
 - **字阶固定档**：数据 31 mono / 页面标题 26 `--display`(宋体) / 模块 18 / 列表项 16 / 正文 14 / 说明 12 / 标签 11.5 大写。
+- **图标调用约定**：任何用图标的模板，在顶部（`{% extends %}` 之后）加 `{% import "_icons.html" as ic %}`，用 `{{ ic.icon('name') }}`。**不要**把宏塞进 base.html（Jinja 子模板取不到父模板宏）。
 - **验收硬线**：`:root` 外无裸 hex；无 emoji 当图标；深浅色对比度 AA；触摸目标 ≥44px；原功能入口零丢失；`app/api`/`app/services` 零改动。
 
 ## 每个 Task 的"验证循环"（替代 TDD）
@@ -39,15 +40,15 @@
 ## Task 1: 图标系统（内联 SVG，替换全站 emoji）
 
 **Files:**
-- Modify: `app/templates/base.html`（在文件顶部加 `{% macro icon(name, cls='') %}`）
+- Create: `app/templates/_icons.html`（存 `{% macro icon(name, cls='') %}`）
 
 **Interfaces:**
-- Produces: Jinja2 macro `icon(name, cls='')` → 输出 `<svg class="icon {{cls}}" viewBox="0 0 24 24" ...><path.../></svg>`，`stroke:currentColor; width:1em; height:1em`。后续所有 Task 用 `{{ icon('folder') }}` 调用。
-- 图标名集合：`folder file doc search plus check clock play pause robot satellite chart kanban tag edit move share trash copy settings chevron arrow-up arrow-down dollar bell menu x star eye dots`。
+- Produces: Jinja2 macro `icon(name, cls='')` → 输出 `<svg class="icon {{cls}}" viewBox="0 0 24 24" ...><path.../></svg>`，`stroke:currentColor; width:1em; height:1em`。
+- **调用约定（全 Task 统一）**：使用宏的模板在顶部（`{% extends %}` 之后）加 `{% import "_icons.html" as ic %}`，然后 `{{ ic.icon('folder') }}`。
+  > ⚠️ Jinja2 里 base.html 定义的宏**不会**自动传给 `{% extends %}` 它的子模板——所以宏放独立文件、按需 import，而不是塞进 base.html。
+- 图标名集合：`folder file doc search plus check clock play pause robot satellite chart kanban tag edit move share trash copy settings gear chevron arrow-up arrow-down dollar bell menu x star eye sun dots`。
 
-- [ ] **Step 1: 在 base.html 顶部（`<!DOCTYPE>` 之后、`<html>` 之前不行——Jinja macro 放文件最上方）定义 macro**
-
-在 base.html 第 1 行之前加入 macro 定义块（Jinja2 macro 可定义在模板顶部）：
+- [ ] **Step 1: 新建 `app/templates/_icons.html`，内容为整段 macro 定义**（文件只含这个 macro）：
 
 ```jinja
 {% macro icon(name, cls='') -%}
@@ -95,13 +96,17 @@
 .icon{ width:1em; height:1em; display:inline-block; vertical-align:-.14em; stroke-width:1.9; fill:none; flex:none; }
 ```
 
-- [ ] **Step 3: 验证**：临时在任意页面放 `{{ icon('folder') }}{{ icon('robot') }}{{ icon('satellite') }}`，`python run.py` 打开确认渲染出线性图标、跟随文字色。删掉临时代码。
+- [ ] **Step 3: 验证**（不起服务）：用最小 Jinja2 脚本渲染宏，确认无语法错误且输出 `<svg>`：
+```bash
+cd /d/GAGA-5-25/ai-pm && python -c "from jinja2 import Environment, FileSystemLoader; e=Environment(loader=FileSystemLoader('app/templates')); m=e.get_template('_icons.html').module; print(str(m.icon('folder'))[:60]); print(str(m.icon('robot'))[:60])"
+```
+Expected: 打印出两段以 `<svg class=\"icon` 开头的字符串，无异常。
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add app/templates/base.html
-git commit -m "feat(ui): 内联 SVG 图标 macro，准备替换全站 emoji"
+git add app/templates/_icons.html
+git commit -m "feat(ui): 内联 SVG 图标 macro(_icons.html)，准备替换全站 emoji"
 ```
 
 ---
@@ -139,8 +144,8 @@ git commit -m "feat(ui): 内联 SVG 图标 macro，准备替换全站 emoji"
 </script>
 ```
 
-- [ ] **Step 3: 把 `<nav>`（顶栏）改写为左侧栏 shell**。结构：`<div class="app-shell"><aside class="side">…</aside><div class="main"><div class="topbar">…</div><main class="scroll">{% block content %}{% endblock %}</main></div></div>`。
-  - side：brand（`◆ AI-PM`）+ 分组菜单（工作区：AI Chat/总览/项目/知识库/自媒体/学习/财务，各 `{{ icon(...) }}` + 文字，用 `{% if path... %}on{% endif %}` 保留现有高亮逻辑）+ 底部固定组（设置链接 + 字号 select + `<button onclick="toggleTheme()">{{ icon('sun') }} 深/浅色</button>` + 退出）。
+- [ ] **Step 3: 把 `<nav>`（顶栏）改写为左侧栏 shell**。先在 base.html 顶部加 `{% import "_icons.html" as ic %}`。结构：`<div class="app-shell"><aside class="side">…</aside><div class="main"><div class="topbar">…</div><main class="scroll">{% block content %}{% endblock %}</main></div></div>`。
+  - side：brand（`◆ AI-PM`）+ 分组菜单（工作区：AI Chat/总览/项目/知识库/自媒体/学习/财务，各 `{{ ic.icon(...) }}` + 文字，用 `{% if path... %}on{% endif %}` 保留现有高亮逻辑）+ 底部固定组（设置链接 + 字号 select + `<button onclick="toggleTheme()">{{ ic.icon('sun') }} 深/浅色</button>` + 退出）。
   - topbar：留面包屑占位 `{% block topbar %}{% endblock %}` + 搜索占位。
   - **保留**：所有原链接 href、`path.startswith` 高亮、登出、字号 select（含移动端那份）。移除死 `md:hidden` 等无效类。
   - 移动端：≤560px 时 `.side` 变顶部横向滚动条（CSS 已含），保留汉堡逻辑或改为直接横向滚动（二选一，横向滚动更简单）。
