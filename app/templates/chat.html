@@ -1,57 +1,87 @@
 {% extends "base.html" %}
+{% import "_icons.html" as ic %}
 {% block title %}AI Chat - AI 项目管理{% endblock %}
+{% block topbar %}
+<span class="crumb"><b>总 AI 对话</b></span>
+{% endblock %}
 {% block content %}
-<div class="flex flex-col" style="height:calc(100vh - 100px)">
-    <!-- 标题 -->
-    <div class="flex items-center justify-between mb-6">
+<style>
+.chat-shell{ display:flex; flex-direction:column; height:calc(100vh - 100px); max-width:920px; margin:0 auto; }
+.chat-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; flex:none; }
+.chat-head h1{ font-family:var(--display); font-size:22px; font-weight:600; margin:0; display:flex; align-items:center; gap:9px; }
+.chat-head h1 .icon{ color:var(--ai); font-size:20px; }
+.chat-head p{ font-size:12.5px; color:var(--ink-3); margin:5px 0 0; }
+
+.chat-messages{ flex:1; overflow-y:auto; background:var(--bg); border:1px solid var(--border); border-radius:var(--r); box-shadow:var(--shadow); padding:20px; margin-bottom:14px; display:flex; flex-direction:column; gap:16px; }
+.chat-empty{ text-align:center; color:var(--ink-3); padding:60px 20px; }
+.chat-empty .t{ font-size:18px; font-weight:600; color:var(--ink-2); margin-bottom:14px; }
+.chat-empty .eg{ font-size:13.5px; color:var(--ink-3); margin-top:8px; }
+
+.msg-row{ display:flex; }
+.msg-row.user{ justify-content:flex-end; }
+.msg-row.ai{ justify-content:flex-start; }
+.bubble-wrap{ max-width:78%; }
+.speaker{ font-size:12px; font-weight:600; color:var(--ai); margin-bottom:6px; display:flex; align-items:center; gap:6px; }
+.bubble{ border-radius:var(--r); padding:12px 15px; font-size:13.5px; line-height:1.65; white-space:pre-wrap; }
+.bubble.user{ background:var(--accent-soft); color:var(--ink-1); border:1px solid var(--border); border-bottom-right-radius:4px; }
+.bubble.ai{ background:var(--ai-soft); border:1px solid rgba(155,133,255,.28); color:var(--ink-1); border-bottom-left-radius:4px; }
+.bubble.thinking{ color:var(--ink-3); }
+.msg-meta{ display:flex; align-items:center; gap:10px; margin-top:7px; font-size:11.5px; color:var(--ink-3); }
+.msg-row.user .msg-meta{ justify-content:flex-end; }
+.copy-btn{ background:none; border:none; cursor:pointer; padding:0; font-size:11.5px; color:var(--ink-3); display:inline-flex; align-items:center; gap:4px; }
+.copy-btn:hover{ color:var(--ai); }
+.copy-btn.ok{ color:var(--up); }
+
+.chatbar{ flex:none; background:var(--bg); border:1px solid var(--border); border-radius:var(--r); padding:14px 16px; box-shadow:var(--shadow-lg); }
+.chatbar textarea.input{ width:100%; resize:none; margin-bottom:10px; }
+.chatbar-row{ display:flex; gap:8px; }
+.chatbar-row select.input{ width:auto; }
+.chatbar-row .btn{ flex:none; }
+</style>
+
+<div class="chat-shell">
+    <div class="chat-head">
         <div>
-            <h1 class="text-4xl font-bold text-gray-800">AI Chat</h1>
-            <p class="text-base text-gray-400 mt-2">把你的想法告诉我，剩下的我来安排</p>
+            <h1>{{ ic.icon('robot') }}总 AI 对话</h1>
+            <p>把你的想法告诉我，剩下的我来安排</p>
         </div>
         <form method="POST" action="/chat/clear" onsubmit="return confirm('清空所有对话记录？')">
-            <button class="text-base px-4 py-2 border rounded-lg text-gray-500 hover:bg-gray-50 transition">清空对话</button>
+            <button class="btn ghost">{{ ic.icon('trash') }}清空对话</button>
         </form>
     </div>
 
-    <!-- 对话区域 -->
-    <div id="chat-messages" class="flex-1 overflow-y-auto bg-white rounded-lg shadow-sm p-6 mb-4 space-y-4" style="min-height:300px">
+    <div id="chat-messages" class="chat-messages">
         {% if not messages %}
-        <div class="text-center text-gray-400 py-20">
-            <div class="text-2xl mb-4 font-medium">我是你的 AI 项目总监</div>
-            <div class="text-lg mb-4">你可以说：</div>
-            <div class="text-lg mt-4 space-y-2">
-                <div class="text-gray-500">"帮我建一个短视频项目"</div>
-                <div class="text-gray-500">"现在所有项目什么状态？"</div>
-                <div class="text-gray-500">"把待办的 AI 任务都执行了"</div>
-                <div class="text-gray-500">"我们决定用 DeepSeek 做日常文案，帮我记下来"</div>
-            </div>
+        <div class="chat-empty">
+            <div class="t">我是你的 AI 项目总监</div>
+            <div>你可以说：</div>
+            <div class="eg">"帮我建一个短视频项目"</div>
+            <div class="eg">"现在所有项目什么状态？"</div>
+            <div class="eg">"把待办的 AI 任务都执行了"</div>
+            <div class="eg">"我们决定用 DeepSeek 做日常文案，帮我记下来"</div>
         </div>
         {% endif %}
 
         {% for msg in messages %}
         {% if msg.direction == 'in' %}
         <!-- 用户消息 -->
-        <div class="flex justify-end">
-            <div class="max-w-2xl">
-                <div class="bg-blue-600 text-white rounded-lg rounded-br-none px-5 py-4">
-                    <div class="text-base leading-relaxed" style="white-space:pre-wrap">{{ msg.content }}</div>
-                </div>
-                <div class="text-sm text-gray-400 mt-2 text-right">{{ msg.created_at[11:16] if msg.created_at else '' }}</div>
+        <div class="msg-row user">
+            <div class="bubble-wrap">
+                <div class="bubble user" style="white-space:pre-wrap">{{ msg.content }}</div>
+                <div class="msg-meta"><span>{{ msg.created_at[11:16] if msg.created_at else '' }}</span></div>
             </div>
         </div>
         {% else %}
         <!-- AI 回复 -->
-        <div class="flex justify-start">
-            <div class="max-w-2xl">
-                <div class="flex items-center gap-2 mb-2">
-                    <span class="text-sm font-semibold text-purple-600">总 AI</span>
+        <div class="msg-row ai">
+            <div class="bubble-wrap">
+                <div class="speaker">总 AI</div>
+                <div class="bubble ai">
+                    <div id="hm-{{ loop.index }}">{{ msg.content }}</div>
                 </div>
-                <div class="bg-gray-100 text-gray-800 rounded-lg rounded-bl-none px-5 py-4">
-                    <div id="hm-{{ loop.index }}" class="text-base leading-relaxed" style="white-space:pre-wrap">{{ msg.content }}</div>
-                </div>
-                <div class="flex items-center justify-between mt-2">
-                    <span class="text-sm text-gray-400">{{ msg.created_at[11:16] if msg.created_at else '' }}</span>
-                    <button onclick="copyMsg('hm-{{ loop.index }}', this)" class="text-xs text-gray-400 hover:text-purple-600 transition" title="复制内容">📋 复制</button>
+                <div class="msg-meta">
+                    <span>{{ msg.created_at[11:16] if msg.created_at else '' }}</span>
+                    <button onclick="copyMsg('hm-{{ loop.index }}', this)" class="copy-btn" title="复制内容">{{ ic.icon('copy') }}复制</button>
                 </div>
             </div>
         </div>
@@ -59,22 +89,20 @@
         {% endfor %}
     </div>
 
-    <!-- 输入区域 -->
-    <div class="bg-white rounded-lg shadow-sm p-4">
+    <div class="chatbar">
         <form id="chat-form">
-            <textarea name="message" id="chat-input" required placeholder="跟总 AI 说点什么..." autofocus rows="3"
-                class="w-full border rounded-lg px-4 py-3 text-base outline-none focus:ring-2 focus:ring-purple-500 resize-none mb-2"></textarea>
-            <div class="flex gap-2">
-                <select name="sender" id="chat-sender" class="border rounded-lg px-3 py-2 text-sm outline-none font-medium">
+            <textarea name="message" id="chat-input" required placeholder="跟总 AI 说点什么..." autofocus rows="3" class="input"></textarea>
+            <div class="chatbar-row">
+                <select name="sender" id="chat-sender" class="input">
                     <option value="Gaga">Gaga</option>
                     <option value="An">An</option>
                 </select>
-                <select name="model" id="chat-model" class="flex-1 border rounded-lg px-3 py-2 text-sm outline-none font-medium">
+                <select name="model" id="chat-model" class="input" style="flex:1">
                     <option value="auto">自动</option>
                     <option value="claude">Claude</option>
                     <option value="deepseek">DeepSeek</option>
                 </select>
-                <button type="submit" id="chat-send-btn" class="bg-violet-600 text-white px-6 py-2 rounded-lg text-sm font-medium hover:bg-violet-700 transition">发送</button>
+                <button type="submit" id="chat-send-btn" class="btn ai">发送</button>
             </div>
         </form>
     </div>
@@ -115,25 +143,24 @@
 
     function addUserMsg(text) {
         // 第一次发消息时清掉占位提示
-        var hint = box.querySelector('.text-center.text-gray-400');
+        var hint = box.querySelector('.chat-empty');
         if (hint) hint.remove();
         var msgId = 'cm-u-' + Date.now() + '-' + Math.random().toString(36).slice(2,7);
         box.insertAdjacentHTML('beforeend',
-            '<div class="flex justify-end"><div class="max-w-2xl">'
-            + '<div class="bg-blue-600 text-white rounded-lg rounded-br-none px-5 py-4">'
-            + '<div id="' + msgId + '" class="text-base leading-relaxed" style="white-space:pre-wrap">' + esc(text) + '</div></div>'
-            + '<div class="flex items-center justify-end gap-2 mt-2">'
-            + '<button onclick="copyMsg(\'' + msgId + '\', this)" class="text-sm text-gray-400 hover:text-blue-600 transition" title="复制内容">📋 复制</button>'
-            + '<span class="text-sm text-gray-400">' + nowHM() + '</span>'
+            '<div class="msg-row user"><div class="bubble-wrap">'
+            + '<div class="bubble user" id="' + msgId + '">' + esc(text) + '</div>'
+            + '<div class="msg-meta">'
+            + '<button onclick="copyMsg(\'' + msgId + '\', this)" class="copy-btn" title="复制内容">{{ ic.icon("copy") }}复制</button>'
+            + '<span>' + nowHM() + '</span>'
             + '</div></div></div>');
         box.scrollTop = box.scrollHeight;
     }
 
     function addThinking() {
         box.insertAdjacentHTML('beforeend',
-            '<div class="flex justify-start" id="thinking-bubble"><div class="max-w-2xl">'
-            + '<div class="flex items-center gap-2 mb-2"><span class="text-sm font-semibold text-purple-600">总 AI</span></div>'
-            + '<div class="bg-gray-100 text-gray-500 rounded-lg rounded-bl-none px-5 py-4 text-base">正在思考…</div>'
+            '<div class="msg-row ai" id="thinking-bubble"><div class="bubble-wrap">'
+            + '<div class="speaker">总 AI</div>'
+            + '<div class="bubble ai thinking">正在思考…</div>'
             + '</div></div>');
         box.scrollTop = box.scrollHeight;
     }
@@ -141,13 +168,12 @@
     function addAiMsg(text) {
         var msgId = 'mm-' + Date.now() + '-' + Math.random().toString(36).slice(2,7);
         box.insertAdjacentHTML('beforeend',
-            '<div class="flex justify-start"><div class="max-w-2xl">'
-            + '<div class="flex items-center gap-2 mb-2"><span class="text-sm font-semibold text-purple-600">总 AI</span></div>'
-            + '<div class="bg-gray-100 text-gray-800 rounded-lg rounded-bl-none px-5 py-4">'
-            + '<div id="' + msgId + '" class="text-base leading-relaxed" style="white-space:pre-wrap">' + esc(text) + '</div></div>'
-            + '<div class="flex items-center justify-between mt-2">'
-            + '<span class="text-sm text-gray-400">' + nowHM() + '</span>'
-            + '<button onclick="copyMsg(\'' + msgId + '\', this)" class="text-xs text-gray-400 hover:text-purple-600 transition" title="复制内容">📋 复制</button>'
+            '<div class="msg-row ai"><div class="bubble-wrap">'
+            + '<div class="speaker">总 AI</div>'
+            + '<div class="bubble ai"><div id="' + msgId + '">' + esc(text) + '</div></div>'
+            + '<div class="msg-meta">'
+            + '<span>' + nowHM() + '</span>'
+            + '<button onclick="copyMsg(\'' + msgId + '\', this)" class="copy-btn" title="复制内容">{{ ic.icon("copy") }}复制</button>'
             + '</div>'
             + '</div></div>');
         box.scrollTop = box.scrollHeight;
@@ -160,9 +186,9 @@
         var text = el.innerText || el.textContent || '';
         function showCopied(){
             var old = btn.innerHTML;
-            btn.innerHTML = '✅ 已复制';
-            btn.classList.add('text-green-600');
-            setTimeout(function(){ btn.innerHTML = old; btn.classList.remove('text-green-600'); }, 1500);
+            btn.textContent = '已复制';
+            btn.classList.add('ok');
+            setTimeout(function(){ btn.innerHTML = old; btn.classList.remove('ok'); }, 1500);
         }
         if (navigator.clipboard && navigator.clipboard.writeText) {
             navigator.clipboard.writeText(text).then(showCopied, function(){
@@ -185,7 +211,7 @@
         busy = true;
         sendBtn.disabled = true;
         sendBtn.textContent = '发送中…';
-        sendBtn.classList.add('opacity-60');
+        sendBtn.classList.add('btn-loading');
 
         addUserMsg(text);
         input.value = '';
@@ -219,7 +245,7 @@
                 busy = false;
                 sendBtn.disabled = false;
                 sendBtn.textContent = '发送';
-                sendBtn.classList.remove('opacity-60');
+                sendBtn.classList.remove('btn-loading');
                 input.focus();
             });
     }
