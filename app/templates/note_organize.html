@@ -1,86 +1,99 @@
 {% extends "base.html" %}
+{% import "_icons.html" as ic %}
 {% block title %}AI 智能整理 - {{ project.name if project else '' }}{% endblock %}
+{% block topbar %}
+<span class="crumb">
+    <a href="/notes" style="color:inherit;text-decoration:none">知识库</a> /
+    {% if project %}<a href="/projects/{{ project.id }}" style="color:inherit;text-decoration:none">{{ project.name }}</a> / {% endif %}
+    <b>AI 智能整理</b>
+</span>
+{% endblock %}
 {% block content %}
 <style>
-.org-card{border:1px solid #e5e7eb;border-radius:10px;padding:12px}
-.org-folder{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes org-spin{to{transform:rotate(360deg)}}
+.org-wrap{ max-width:760px; }
+.org-head h1{ font-family:var(--display); font-size:22px; font-weight:600; margin:0 0 6px; display:flex; align-items:center; gap:9px; }
+.org-head h1 .icon{ color:var(--ai); font-size:20px; }
+.org-head p{ font-size:13px; color:var(--ink-3); margin:0 0 18px; line-height:1.6; }
+.org-spinner{ display:inline-block; width:22px; height:22px; border:3px solid var(--ai); border-top-color:transparent; border-radius:50%; animation:org-spin .8s linear infinite; }
+.org-proposal-flag{ display:flex; align-items:center; gap:9px; background:var(--ai-soft); border:1px solid rgba(155,133,255,.3); border-radius:var(--r-sm); padding:9px 14px; font-size:12.5px; color:var(--ai); font-weight:600; margin-bottom:14px; }
+.org-proposal-flag .icon{ font-size:15px; flex:none; }
+.org-card{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.org-card .title{ font-size:13.5px; font-weight:500; color:var(--ink-1); flex:1; min-width:160px; }
+.org-arrow{ color:var(--ink-3); flex:none; }
+.org-folder-input{ flex:1; min-width:160px; }
+.org-done-icon{ color:var(--up); font-size:34px; display:inline-flex; margin-bottom:10px; }
 </style>
 
-<div class="mb-4 text-sm text-gray-400">
-    <a href="/notes" class="hover:text-gray-600">知识库</a> /
-    {% if project %}<a href="/projects/{{ project.id }}" class="hover:text-gray-600">{{ project.name }}</a> / {% endif %}
-    <span class="text-gray-600">AI 智能整理</span>
-</div>
-
 {% if not project %}
-<div class="bg-white rounded-xl shadow-sm p-12 text-center">
-    <p class="text-gray-600">项目不存在</p>
+<div class="card" style="padding:48px;text-align:center">
+    <p class="empty">项目不存在</p>
 </div>
 {% else %}
 
-<div class="max-w-3xl">
-    <h1 class="text-xl font-bold text-gray-800 mb-1">🤖 AI 智能整理 · {{ project.name }}</h1>
-    <p class="text-sm text-gray-400 mb-5">AI 读完本项目 {{ note_count }} 篇笔记，按内容主题生成编号文件夹（最多 3 层），你确认后再应用。只改归类，不删笔记，可逆。</p>
+<div class="org-wrap">
+    <div class="org-head">
+        <h1>{{ ic.icon('robot') }}AI 智能整理 · {{ project.name }}</h1>
+        <p>AI 读完本项目 {{ note_count }} 篇笔记，按内容主题生成编号文件夹（最多 3 层），你确认后再应用。只改归类，不删笔记，可逆。</p>
+    </div>
 
     {% if note_count == 0 %}
-    <div class="bg-white rounded-xl shadow-sm p-10 text-center">
-        <div class="text-3xl mb-3">📭</div>
-        <p class="text-gray-600">这个项目还没有笔记，没什么可整理的。</p>
+    <div class="card" style="padding:40px;text-align:center">
+        <p class="empty">这个项目还没有笔记，没什么可整理的。</p>
     </div>
     {% else %}
 
     <!-- 第一步：发起整理 -->
-    <div id="org-start" class="bg-white rounded-xl shadow-sm p-5">
-        <div class="flex flex-wrap items-center gap-3">
-            <select id="org-model" class="border rounded-lg px-3 py-2 text-sm outline-none">
+    <div id="org-start" class="card" style="padding:18px">
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px">
+            <select id="org-model" class="input">
                 <option value="auto">自动选模型</option>
                 <option value="deepseek">DeepSeek（省钱）</option>
                 <option value="claude">Claude（质量高）</option>
                 <option value="openai">OpenAI</option>
             </select>
-            <button id="org-go" onclick="propose()"
-                class="bg-violet-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-violet-700 transition">
-                🤖 开始 AI 整理
-            </button>
+            <button id="org-go" onclick="propose()" class="btn ai">{{ ic.icon('robot') }}开始 AI 整理</button>
         </div>
     </div>
 
     <!-- 加载中 -->
-    <div id="org-loading" class="bg-white rounded-xl shadow-sm p-10 text-center mt-4" style="display:none">
-        <span style="display:inline-block;width:22px;height:22px;border:3px solid #8b5cf6;border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite"></span>
-        <p class="text-sm text-gray-500 mt-3">AI 正在读笔记、设计结构… <span id="org-elapsed">0</span> 秒</p>
+    <div id="org-loading" class="card" style="padding:36px;text-align:center;display:none">
+        <span class="org-spinner"></span>
+        <p style="font-size:13px;color:var(--ink-3);margin:12px 0 0">AI 正在读笔记、设计结构… <span id="org-elapsed">0</span> 秒</p>
     </div>
 
     <!-- 结果预览 -->
-    <div id="org-result" class="mt-4" style="display:none">
-        <div class="bg-violet-50 border border-violet-100 rounded-xl p-4 mb-4">
-            <div class="text-sm text-violet-800" id="org-summary"></div>
-            <div class="text-xs text-violet-400 mt-1" id="org-meta"></div>
+    <div id="org-result" style="display:none;margin-top:4px">
+        <div class="org-proposal-flag">
+            {{ ic.icon('satellite') }}
+            <span>这是 AI 生成的整理建议 — 尚未写入，确认无误后点击「应用整理」才会真正移动笔记</span>
         </div>
-        <div class="bg-white rounded-xl shadow-sm p-5">
-            <div class="flex items-center justify-between mb-3">
-                <h3 class="text-sm font-semibold text-gray-700">逐篇归类（可手动改「新文件夹」后再应用）</h3>
-                <span class="text-xs text-gray-400" id="org-count"></span>
+        <div class="card" style="padding:14px 16px;margin-bottom:14px">
+            <div style="font-size:13px;color:var(--ink-1)" id="org-summary"></div>
+            <div style="font-size:11.5px;color:var(--ink-3);margin-top:5px" id="org-meta"></div>
+        </div>
+        <div class="card" style="padding:18px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+                <div class="modhead" style="margin:0">{{ ic.icon('folder') }}逐篇归类（可手动改「新文件夹」后再应用）</div>
+                <span style="font-size:11.5px;color:var(--ink-3)" id="org-count"></span>
             </div>
-            <div id="org-list" class="space-y-2"></div>
-            <div class="flex items-center gap-3 mt-5 pt-4 border-t">
-                <button id="org-apply" onclick="applyOrganize()"
-                    class="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-blue-700 transition">✅ 应用整理</button>
-                <button onclick="propose()" class="text-sm text-gray-500 px-3 py-2 rounded-lg hover:bg-gray-100 transition">↻ 重新生成</button>
-                <span class="text-xs text-gray-400">应用后回到知识库就能看到新结构</span>
+            <div id="org-list" style="display:flex;flex-direction:column;gap:8px"></div>
+            <div style="display:flex;align-items:center;gap:10px;margin-top:18px;padding-top:14px;border-top:1px solid var(--border)">
+                <button id="org-apply" onclick="applyOrganize()" class="btn primary">{{ ic.icon('check') }}应用整理</button>
+                <button onclick="propose()" class="btn ghost">{{ ic.icon('arrow-up') }}重新生成</button>
+                <span style="font-size:11.5px;color:var(--ink-3)">应用后回到知识库就能看到新结构</span>
             </div>
         </div>
     </div>
 
     <!-- 完成 -->
-    <div id="org-done" class="bg-white rounded-xl shadow-sm p-10 text-center mt-4" style="display:none">
-        <div class="text-3xl mb-3">✅</div>
-        <p class="text-gray-700 font-medium mb-1">整理完成，已重新归类 <span id="org-updated">0</span> 篇笔记</p>
-        <div class="flex items-center justify-center gap-3 mt-4">
-            <a href="/notes" class="text-sm bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition">去知识库看看 →</a>
+    <div id="org-done" class="card" style="padding:40px;text-align:center;display:none">
+        <div class="org-done-icon">{{ ic.icon('check') }}</div>
+        <p style="font-size:14px;color:var(--ink-1);font-weight:500;margin:0 0 4px">整理完成，已重新归类 <span id="org-updated">0</span> 篇笔记</p>
+        <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-top:16px">
+            <a href="/notes" class="btn primary">去知识库看看 &rarr;</a>
             {% if project.id != '__unfiled__' %}
-            <a href="/projects/{{ project.id }}" class="text-sm text-gray-500 px-4 py-2 rounded-lg hover:bg-gray-100 transition">回项目</a>
+            <a href="/projects/{{ project.id }}" class="btn ghost">回项目</a>
             {% endif %}
         </div>
     </div>
@@ -131,13 +144,12 @@ function renderResult(data) {
     var list = document.getElementById('org-list');
     list.innerHTML = data.actions.map(function(a){
         var oldf = a.old_folder || '未分类';
-        return '<div class="org-card" data-id="' + _esc(a.id) + '">'
-            + '<div class="text-sm font-medium text-gray-800">' + _esc(a.title) + '</div>'
-            + '<div class="flex items-center gap-2 mt-2 text-xs">'
-            + '<span class="text-gray-400 flex-shrink-0">原：' + _esc(oldf) + '</span>'
-            + '<span class="text-gray-300 flex-shrink-0">→</span>'
-            + '<input class="org-folder flex-1 border rounded px-2 py-1 text-xs text-gray-700 outline-none focus:ring-2 focus:ring-blue-400" value="' + _esc(a.folder) + '">'
-            + '</div></div>';
+        return '<div class="card org-card" data-id="' + _esc(a.id) + '">'
+            + '<div class="title">' + _esc(a.title) + '</div>'
+            + '<span class="tag" style="flex:none">原：' + _esc(oldf) + '</span>'
+            + '<span class="org-arrow">&rarr;</span>'
+            + '<input class="input org-folder org-folder-input" value="' + _esc(a.folder) + '">'
+            + '</div>';
     }).join('');
     document.getElementById('org-result').style.display = 'block';
 }
@@ -158,12 +170,12 @@ function applyOrganize() {
     fetch('/notes/chat/apply', { method:'POST', body: fd })
         .then(function(r){ return r.json(); })
         .then(function(data){
-            if (data.error) { alert(data.error); btn.disabled=false; btn.textContent='✅ 应用整理'; return; }
+            if (data.error) { alert(data.error); btn.disabled=false; btn.textContent='应用整理'; return; }
             document.getElementById('org-result').style.display = 'none';
             document.getElementById('org-updated').textContent = data.updated || actions.length;
             document.getElementById('org-done').style.display = 'block';
         })
-        .catch(function(){ alert('应用失败，请重试'); btn.disabled=false; btn.textContent='✅ 应用整理'; });
+        .catch(function(){ alert('应用失败，请重试'); btn.disabled=false; btn.textContent='应用整理'; });
 }
 </script>
 {% endif %}
