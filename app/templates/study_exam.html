@@ -1,26 +1,43 @@
 {% extends "base.html" %}
+{% import "_icons.html" as ic %}
 {% block title %}{{ subject }}密卷{% endblock %}
+{% block topbar %}
+<span class="crumb"><a href="/study" style="color:inherit;text-decoration:none">学习</a> {{ ic.icon('chevron') }} <b>{{ subject }} · 密卷</b></span>
+{% endblock %}
 {% block content %}
-<div class="max-w-2xl mx-auto px-3 py-4">
-  <h1 class="text-lg font-bold text-gray-900 mb-3">{{ subject }} · 2026预测密卷</h1>
-  {% for q in questions %}
-  <div class="bg-white rounded-lg shadow-sm p-4 mb-3">
-    <div class="text-xs text-gray-400">{{ loop.index }} / {{ q.qtype }}</div>
-    <div class="text-sm text-gray-900 mt-1 whitespace-pre-wrap">{{ q.stem }}</div>
-    <ul class="mt-2 text-sm text-gray-700">
-      {% for opt in q.options %}<li class="py-0.5">{{ opt }}</li>{% endfor %}
-    </ul>
-    <details class="mt-2"><summary class="text-xs text-purple-500">看答案</summary>
-      <div class="text-sm text-green-700 mt-1">答案：{{ q.answer }}</div></details>
-    <form method="post" action="/study/record" class="flex gap-2 mt-2">
-      <input type="hidden" name="item_type" value="question">
-      <input type="hidden" name="item_id" value="{{ q.id }}">
-      <input type="hidden" name="subject" value="{{ subject }}">
-      <input type="hidden" name="next_url" value="/study/exam/{{ subject }}">
-      <button name="action" value="对" class="px-4 py-1.5 rounded bg-green-500 text-white text-sm">做对</button>
-      <button name="action" value="错" class="px-4 py-1.5 rounded bg-red-400 text-white text-sm">做错</button>
-    </form>
-  </div>
-  {% else %}<p class="text-sm text-gray-400">该科暂无密卷题</p>{% endfor %}
+<style>
+.study-shell{max-width:640px}
+.exam-opts{margin-top:8px;font-size:13.5px;color:var(--ink-2)}
+.exam-opts li{padding:2px 0}
+.exam-ans summary{font-size:12px;color:var(--accent);cursor:pointer}
+.exam-ans .a{font-size:13.5px;color:var(--up);margin-top:6px}
+</style>
+<div class="study-shell">
+    <div style="font-family:var(--display);font-size:20px;font-weight:600;color:var(--ink-1);margin-bottom:14px">{{ subject }} · 2026预测密卷</div>
+    {% if questions %}
+    {% for q in questions %}
+    <div class="card" style="padding:14px 16px;margin-bottom:12px">
+        <div style="font-size:11.5px;color:var(--ink-3)">{{ loop.index }} / {{ q.qtype }}</div>
+        <div style="font-size:14px;color:var(--ink-1);line-height:1.75;margin-top:5px;white-space:pre-wrap">{{ q.stem }}</div>
+        <ul class="exam-opts">
+            {% for opt in q.options %}<li>{{ opt }}</li>{% endfor %}
+        </ul>
+        <details class="exam-ans" style="margin-top:8px">
+            <summary>看答案</summary>
+            <div class="a">答案：{{ q.answer }}</div>
+        </details>
+        <form method="post" action="/study/record" style="display:flex;gap:8px;margin-top:10px">
+            <input type="hidden" name="item_type" value="question">
+            <input type="hidden" name="item_id" value="{{ q.id }}">
+            <input type="hidden" name="subject" value="{{ subject }}">
+            <input type="hidden" name="next_url" value="/study/exam/{{ subject }}">
+            <button name="action" value="对" class="btn" style="color:var(--up);border-color:rgba(63,203,134,.35)">做对</button>
+            <button name="action" value="错" class="btn" style="color:var(--down);border-color:rgba(255,98,87,.35)">做错</button>
+        </form>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="module"><div class="inner"><div class="empty">该科暂无密卷题</div></div></div>
+    {% endif %}
 </div>
 {% endblock %}

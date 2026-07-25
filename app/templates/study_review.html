@@ -1,14 +1,32 @@
 {% extends "base.html" %}
+{% import "_icons.html" as ic %}
 {% block title %}复习{% endblock %}
+{% block topbar %}
+<span class="crumb"><a href="/study" style="color:inherit;text-decoration:none">学习</a> {{ ic.icon('chevron') }} <b>到期复习</b></span>
+{% endblock %}
 {% block content %}
-<div class="max-w-2xl mx-auto px-3 py-4">
-  <h1 class="text-lg font-bold text-gray-900 mb-3">🔁 到期复习（{{ due|length }}）</h1>
-  {% for it in due %}
-  <a href="{% if it.item_type=='point' %}/study/point/{{ it.item_id }}{% elif it.item_type=='archetype' %}/study/archetype/{{ it.item_id }}{% else %}/study/exam/{{ it.subject }}{% endif %}"
-     class="block bg-white rounded-lg shadow-sm p-3 mb-2 active:bg-gray-50">
-    <span class="text-xs text-purple-500">{{ it.subject }} · {{ it.item_type }} · 第{{ it.stage }}档</span>
-    <div class="text-sm text-gray-800">{{ it.item_id }}</div>
-  </a>
-  {% else %}<p class="text-sm text-gray-400">暂无到期复习 🎉</p>{% endfor %}
+<style>
+.study-shell{max-width:640px}
+.review-row{display:block;text-decoration:none;color:inherit;padding:12px 14px;margin-bottom:8px}
+.review-row .sub{font-size:11.5px;color:var(--accent)}
+.review-row .ttl{font-size:13.5px;color:var(--ink-1);margin-top:2px}
+</style>
+<div class="study-shell">
+<div class="module">
+    <div class="mh"><span class="ic">{{ ic.icon('clock') }}</span><span class="ttl">到期复习</span><span class="sub">· {{ due|length }}</span></div>
+    <div class="inner">
+    {% if due %}
+    {% for it in due %}
+    <a href="{% if it.item_type=='point' %}/study/point/{{ it.item_id }}{% elif it.item_type=='archetype' %}/study/archetype/{{ it.item_id }}{% else %}/study/exam/{{ it.subject }}{% endif %}"
+       class="card review-row">
+        <div class="sub">{{ it.subject }} · {{ it.item_type }} · 第{{ it.stage }}档</div>
+        <div class="ttl">{{ it.item_id }}</div>
+    </a>
+    {% endfor %}
+    {% else %}
+    <div class="empty">暂无到期复习</div>
+    {% endif %}
+    </div>
+</div>
 </div>
 {% endblock %}

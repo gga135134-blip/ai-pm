@@ -1,55 +1,68 @@
 {% extends "base.html" %}
+{% import "_icons.html" as ic %}
 {% block title %}今日练一练{% endblock %}
+{% block topbar %}
+<span class="crumb"><a href="/study" style="color:inherit;text-decoration:none">学习</a> {{ ic.icon('chevron') }} <b>今日练一练</b></span>
+{% endblock %}
 {% block content %}
-<div class="max-w-2xl mx-auto px-3 py-4">
-  <div class="flex items-center gap-2 mb-4">
-    <a href="/study" class="text-gray-400 text-sm">← 返回</a>
-    <span class="text-gray-300">|</span>
-    <span class="text-sm text-gray-600 font-medium">今日练一练</span>
-  </div>
+<style>
+.study-shell{max-width:640px}
+.opt-row{display:block;width:100%;text-align:left;font-family:var(--sans);font-size:13.5px;line-height:1.6;color:var(--ink-1);
+  padding:12px 14px;min-height:44px;border-radius:var(--r-sm);border:1px solid var(--border);background:var(--panel-2);cursor:pointer}
+.opt-row:hover:not(:disabled){border-color:var(--ink-3)}
+.opt-row.sel{border-color:var(--accent);background:var(--accent-soft);color:var(--accent);font-weight:500}
+.opt-row.ok{border-color:var(--up);background:rgba(63,203,134,.14);color:var(--up)}
+.opt-row.bad{border-color:var(--down);background:rgba(255,98,87,.14);color:var(--down)}
+.opt-row:disabled{cursor:default}
+.q-stem{font-size:14.5px;color:var(--ink-1);line-height:1.8}
+.q-meta{font-size:11.5px;color:var(--ink-3);margin-bottom:5px}
+</style>
+
+<div class="study-shell">
 
   {% if not questions %}
-  <div class="bg-white rounded-xl shadow-sm p-8 text-center">
-    <div class="text-4xl mb-3">📭</div>
-    <div class="text-gray-500 text-sm">今天还没学任何考点，先去学习再来练习吧</div>
-    <a href="/study" class="inline-block mt-4 bg-purple-600 text-white px-6 py-2 rounded-lg text-sm">去学习</a>
+  <div class="module">
+    <div class="inner">
+      <div class="empty" style="padding:36px 12px">
+        {{ ic.icon('doc') }}
+        <p style="margin:10px 0 4px;color:var(--ink-2)">今天还没学任何考点，先去学习再来练习吧</p>
+        <a href="/study" class="btn primary" style="display:inline-flex;margin-top:8px">去学习</a>
+      </div>
+    </div>
   </div>
   {% else %}
-  <div class="text-xs text-gray-400 mb-4">共 {{ questions|length }} 题，根据今日学习内容生成</div>
+  <div style="font-size:12px;color:var(--ink-3);margin-bottom:14px">共 {{ questions|length }} 题，根据今日学习内容生成</div>
 
   <form id="practice-form">
   {% for q in questions %}
-  <div class="bg-white rounded-xl shadow-sm p-4 mb-4" id="q-{{ loop.index }}">
-    <div class="flex items-start gap-2 mb-3">
-      <span class="text-xs bg-blue-100 text-blue-600 rounded px-1.5 py-0.5 shrink-0 mt-0.5">{{ loop.index }}</span>
-      <div>
-        <span class="text-xs text-gray-400 mr-1">{{ q.subject }} · {{ q.qtype }}</span>
-        <div class="text-sm text-gray-800 mt-1 leading-relaxed">{{ q.stem }}</div>
+  <div class="card" id="q-{{ loop.index }}" style="padding:16px;margin-bottom:14px">
+    <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:12px">
+      <span class="pill run" style="flex:none">{{ loop.index }}</span>
+      <div style="min-width:0">
+        <div class="q-meta">{{ q.subject }} · {{ q.qtype }}</div>
+        <div class="q-stem">{{ q.stem }}</div>
       </div>
     </div>
-    <div class="space-y-2" data-answer="{{ q.answer }}" data-qtype="{{ q.qtype }}">
+    <div class="opts" data-answer="{{ q.answer }}" data-qtype="{{ q.qtype }}" style="display:flex;flex-direction:column;gap:8px">
       {% for opt in q.options %}
       {% set label = opt.split('．')[0] if '．' in opt else opt[0] %}
-      <button type="button" onclick="selectOpt(this)"
-              data-label="{{ label }}"
-              class="opt-btn w-full text-left text-sm px-3 py-2.5 rounded-lg border border-gray-200 bg-gray-50 active:bg-gray-100 transition-colors">
-        {{ opt }}
-      </button>
+      <button type="button" onclick="selectOpt(this)" data-label="{{ label }}" class="opt-btn opt-row">{{ opt }}</button>
       {% endfor %}
     </div>
-    <div class="result-msg mt-2 text-sm hidden"></div>
-    <button type="button" onclick="checkAnswer(this)"
-            class="check-btn mt-3 w-full bg-blue-600 text-white text-sm py-2 rounded-lg active:bg-blue-700 hidden">
+    <div class="result-msg" style="margin-top:10px;font-size:13px;display:none;font-weight:600"></div>
+    <button type="button" onclick="checkAnswer(this)" class="check-btn btn primary" style="margin-top:12px;width:100%;justify-content:center;display:none">
       确认答案
     </button>
   </div>
   {% endfor %}
   </form>
 
-  <div id="score-card" class="hidden bg-white rounded-xl shadow-sm p-6 text-center mt-2 mb-8">
-    <div class="text-4xl font-bold text-blue-600 mb-1" id="score-text"></div>
-    <div class="text-sm text-gray-500 mb-4" id="score-sub"></div>
-    <a href="/study" class="inline-block bg-purple-600 text-white px-8 py-3 rounded-xl text-base font-medium">回到今日学习</a>
+  <div id="score-card" class="module" style="display:none;text-align:center;margin-top:6px;margin-bottom:32px">
+    <div class="inner" style="padding:28px 16px">
+      <div style="font-size:32px;font-weight:700;color:var(--accent);font-family:var(--mono);margin-bottom:4px" id="score-text"></div>
+      <div style="font-size:13px;color:var(--ink-3);margin-bottom:16px" id="score-sub"></div>
+      <a href="/study" class="btn primary" style="display:inline-flex">回到今日学习</a>
+    </div>
   </div>
   {% endif %}
 </div>
@@ -63,56 +76,54 @@
   function selectOpt(btn) {
     var wrap = btn.closest('[data-answer]');
     var qtype = wrap.dataset.qtype;
-    var checkBtn = btn.closest('.bg-white').querySelector('.check-btn');
+    var checkBtn = btn.closest('.card').querySelector('.check-btn');
     if (wrap.dataset.done) return;
 
     if (qtype === '多选') {
-      btn.classList.toggle('border-blue-500');
-      btn.classList.toggle('bg-blue-50');
-      btn.classList.toggle('text-blue-700');
+      btn.classList.toggle('sel');
       // show confirm button if any selected
-      var anySelected = wrap.querySelectorAll('.border-blue-500').length > 0;
-      checkBtn.classList.toggle('hidden', !anySelected);
+      var anySelected = wrap.querySelectorAll('.sel').length > 0;
+      checkBtn.style.display = anySelected ? '' : 'none';
     } else {
       // 单选：直接判定
-      wrap.querySelectorAll('.opt-btn').forEach(function(b){ b.classList.remove('border-blue-500','bg-blue-50','text-blue-700'); });
-      btn.classList.add('border-blue-500','bg-blue-50','text-blue-700');
-      checkBtn.classList.remove('hidden');
+      wrap.querySelectorAll('.opt-btn').forEach(function(b){ b.classList.remove('sel'); });
+      btn.classList.add('sel');
+      checkBtn.style.display = '';
     }
   }
 
   function checkAnswer(btn) {
-    var card = btn.closest('.bg-white');
+    var card = btn.closest('.card');
     var wrap = card.querySelector('[data-answer]');
     if (wrap.dataset.done) return;
     wrap.dataset.done = '1';
-    btn.classList.add('hidden');
+    btn.style.display = 'none';
 
     var correct_answer = wrap.dataset.answer.trim().toUpperCase();
-    var selected = Array.from(wrap.querySelectorAll('.border-blue-500')).map(function(b){ return b.dataset.label.trim().toUpperCase(); }).sort().join('');
+    var selected = Array.from(wrap.querySelectorAll('.sel')).map(function(b){ return b.dataset.label.trim().toUpperCase(); }).sort().join('');
     var isCorrect = selected === correct_answer.split('').sort().join('');
 
     wrap.querySelectorAll('.opt-btn').forEach(function(b){
       var lbl = b.dataset.label.trim().toUpperCase();
       if (correct_answer.includes(lbl)) {
-        b.classList.remove('border-gray-200','bg-gray-50');
-        b.classList.add('border-green-500','bg-green-50','text-green-700');
-      } else if (b.classList.contains('border-blue-500')) {
-        b.classList.remove('border-blue-500','bg-blue-50','text-blue-700');
-        b.classList.add('border-red-400','bg-red-50','text-red-600');
+        b.classList.remove('sel');
+        b.classList.add('ok');
+      } else if (b.classList.contains('sel')) {
+        b.classList.remove('sel');
+        b.classList.add('bad');
       }
       b.disabled = true;
     });
 
     var msg = card.querySelector('.result-msg');
-    msg.classList.remove('hidden');
+    msg.style.display = 'block';
     if (isCorrect) {
-      msg.className = 'result-msg mt-2 text-sm text-green-600';
-      msg.textContent = '✓ 正确！';
+      msg.style.color = 'var(--up)';
+      msg.textContent = '正确！';
       correct++;
     } else {
-      msg.className = 'result-msg mt-2 text-sm text-red-500';
-      msg.textContent = '✗ 正确答案：' + correct_answer;
+      msg.style.color = 'var(--down)';
+      msg.textContent = '正确答案：' + correct_answer;
     }
 
     answered++;
@@ -120,10 +131,10 @@
   }
 
   function showScore() {
-    document.getElementById('score-card').classList.remove('hidden');
+    document.getElementById('score-card').style.display = 'block';
     var pct = Math.round(correct / total * 100);
     document.getElementById('score-text').textContent = correct + ' / ' + total + ' 正确';
-    var sub = pct >= 80 ? '🎉 掌握不错！' : pct >= 60 ? '💪 继续加油！' : '📖 建议重温考点';
+    var sub = pct >= 80 ? '掌握不错！' : pct >= 60 ? '继续加油！' : '建议重温考点';
     document.getElementById('score-sub').textContent = sub + '  正确率 ' + pct + '%';
     document.getElementById('score-card').scrollIntoView({behavior:'smooth'});
   }

@@ -1,21 +1,43 @@
 {% extends "base.html" %}
+{% import "_icons.html" as ic %}
 {% block title %}考点{% endblock %}
+{% block topbar %}
+<span class="crumb"><a href="/study" style="color:inherit;text-decoration:none">学习</a> {{ ic.icon('chevron') }} <b>{{ point.title if point else '考点' }}</b></span>
+{% endblock %}
 {% block content %}
+<style>
+.study-shell{max-width:640px}
+.record-bar{position:fixed;bottom:0;left:0;right:0;background:var(--bg);border-top:1px solid var(--border);
+  display:flex;gap:8px;padding:12px;max-width:640px;margin:0 auto;box-shadow:var(--shadow-lg)}
+.record-bar .btn{flex:1;justify-content:center;padding:12px;font-size:14px;font-weight:600;border:none}
+.record-bar .btn.know{color:var(--up);background:rgba(63,203,134,.14)}
+.record-bar .btn.fuzzy{color:var(--warn);background:rgba(240,168,104,.14)}
+.record-bar .btn.dontknow{color:var(--down);background:rgba(255,98,87,.14)}
+</style>
 {% if point %}
-<div class="max-w-2xl mx-auto px-3 py-4 pb-24">
-  <span class="text-xs text-purple-500">{{ point.subject }} · {{ point.chapter }}</span>
-  <h1 class="text-lg font-bold text-gray-900 mt-1 mb-3">{{ point.title }}</h1>
-  <div class="bg-white rounded-lg shadow-sm p-4 text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">{{ point.content }}</div>
-  {% if point.memory_method %}<div class="mt-3 text-sm text-amber-700 bg-amber-50 rounded-lg p-3">💡 记忆法：{{ point.memory_method }}</div>{% endif %}
+<div class="study-shell" style="padding-bottom:24px">
+    <div class="module">
+        <div class="mh"><span class="ic">{{ ic.icon('doc') }}</span><span class="ttl">{{ point.title }}</span></div>
+        <div class="inner">
+            <div style="font-size:11.5px;color:var(--accent);margin-bottom:10px">{{ point.subject }} · {{ point.chapter }}</div>
+            <div style="font-size:14px;color:var(--ink-1);line-height:1.85;white-space:pre-wrap">{{ point.content }}</div>
+            {% if point.memory_method %}
+            <div style="margin-top:14px;padding:12px 14px;border-radius:var(--r-sm);background:var(--panel-2);font-size:13px;color:var(--warn)">
+                记忆法：{{ point.memory_method }}
+            </div>
+            {% endif %}
+        </div>
+    </div>
 </div>
-<form method="post" action="/study/record"
-      class="fixed bottom-0 inset-x-0 bg-white border-t flex gap-2 p-3 max-w-2xl mx-auto">
-  <input type="hidden" name="item_type" value="point">
-  <input type="hidden" name="item_id" value="{{ point.id }}">
-  <input type="hidden" name="subject" value="{{ point.subject }}">
-  <button name="action" value="会" class="flex-1 py-3 rounded-lg bg-green-500 text-white font-medium">会</button>
-  <button name="action" value="模糊" class="flex-1 py-3 rounded-lg bg-amber-400 text-white font-medium">模糊</button>
-  <button name="action" value="不会" class="flex-1 py-3 rounded-lg bg-red-400 text-white font-medium">不会</button>
+<form method="post" action="/study/record" class="record-bar">
+    <input type="hidden" name="item_type" value="point">
+    <input type="hidden" name="item_id" value="{{ point.id }}">
+    <input type="hidden" name="subject" value="{{ point.subject }}">
+    <button name="action" value="会" class="btn know">会</button>
+    <button name="action" value="模糊" class="btn fuzzy">模糊</button>
+    <button name="action" value="不会" class="btn dontknow">不会</button>
 </form>
-{% else %}<p class="p-4 text-gray-500">考点不存在</p>{% endif %}
+{% else %}
+<div class="study-shell"><div class="empty">考点不存在</div></div>
+{% endif %}
 {% endblock %}

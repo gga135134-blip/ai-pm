@@ -1,82 +1,94 @@
 {% extends "base.html" %}
+{% import "_icons.html" as ic %}
 {% block title %}学习提醒设置{% endblock %}
+{% block topbar %}
+<span class="crumb"><a href="/study" style="color:inherit;text-decoration:none">学习</a> {{ ic.icon('chevron') }} <b>设置</b></span>
+{% endblock %}
 {% block content %}
-<div class="max-w-lg mx-auto px-4 py-6">
-  <div class="flex items-center gap-2 mb-5">
-    <a href="/study" class="text-gray-400 text-sm">← 返回学习</a>
-  </div>
-  <h1 class="text-xl font-bold text-gray-800 mb-1">学习设置</h1>
-  <p class="text-sm text-gray-500 mb-5">任务配额 + 每日提醒</p>
+<style>
+.study-shell{max-width:520px}
+.msg-bar{font-size:13px;border-radius:var(--r-sm);border:1px solid var(--border);padding:11px 14px;margin-bottom:16px}
+.msg-bar.ok{color:var(--up);border-color:rgba(63,203,134,.35);background:rgba(63,203,134,.1)}
+.msg-bar.err{color:var(--down);border-color:rgba(255,98,87,.35);background:rgba(255,98,87,.1)}
+.remind-row{display:flex;justify-content:space-between;font-size:12.5px;padding:4px 0}
+</style>
+<div class="study-shell">
+    <div style="font-family:var(--display);font-size:20px;font-weight:600;color:var(--ink-1);margin-bottom:4px">学习设置</div>
+    <div style="font-size:13px;color:var(--ink-3);margin-bottom:18px">任务配额 + 每日提醒</div>
 
-  {% if msg == 'saved' %}
-  <div class="bg-green-50 border border-green-200 text-green-700 text-sm rounded-lg px-4 py-3 mb-4">✅ 已保存</div>
-  {% elif msg == 'test_ok' %}
-  <div class="bg-green-50 border border-green-200 text-green-700 text-sm rounded-lg px-4 py-3 mb-4">✅ 测试推送成功！去微信查看</div>
-  {% elif msg == 'test_fail' %}
-  <div class="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3 mb-4">❌ 推送失败，请确认 Server酱 Key 已在全局设置中配置</div>
-  {% endif %}
-
-  <!-- 推送渠道状态 -->
-  <div class="bg-white rounded-xl shadow-sm p-4 mb-4">
-    <div class="text-sm font-medium text-gray-700 mb-2">推送渠道（Server酱）</div>
-    {% if has_key %}
-    <div class="text-sm text-green-600">✅ SendKey 已配置</div>
-    {% else %}
-    <div class="text-sm text-red-500 mb-1">⚠️ 尚未配置 Server酱 SendKey</div>
-    <p class="text-xs text-gray-400">去 <a href="/settings" class="text-blue-500 underline">全局设置</a> 填入（sct.ftqq.com 注册获取）</p>
+    {% if msg == 'saved' %}
+    <div class="msg-bar ok">已保存</div>
+    {% elif msg == 'test_ok' %}
+    <div class="msg-bar ok">测试推送成功！去微信查看</div>
+    {% elif msg == 'test_fail' %}
+    <div class="msg-bar err">推送失败，请确认 Server酱 Key 已在全局设置中配置</div>
     {% endif %}
-  </div>
 
-  <!-- 统一表单 -->
-  <form method="post" action="/study/settings" class="space-y-4">
-
-    <!-- 每日新学任务数 -->
-    <div class="bg-white rounded-xl shadow-sm p-4">
-      <div class="text-sm font-medium text-gray-700 mb-3">每日新学考点数</div>
-      <div class="flex items-center gap-3">
-        <input type="number" name="daily_new_target" value="{{ s.daily_new_target }}"
-               min="1" max="300"
-               class="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 bg-gray-50 text-center text-lg font-bold">
-        <span class="text-sm text-gray-400">项 / 天</span>
-      </div>
-      <p class="text-xs text-gray-400 mt-2">当前共 3037 个考点，150/天约 20 天过完一轮</p>
+    <!-- 推送渠道状态 -->
+    <div class="module">
+        <div class="mh"><span class="ttl" style="font-size:14px">推送渠道（Server酱）</span></div>
+        <div class="inner">
+        {% if has_key %}
+        <div style="font-size:13px;color:var(--up)">SendKey 已配置</div>
+        {% else %}
+        <div style="font-size:13px;color:var(--down);margin-bottom:4px">尚未配置 Server酱 SendKey</div>
+        <p style="font-size:12px;color:var(--ink-3)">去 <a href="/settings" style="color:var(--accent)">全局设置</a> 填入（sct.ftqq.com 注册获取）</p>
+        {% endif %}
+        </div>
     </div>
 
-    <!-- 晨间提醒时间 -->
-    <div class="bg-white rounded-xl shadow-sm p-4">
-      <div class="text-sm font-medium text-gray-700 mb-3">晨间提醒时间（每天发今日计划）</div>
-      <select name="reminder_hour"
-              class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 bg-gray-50">
-        {% for h in range(5, 23) %}
-        <option value="{{ h }}" {% if s.reminder_hour == h %}selected{% endif %}>{{ "%02d"|format(h) }}:00</option>
-        {% endfor %}
-      </select>
-      <p class="text-xs text-gray-400 mt-2">建议 07:00–08:00，起床第一条微信</p>
-    </div>
+    <!-- 统一表单 -->
+    <form method="post" action="/study/settings">
 
-    <!-- 截止催促说明（固定，不可改） -->
-    <div class="bg-amber-50 border border-amber-100 rounded-xl p-4">
-      <div class="text-sm font-medium text-amber-700 mb-2">⏰ 截止催促（自动）</div>
-      <div class="space-y-1 text-xs text-amber-600">
-        <div class="flex justify-between"><span>12:00</span><span>当天未完成 → 发催促</span></div>
-        <div class="flex justify-between"><span>18:00</span><span>仍未完成 → 再催一次</span></div>
-        <div class="flex justify-between"><span>22:00</span><span>还未完成 → 最后一次轰炸</span></div>
-      </div>
-      <p class="text-xs text-gray-400 mt-2">任务当天完成则自动跳过，不打扰</p>
-    </div>
+        <div class="module">
+            <div class="mh"><span class="ttl" style="font-size:14px">每日新学考点数</span></div>
+            <div class="inner">
+                <div class="field" style="margin-bottom:0">
+                    <div style="display:flex;align-items:center;gap:10px">
+                        <input type="number" name="daily_new_target" value="{{ s.daily_new_target }}"
+                               min="1" max="300" class="input" style="flex:1;text-align:center;font-size:16px;font-weight:700;font-family:var(--mono)">
+                        <span style="font-size:13px;color:var(--ink-3)">项 / 天</span>
+                    </div>
+                    <p style="font-size:12px;color:var(--ink-3);margin-top:6px">当前共 3037 个考点，150/天约 20 天过完一轮</p>
+                </div>
+            </div>
+        </div>
 
-    <button type="submit"
-            class="w-full bg-purple-600 text-white text-base font-semibold py-3 rounded-xl active:bg-purple-700">
-      保存设置
-    </button>
-  </form>
+        <div class="module">
+            <div class="mh"><span class="ttl" style="font-size:14px">晨间提醒时间（每天发今日计划）</span></div>
+            <div class="inner">
+                <div class="field" style="margin-bottom:0">
+                    <select name="reminder_hour" class="input">
+                        {% for h in range(5, 23) %}
+                        <option value="{{ h }}" {% if s.reminder_hour == h %}selected{% endif %}>{{ "%02d"|format(h) }}:00</option>
+                        {% endfor %}
+                    </select>
+                    <p style="font-size:12px;color:var(--ink-3);margin-top:6px">建议 07:00–08:00，起床第一条微信</p>
+                </div>
+            </div>
+        </div>
 
-  <!-- 测试推送 -->
-  <form method="post" action="/study/settings/test" class="mt-3">
-    <button type="submit"
-            class="w-full border border-gray-300 text-gray-600 text-sm py-3 rounded-xl active:bg-gray-50 {% if not has_key %}opacity-40 pointer-events-none{% endif %}">
-      发送测试推送
-    </button>
-  </form>
+        <!-- 截止催促说明（固定，不可改） -->
+        <div class="module" style="border-color:rgba(240,168,104,.3)">
+            <div class="mh" style="background:rgba(240,168,104,.1)"><span class="ic" style="color:var(--warn)">{{ ic.icon('clock') }}</span><span class="ttl" style="font-size:14px;color:var(--warn)">截止催促（自动）</span></div>
+            <div class="inner">
+                <div class="remind-row" style="color:var(--warn)"><span>12:00</span><span>当天未完成 → 发催促</span></div>
+                <div class="remind-row" style="color:var(--warn)"><span>18:00</span><span>仍未完成 → 再催一次</span></div>
+                <div class="remind-row" style="color:var(--warn)"><span>22:00</span><span>还未完成 → 最后一次轰炸</span></div>
+                <p style="font-size:12px;color:var(--ink-3);margin-top:8px">任务当天完成则自动跳过，不打扰</p>
+            </div>
+        </div>
+
+        <button type="submit" class="btn primary" style="width:100%;justify-content:center;padding:12px;font-size:14px">
+            保存设置
+        </button>
+    </form>
+
+    <!-- 测试推送 -->
+    <form method="post" action="/study/settings/test" style="margin-top:12px">
+        <button type="submit" class="btn" style="width:100%;justify-content:center;padding:12px;font-size:13px{% if not has_key %};opacity:.4;pointer-events:none{% endif %}">
+            发送测试推送
+        </button>
+    </form>
 </div>
 {% endblock %}
