@@ -1,120 +1,142 @@
 {% extends "base.html" %}
+{% import "_icons.html" as ic %}
 {% block title %}{{ project.name }} - AI 项目管理{% endblock %}
+{% block topbar %}
+<span class="crumb"><a href="/projects" style="color:inherit;text-decoration:none">项目</a> {{ ic.icon('chevron') }} <b>{{ project.name }}</b></span>
+{% endblock %}
 {% block content %}
 <style>
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes wr-march{0%{margin-left:-30%}100%{margin-left:100%}}
-.wr-bar{width:30%;background:#22c55e;height:4px;border-radius:9999px;animation:wr-march 1.1s ease-in-out infinite}
-#board-sync-chip{position:fixed;left:50%;transform:translateX(-50%);top:64px;z-index:60;display:none;align-items:center;gap:8px;background:#1d4ed8;color:#fff;font-size:13px;padding:8px 16px;border-radius:9999px;box-shadow:0 4px 12px rgba(0,0,0,.15);cursor:pointer}
-#board-sync-chip:hover{background:#1e40af}
-.proj-tabs{display:flex;gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px}
-.proj-tabs::-webkit-scrollbar{height:3px}
-.proj-tabs button{flex-shrink:0;white-space:nowrap}
-.kanban-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
-.kanban-cols{display:flex;gap:12px;align-items:flex-start}
-.kb-col{min-width:200px;flex:1}
-.kb-col-empty{width:32px;flex-shrink:0;flex-grow:0;cursor:pointer;border-radius:8px;padding:10px 4px;background:#f9fafb;display:flex;flex-direction:column;align-items:center;gap:6px;transition:background .15s}
-.kb-col-empty:hover{background:#f3f4f6}
-.kb-col-empty .kbe-label{font-size:11px;color:#d1d5db;font-weight:500;writing-mode:vertical-lr;letter-spacing:.05em;user-select:none}
-.kb-col-empty .kbe-add{font-size:14px;color:#e5e7eb;line-height:1}
-.ddmenu{display:none;position:absolute;right:0;top:calc(100% + 4px);z-index:50;background:#fff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);min-width:160px;overflow:hidden}
-.ddmenu.open{display:block}
-#ai-ctrl-panel{display:none}
+.wr-bar{width:30%;background:var(--accent);height:3px;border-radius:9999px;animation:wr-march 1.1s ease-in-out infinite}
+@media (prefers-reduced-motion:reduce){ .wr-bar{animation:none;width:100%} }
+#board-sync-chip{position:fixed;left:50%;transform:translateX(-50%);top:64px;z-index:60;display:none;align-items:center;gap:8px;background:var(--accent);color:var(--on-accent);font-size:13px;font-weight:600;padding:8px 16px;border-radius:9999px;box-shadow:var(--shadow-lg);cursor:pointer}
+#board-sync-chip:hover{filter:brightness(1.06)}
+
+/* ---- page-local pill states (base.html only ships .pill.run) ---- */
+.pill.off{ color:var(--ink-3); background:var(--panel-2); }
+.pill.warn{ color:var(--warn); background:rgba(240,168,104,.14); }
+.pill.done{ color:var(--up); background:rgba(63,203,134,.14); }
+.pill.blocked{ color:var(--down); background:rgba(255,98,87,.14); }
+.pill.reviewing{ color:var(--ai); background:var(--ai-soft); }
+
+/* ---- AI control panel (auto-run + budget bar) ---- */
+#ai-ctrl-panel{display:none;background:var(--panel-2);border:1px solid var(--border);border-radius:var(--r-sm);padding:12px 16px;margin-bottom:18px}
 #ai-ctrl-panel.open{display:block}
+.budget-track{background:var(--border);border-radius:9999px;height:6px;width:112px;overflow:hidden}
+.budget-fill{height:6px;border-radius:9999px;background:var(--up)}
+.budget-fill.warn{background:var(--warn)}
+.budget-fill.over{background:var(--down)}
+
+/* ---- header dropdown ---- */
+.ddmenu{display:none;position:absolute;right:0;top:calc(100% + 4px);z-index:50;background:var(--bg);border:1px solid var(--border);border-radius:var(--r-sm);box-shadow:var(--shadow-lg);min-width:160px;overflow:hidden}
+.ddmenu.open{display:block}
+.ddmenu button{color:var(--ink-1)}
+.ddmenu button:hover{background:var(--panel-2)}
+.ddmenu button.danger{color:var(--down)}
+.ddmenu button.danger:hover{background:rgba(255,98,87,.1)}
+
+/* ---- kanban ---- */
+.kanban-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.kanban-cols{display:flex;gap:14px;align-items:flex-start}
+.kb-col{min-width:210px;flex:1}
+.kanban-cols .col-empty{width:34px;flex-shrink:0;flex-grow:0;cursor:pointer}
+.kanban-cols .col-empty:hover{border-color:var(--accent);color:var(--ink-2)}
+.card .acts{display:flex;gap:6px;margin-top:8px}
+.card .acts .btn{padding:3px 9px;font-size:11.5px;font-weight:500}
+.card .prog{margin-top:8px;background:var(--border);border-radius:9999px;height:3px;overflow:hidden}
+.card .prog i{display:block;height:3px;background:var(--accent)}
+
+/* ---- tab strip scroll (mobile) ---- */
+.proj-tabs{display:flex;gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.proj-tabs::-webkit-scrollbar{height:3px}
+.proj-tabs .tab{flex-shrink:0;white-space:nowrap}
+.rec-tabs{display:flex;gap:4px;margin-bottom:14px}
+
+/* ---- FAB / manual add overlay ---- */
 .fab-root{position:fixed;bottom:80px;right:16px;z-index:40}
+.fab-btn{width:48px;height:48px;background:var(--accent);color:var(--on-accent);border:none;border-radius:50%;box-shadow:var(--shadow-lg);display:flex;align-items:center;justify-content:center;font-size:24px;line-height:1;cursor:pointer}
+.fab-btn:hover{filter:brightness(1.06)}
 #manual-overlay{display:none;position:fixed;bottom:148px;right:16px;z-index:41;width:min(360px,calc(100vw - 32px))}
-.rec-tab{padding:6px 14px;border-radius:6px;font-size:13px;cursor:pointer;color:#6b7280}
-.rec-tab.active{background:#dbeafe;color:#1d4ed8;font-weight:500}
+#manual-overlay .panel{background:var(--bg);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow-lg);padding:16px}
+
+/* ---- misc form field spacing reused inside this page ---- */
+.dv-row{display:flex;gap:10px}
+.field-row{display:flex;flex-wrap:wrap;gap:10px;align-items:end}
+
 @media(max-width:767px){
-  .proj-header-row{flex-wrap:wrap}
   .fab-root{bottom:80px}
-  .proj-tabs button{font-size:12px;padding:6px 10px}
   .kb-col{min-width:200px;flex:none;width:200px}
-  /* 资料库上传/粘贴表单的输入行：手机上竖排，避免大字号时挤出屏幕 */
   .dv-row{flex-direction:column}
   .dv-row > *{width:100%}
-  /* 对话输入框固定在屏幕底部，键盘弹出时自动上移 */
-  #projai-form{position:fixed;bottom:0;left:0;right:0;background:white;border-top:1px solid #e5e7eb;padding:12px 16px;z-index:100}
-  /* 消息区域去掉高度上限，给底部固定框留出空间 */
+  #projai-form{position:fixed;bottom:0;left:0;right:0;background:var(--bg);border-top:1px solid var(--border);padding:12px 16px;z-index:100}
   #projai-messages{max-height:none;padding-bottom:110px}
-  /* 整个 AI 视图底部留白，避免内容被固定框遮住 */
   #ai-view{padding-bottom:110px}
 }
 </style>
 
-<!-- Breadcrumb -->
-<div class="mb-3 text-sm text-gray-400">
-    <a href="/projects" class="hover:text-gray-600">← 项目</a> /
-    <span class="text-gray-600">{{ project.code or project.name }}{% if project.code %} {{ project.name }}{% endif %}</span>
+{% set pill_map = {'draft':'off','active':'run','paused':'warn','done':'done'} %}
+{% set pcls = pill_map.get(project.status, 'off') %}
+
+<!-- Layer 1: Header -->
+<div class="phead">
+    {% if project.code %}<span class="pcode" style="font-size:13px;background:var(--panel-2);border:1px solid var(--border);border-radius:6px;padding:2px 8px">{{ project.code }}</span>{% endif %}
+    <span class="pname">{{ project.name }}</span>
+    <span class="pill {{ pcls }}"><span class="d"></span>{{ project.status }}</span>
+    {% if core_count %}<span class="pcode"><span class="star">{{ ic.icon('star') }}</span> 核心档 {{ core_count }}</span>{% endif %}
+    <span class="sp"></span>
+    <span class="cost">AI 费用 <b>${{ project_cost }}</b></span>
+    <button id="ai-ctrl-toggle" onclick="document.getElementById('ai-ctrl-panel').classList.toggle('open')"
+        class="pill {{ 'run' if auto_running else 'off' }}" style="cursor:pointer;border:none">
+        <span class="d {{ 'live-dot' if auto_running else '' }}"></span>{{ '运行中' if auto_running else '已停止' }}
+    </button>
+    <a href="/projects/{{ project.id }}/edit" class="btn">{{ ic.icon('edit') }}编辑</a>
+    <div class="relative" id="more-wrap" style="position:relative">
+        <button onclick="event.stopPropagation();document.getElementById('more-menu').classList.toggle('open')" class="btn">{{ ic.icon('dots') }}更多</button>
+        <div class="ddmenu" id="more-menu">
+            <form method="POST" action="/projects/{{ project.id }}/clone">
+                <button class="w-full text-left px-4 py-3 text-sm" style="width:100%">复制项目</button>
+            </form>
+            <div style="border-top:1px solid var(--border)"></div>
+            <form method="POST" action="/projects/{{ project.id }}/delete" onsubmit="return confirm('确定删除此项目及所有任务？')">
+                <button class="danger w-full text-left px-4 py-3 text-sm" style="width:100%">删除项目</button>
+            </form>
+        </div>
+    </div>
 </div>
 
-<!-- Layer 1: Header Card -->
-<div class="bg-white rounded-xl shadow-sm p-4 mb-4">
-    <div class="flex flex-wrap items-center justify-between gap-2 proj-header-row">
-        <div class="flex flex-wrap items-center gap-2 min-w-0">
-            {% if project.code %}<span class="text-xs font-mono bg-gray-800 text-white px-2 py-0.5 rounded flex-shrink-0">{{ project.code }}</span>{% endif %}
-            <h1 class="text-lg font-bold text-gray-800">{{ project.name }}</h1>
-            <span class="text-xs px-2 py-0.5 rounded status-{{ project.status }} flex-shrink-0">{{ project.status }}</span>
-        </div>
-        <div class="flex items-center gap-2 flex-shrink-0">
-            <button onclick="document.getElementById('ai-ctrl-panel').classList.toggle('open')"
-                class="text-xs px-2 py-1 rounded-full border flex items-center gap-1 flex-shrink-0 {% if auto_running %}border-green-300 bg-green-50 text-green-700{% else %}border-gray-200 bg-gray-50 text-gray-500{% endif %}">
-                {% if auto_running %}<span class="animate-pulse">🟢</span> 运行中{% else %}⏸️ 已停止{% endif %}
-            </button>
-            <a href="/projects/{{ project.id }}/edit" class="text-sm px-3 py-1.5 border rounded-lg hover:bg-gray-50 transition flex-shrink-0">编辑</a>
-            <div class="relative" id="more-wrap">
-                <button onclick="event.stopPropagation();document.getElementById('more-menu').classList.toggle('open')"
-                    class="text-sm px-3 py-1.5 border rounded-lg hover:bg-gray-50 transition flex-shrink-0">▾ 更多</button>
-                <div class="ddmenu" id="more-menu">
-                    <form method="POST" action="/projects/{{ project.id }}/clone">
-                        <button class="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50">复制项目</button>
-                    </form>
-                    <div class="border-t border-gray-100"></div>
-                    <form method="POST" action="/projects/{{ project.id }}/delete" onsubmit="return confirm('确定删除此项目及所有任务？')">
-                        <button class="w-full text-left px-4 py-3 text-sm text-red-600 hover:bg-red-50">删除项目</button>
-                    </form>
-                </div>
-            </div>
-        </div>
-    </div>
+<div style="display:flex;flex-wrap:wrap;gap:14px;margin:-10px 0 18px;font-size:12.5px;color:var(--ink-3)">
+    {% if project.budget %}<span>预算 ¥{{ project.budget }}</span>{% endif %}
+    {% if project.revenue %}<span style="color:var(--up)">收款 ¥{{ project.revenue }}</span>{% endif %}
+    {% if project.description %}<span>{{ project.description }}</span>{% endif %}
+</div>
 
-    <div class="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-xs">
-        <span class="{% if core_count %}text-amber-700 font-medium{% else %}text-gray-400{% endif %}">⭐ 核心档 {{ core_count }} 篇</span>
-        <span class="text-violet-600 font-medium">AI费用 ${{ project_cost }}</span>
-        {% if project.budget %}<span class="text-gray-500">预算 ¥{{ project.budget }}</span>{% endif %}
-        {% if project.revenue %}<span class="text-green-600 font-medium">收款 ¥{{ project.revenue }}</span>{% endif %}
-        {% if project.description %}<span class="text-gray-400">{{ project.description }}</span>{% endif %}
-    </div>
-
-    <!-- AI 控制面板（点击状态按钮展开） -->
-    <div id="ai-ctrl-panel" class="mt-3 pt-3 border-t border-gray-100">
-        <div class="flex flex-wrap items-center justify-between gap-3">
-            <div class="flex flex-wrap items-center gap-3 text-xs">
-                <span class="text-gray-500">模式: <strong>{{ '全自动' if project.automation_level == 'auto' else '每步确认' }}</strong></span>
-                {% if project.ai_budget and project.ai_budget > 0 %}
-                {% set pct = ((project_cost / project.ai_budget * 100) | round(0)) | int %}
-                <div class="flex items-center gap-2">
-                    <div class="bg-gray-200 rounded-full h-1.5 w-28">
-                        <div class="h-1.5 rounded-full {% if pct >= 100 %}bg-red-500{% elif pct >= 80 %}bg-yellow-500{% else %}bg-green-500{% endif %}" style="width:{{ [pct,100]|min }}%"></div>
-                    </div>
-                    <span class="text-gray-500">${{ project_cost }}/${{ project.ai_budget }} ({{ pct }}%)</span>
-                </div>
-                {% else %}
-                <span class="text-gray-400">未设 AI 预算（编辑项目可设置，80% 预警 / 100% 暂停）</span>
-                {% endif %}
+<!-- AI 控制面板（点击状态按钮展开） -->
+<div id="ai-ctrl-panel">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="flex flex-wrap items-center gap-3 text-xs" style="color:var(--ink-2)">
+            <span>模式: <strong style="color:var(--ink-1)">{{ '全自动' if project.automation_level == 'auto' else '每步确认' }}</strong></span>
+            {% if project.ai_budget and project.ai_budget > 0 %}
+            {% set pct = ((project_cost / project.ai_budget * 100) | round(0)) | int %}
+            <div class="flex items-center gap-2">
+                <div class="budget-track"><div class="budget-fill {% if pct >= 100 %}over{% elif pct >= 80 %}warn{% endif %}" style="width:{{ [pct,100]|min }}%"></div></div>
+                <span>${{ project_cost }}/${{ project.ai_budget }} ({{ pct }}%)</span>
             </div>
-            <div class="flex gap-2">
-                {% if auto_running %}
-                <form method="POST" action="/projects/{{ project.id }}/auto/stop">
-                    <button class="text-sm px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition">停止</button>
-                </form>
-                {% else %}
-                <form method="POST" action="/projects/{{ project.id }}/auto/start"
-                      onsubmit="return confirm('启动后 AI 会自动逐个执行所有待处理的 AI 任务（含自动审核），费用受预算护栏控制。确定启动？')">
-                    <button class="text-sm px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">&#9654; 启动自动执行</button>
-                </form>
-                {% endif %}
-            </div>
+            {% else %}
+            <span style="color:var(--ink-3)">未设 AI 预算（编辑项目可设置，80% 预警 / 100% 暂停）</span>
+            {% endif %}
+        </div>
+        <div class="flex gap-2">
+            {% if auto_running %}
+            <form method="POST" action="/projects/{{ project.id }}/auto/stop">
+                <button class="btn" style="color:var(--down);border-color:rgba(255,98,87,.35)">{{ ic.icon('pause') }}停止</button>
+            </form>
+            {% else %}
+            <form method="POST" action="/projects/{{ project.id }}/auto/start"
+                  onsubmit="return confirm('启动后 AI 会自动逐个执行所有待处理的 AI 任务（含自动审核），费用受预算护栏控制。确定启动？')">
+                <button class="btn primary">{{ ic.icon('play') }}启动自动执行</button>
+            </form>
+            {% endif %}
         </div>
     </div>
 </div>
@@ -122,13 +144,51 @@
 document.addEventListener('click',function(){document.getElementById('more-menu').classList.remove('open');});
 </script>
 
+<!-- KPI 行 -->
+{% set pending_n = task_board['pending']|length %}
+{% set running_n = task_board['running']|length %}
+{% set reviewing_n = task_board['reviewing']|length %}
+{% set blocked_n = task_board['blocked']|length %}
+{% set done_n = task_board['done']|length %}
+{% set failed_n = task_board['failed']|length %}
+{% set total_tasks = pending_n + running_n + reviewing_n + blocked_n + done_n + failed_n %}
+{% set done_pct = ((done_n / total_tasks * 100) | round(0) | int) if total_tasks > 0 else 0 %}
+<div class="kpis">
+    <div class="kpi">
+        <div class="top"><span class="chip">{{ ic.icon('kanban') }}</span>
+            {% if pending_n %}<span class="delta mut">{{ pending_n }} 待处理</span>{% endif %}
+        </div>
+        <div class="lbl">任务总数</div><div class="val">{{ total_tasks }}</div>
+    </div>
+    <div class="kpi">
+        <div class="top"><span class="chip">{{ ic.icon('clock') }}</span>
+            {% if blocked_n %}<span class="delta dn">{{ blocked_n }} 阻塞</span>
+            {% elif reviewing_n %}<span class="delta mut">{{ reviewing_n }} 审核中</span>{% endif %}
+        </div>
+        <div class="lbl">进行中</div><div class="val">{{ running_n }}</div>
+    </div>
+    <div class="kpi">
+        <div class="top"><span class="chip up">{{ ic.icon('check') }}</span><span class="delta mut">{{ done_pct }}%</span></div>
+        <div class="lbl">已完成</div><div class="val">{{ done_n }}</div>
+    </div>
+    <div class="kpi">
+        <div class="top"><span class="chip warn">{{ ic.icon('dollar') }}</span>
+            {% if project.ai_budget and project.ai_budget > 0 %}
+            {% set bpct = ((project_cost / project.ai_budget * 100) | round(0)) | int %}
+            <span class="delta {{ 'dn' if bpct >= 100 else ('mut' if bpct < 80 else 'dn') }}">预算 {{ bpct }}%</span>
+            {% endif %}
+        </div>
+        <div class="lbl">AI 费用</div><div class="val">${{ project_cost }}</div>
+    </div>
+</div>
+
 <!-- Layer 2: Tabs -->
 <div class="proj-tabs mb-4" id="view-tabs">
-    <button onclick="switchView('board')" class="text-sm px-4 py-2 rounded-lg bg-blue-100 text-blue-700 font-medium" data-tab="board">看板</button>
-    <button onclick="switchView('tree')" class="text-sm px-4 py-2 rounded-lg text-gray-600 hover:bg-gray-100" data-tab="tree">任务树</button>
-    <button onclick="switchView('docs')" class="text-sm px-4 py-2 rounded-lg text-gray-600 hover:bg-gray-100" data-tab="docs">资料库 ({{ project_notes|length }})</button>
-    <button onclick="switchView('records')" class="text-sm px-4 py-2 rounded-lg text-gray-600 hover:bg-gray-100" data-tab="records">记录</button>
-    <button onclick="switchView('ai')" class="text-sm px-4 py-2 rounded-lg text-gray-600 hover:bg-gray-100" data-tab="ai">🤖 AI指挥</button>
+    <button onclick="switchView('board')" class="tab on" data-tab="board">看板</button>
+    <button onclick="switchView('tree')" class="tab" data-tab="tree">任务树</button>
+    <button onclick="switchView('docs')" class="tab" data-tab="docs">资料库 ({{ project_notes|length }})</button>
+    <button onclick="switchView('records')" class="tab" data-tab="records">记录</button>
+    <button onclick="switchView('ai')" class="tab" data-tab="ai">{{ ic.icon('robot') }}AI指挥</button>
 </div>
 <script>
 var _ALL_TABS=['board','tree','docs','records','ai'];
@@ -136,125 +196,129 @@ function switchView(name){
     _ALL_TABS.forEach(function(v){var el=document.getElementById(v+'-view');if(el)el.style.display=v===name?'block':'none';});
     document.querySelectorAll('#view-tabs button').forEach(function(b){
         var on=b.dataset.tab===name;
-        b.className='text-sm px-4 py-2 rounded-lg '+(on?'bg-blue-100 text-blue-700 font-medium':'text-gray-600 hover:bg-gray-100');
+        b.className='tab'+(on?' on':'');
     });
 }
 </script>
 
 <!-- ===== 看板 ===== -->
 <div id="board-view">
-    {% set has_tasks = task_board['pending'] or task_board['running'] or task_board['reviewing'] or task_board['blocked'] or task_board['done'] or task_board['failed'] %}
-    {% if not has_tasks %}
-    <div class="bg-white rounded-xl shadow-sm p-12 text-center">
-        <div class="text-4xl mb-3">📋</div>
-        <p class="text-gray-600 font-medium mb-1">项目还没有任务</p>
-        <p class="text-xs text-gray-400 mb-5">可以让 AI 自动拆解，或手动添加第一个任务</p>
-        <button onclick="switchView('ai')" class="text-sm px-5 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition">🤖 去 AI 指挥 →</button>
-    </div>
-    {% else %}
-    <div class="kanban-scroll">
-        <div class="kanban-cols">
-            {% for status, label in [('pending','待处理'),('running','执行中'),('reviewing','审核中'),('blocked','阻塞'),('done','已完成'),('failed','失败')] %}
-            {% set col = task_board[status] %}
-            {% if col %}
-            <div class="kb-col bg-gray-100 rounded-lg p-3">
-                <div class="flex items-center justify-between mb-3">
-                    <h3 class="text-sm font-semibold text-gray-600">{{ label }}</h3>
-                    <span class="text-xs bg-gray-200 text-gray-500 px-2 rounded-full">{{ col|length }}</span>
-                </div>
-                <div class="space-y-2">
-                    {% for t in col %}
-                    <div class="bg-white rounded-lg p-3 shadow-sm hover:shadow-md transition">
-                        <a href="/tasks/{{ t.id }}" class="block">
-                            <div class="text-sm font-medium text-gray-800">{{ t.title }}</div>
-                            {% if t.parent_task_id %}<div class="text-xs text-violet-400 mt-1">子任务</div>{% endif %}
-                            <div class="flex items-center justify-between mt-2 text-xs text-gray-400">
-                                <span>{{ t.assignee or '未分配' }}</span>
-                                <span class="{% if t.priority <= 2 %}text-red-500 font-medium{% endif %}">P{{ t.priority }}</span>
+    {% set has_tasks = total_tasks > 0 %}
+    <div class="module">
+        <div class="mh">
+            <span class="ic">{{ ic.icon('kanban') }}</span><span class="ttl">看板</span>
+            {% if has_tasks %}<span class="sub">· {{ total_tasks }} 个任务</span>{% endif %}
+            <span class="sp"></span>
+            <button onclick="document.getElementById('manual-overlay').style.display='block'" class="btn" style="padding:5px 10px;font-size:12px">{{ ic.icon('plus') }}添加任务</button>
+        </div>
+        <div class="inner">
+        {% if not has_tasks %}
+        <div class="empty" style="padding:48px 12px">
+            <div style="font-size:32px;color:var(--ink-3);margin-bottom:10px">{{ ic.icon('kanban') }}</div>
+            <p style="color:var(--ink-2);font-weight:500;margin-bottom:4px">项目还没有任务</p>
+            <p style="font-size:12px;margin-bottom:16px">可以让 AI 自动拆解，或手动添加第一个任务</p>
+            <button onclick="switchView('ai')" class="btn ai">{{ ic.icon('robot') }}去 AI 指挥 →</button>
+        </div>
+        {% else %}
+        <div class="kanban-scroll">
+            <div class="kanban-cols">
+                {% for status, label in [('pending','待处理'),('running','执行中'),('reviewing','审核中'),('blocked','阻塞'),('done','已完成'),('failed','失败')] %}
+                {% set col = task_board[status] %}
+                {% if col %}
+                <div class="kb-col">
+                    <div class="col-h"><span>{{ label }}</span><span class="c">{{ col|length }}</span></div>
+                    <div>
+                        {% for t in col %}
+                        <div class="card">
+                            {% if status == 'running' %}<div class="lane run"></div>{% elif status == 'reviewing' %}<div class="lane rev"></div>{% endif %}
+                            <a href="/tasks/{{ t.id }}" class="block" style="text-decoration:none;color:inherit">
+                                <div class="ct">{{ t.title }}</div>
+                                {% if t.parent_task_id %}<div class="cm" style="color:var(--ai)">子任务</div>{% endif %}
+                                <div class="cm" style="justify-content:space-between">
+                                    <span>{{ t.assignee or '未分配' }}</span>
+                                    <span {% if t.priority <= 2 %}style="color:var(--down);font-weight:600"{% endif %}>P{{ t.priority }}</span>
+                                </div>
+                                {% if t.progress and t.progress > 0 and t.status != 'done' %}
+                                <div class="prog"><i style="width:{{ t.progress }}%"></i></div>
+                                {% endif %}
+                            </a>
+                            {% if status == 'pending' %}
+                            <div class="acts">
+                                {% if t.assignee == 'ai' %}
+                                <form method="POST" action="/tasks/{{ t.id }}/execute" class="inline">
+                                    <button class="btn ai">AI 执行</button>
+                                </form>
+                                {% endif %}
+                                <form method="POST" action="/tasks/{{ t.id }}/status" class="inline">
+                                    <input type="hidden" name="status" value="running">
+                                    <button class="btn">开始</button>
+                                </form>
                             </div>
-                            {% if t.progress and t.progress > 0 and t.status != 'done' %}
-                            <div class="mt-2 bg-gray-200 rounded-full h-1">
-                                <div class="bg-blue-500 h-1 rounded-full" style="width:{{ t.progress }}%"></div>
+                            {% elif status == 'running' %}
+                            <div class="acts">
+                                <form method="POST" action="/tasks/{{ t.id }}/status" class="inline">
+                                    <input type="hidden" name="status" value="done">
+                                    <button class="btn" style="color:var(--up)">完成</button>
+                                </form>
+                            </div>
+                            {% elif status == 'blocked' %}
+                            <div class="acts">
+                                {% if t.assignee == 'ai' %}
+                                <form method="POST" action="/tasks/{{ t.id }}/execute" class="inline">
+                                    <button class="btn ai">重新执行</button>
+                                </form>
+                                {% endif %}
+                                <form method="POST" action="/tasks/{{ t.id }}/status" class="inline">
+                                    <input type="hidden" name="status" value="done">
+                                    <button class="btn" style="color:var(--up)">人工通过</button>
+                                </form>
+                            </div>
+                            {% elif status == 'failed' %}
+                            <div class="acts">
+                                <form method="POST" action="/tasks/{{ t.id }}/status" class="inline">
+                                    <input type="hidden" name="status" value="pending">
+                                    <button class="btn">重置</button>
+                                </form>
                             </div>
                             {% endif %}
-                        </a>
-                        {% if status == 'pending' %}
-                        <div class="mt-2 flex gap-1">
-                            {% if t.assignee == 'ai' %}
-                            <form method="POST" action="/tasks/{{ t.id }}/execute" class="inline">
-                                <button class="text-xs px-2 py-0.5 bg-violet-50 text-violet-600 rounded hover:bg-violet-100">AI 执行</button>
-                            </form>
-                            {% endif %}
-                            <form method="POST" action="/tasks/{{ t.id }}/status" class="inline">
-                                <input type="hidden" name="status" value="running">
-                                <button class="text-xs px-2 py-0.5 bg-blue-50 text-blue-600 rounded hover:bg-blue-100">开始</button>
-                            </form>
                         </div>
-                        {% elif status == 'running' %}
-                        <div class="mt-2">
-                            <form method="POST" action="/tasks/{{ t.id }}/status" class="inline">
-                                <input type="hidden" name="status" value="done">
-                                <button class="text-xs px-2 py-0.5 bg-green-50 text-green-600 rounded hover:bg-green-100">完成</button>
-                            </form>
-                        </div>
-                        {% elif status == 'blocked' %}
-                        <div class="mt-2 flex gap-1">
-                            {% if t.assignee == 'ai' %}
-                            <form method="POST" action="/tasks/{{ t.id }}/execute" class="inline">
-                                <button class="text-xs px-2 py-0.5 bg-violet-50 text-violet-600 rounded hover:bg-violet-100">重新执行</button>
-                            </form>
-                            {% endif %}
-                            <form method="POST" action="/tasks/{{ t.id }}/status" class="inline">
-                                <input type="hidden" name="status" value="done">
-                                <button class="text-xs px-2 py-0.5 bg-green-50 text-green-600 rounded hover:bg-green-100">人工通过</button>
-                            </form>
-                        </div>
-                        {% elif status == 'failed' %}
-                        <div class="mt-2">
-                            <form method="POST" action="/tasks/{{ t.id }}/status" class="inline">
-                                <input type="hidden" name="status" value="pending">
-                                <button class="text-xs px-2 py-0.5 bg-gray-50 text-gray-600 rounded hover:bg-gray-100">重置</button>
-                            </form>
-                        </div>
-                        {% endif %}
+                        {% endfor %}
                     </div>
-                    {% endfor %}
                 </div>
+                {% else %}
+                <div class="col-empty" title="{{ label }}（空）— 点击添加任务"
+                     onclick="document.getElementById('manual-overlay').style.display='block'">{{ label }}</div>
+                {% endif %}
+                {% endfor %}
             </div>
-            {% else %}
-            <div class="kb-col-empty" title="{{ label }}（空）— 点击添加任务"
-                 onclick="document.getElementById('manual-overlay').style.display='block'">
-                <span class="kbe-label">{{ label }}</span>
-                <span class="kbe-add">+</span>
-            </div>
-            {% endif %}
-            {% endfor %}
+        </div>
+        {% endif %}
         </div>
     </div>
-    {% endif %}
 </div>
 
 <!-- ===== 任务树 ===== -->
-<div id="tree-view" class="bg-white rounded-xl shadow-sm p-6" style="display:none">
-    <h3 class="text-lg font-semibold text-gray-700 mb-4">任务层级结构</h3>
+<div id="tree-view" class="module" style="display:none">
+    <div class="mh"><span class="ic">{{ ic.icon('chart') }}</span><span class="ttl">任务层级结构</span></div>
+    <div class="inner">
     {% macro render_tree(nodes, depth=0) %}
     {% set active = nodes|selectattr('status', 'ne', 'done')|list %}
     {% set done_nodes = nodes|selectattr('status', 'equalto', 'done')|list %}
-    <div class="{% if depth > 0 %}ml-6 border-l-2 border-gray-200 pl-4{% endif %}">
+    <div style="{% if depth > 0 %}margin-left:22px;border-left:2px solid var(--border);padding-left:16px{% endif %}">
         {% for node in (active + done_nodes) %}
-        <div class="py-2 {% if not loop.last %}border-b border-gray-100{% endif %}">
+        <div style="padding:8px 0;{% if not loop.last %}border-bottom:1px solid var(--border){% endif %}">
             <div class="flex items-start gap-2">
-                <span class="flex-shrink-0 mt-1 text-xs {% if node.children %}text-gray-400{% else %}text-gray-300{% endif %}">
+                <span style="flex-shrink:0;margin-top:3px;font-size:11px;color:var(--ink-3)">
                     {% if node.children %}&#9660;{% else %}&#9679;{% endif %}
                 </span>
                 <div class="flex-1 min-w-0">
                     <div class="flex items-center gap-2 flex-wrap">
-                        <a href="/tasks/{{ node.id }}" class="text-sm font-medium text-gray-800 hover:text-blue-600">{{ node.title }}</a>
+                        <a href="/tasks/{{ node.id }}" style="font-size:13.5px;font-weight:500;color:var(--ink-1);text-decoration:none">{{ node.title }}</a>
                         <span class="text-xs px-2 py-0.5 rounded flex-shrink-0 status-{{ node.status }}">{{ node.status }}</span>
                     </div>
-                    <div class="flex items-center gap-2 mt-0.5 text-xs text-gray-400">
+                    <div class="flex items-center gap-2 mt-0.5 text-xs" style="color:var(--ink-3)">
                         <span>{{ node.assignee or '未分配' }}</span>
-                        <span class="{% if node.priority <= 2 %}text-red-500{% endif %}">P{{ node.priority }}</span>
+                        <span {% if node.priority <= 2 %}style="color:var(--down)"{% endif %}>P{{ node.priority }}</span>
                         {% if node.progress > 0 %}<span>{{ node.progress }}%</span>{% endif %}
                     </div>
                 </div>
@@ -265,268 +329,284 @@ function switchView(name){
     </div>
     {% endmacro %}
     {% if task_tree %}{{ render_tree(task_tree) }}
-    {% else %}<div class="text-center text-gray-400 py-6">暂无任务</div>{% endif %}
+    {% else %}<div class="empty">暂无任务</div>{% endif %}
+    </div>
 </div>
 
 <!-- ===== 资料库 ===== -->
-<div id="docs-view" class="space-y-4" style="display:none">
-    <div class="grid gap-4" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr))">
-        <div class="bg-white rounded-xl shadow-sm p-4">
-            <h3 class="text-sm font-semibold text-gray-700 mb-3">上传文件</h3>
+<div id="docs-view" style="display:none">
+    <div class="grid gap-4" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr));margin-bottom:16px">
+        <div class="module" style="margin-bottom:0">
+            <div class="mh"><span class="ttl" style="font-size:14px">上传文件</span></div>
+            <div class="inner">
             <form method="POST" action="/projects/{{ project.id }}/upload" enctype="multipart/form-data" class="space-y-3">
-                <input type="file" name="files" multiple accept=".md,.txt,.csv,.json,.py,.js,.html,.css,.yaml,.yml,.toml,.log,.xml" class="w-full border rounded-lg px-3 py-2 text-sm">
-                <div class="dv-row flex gap-2">
-                    <input type="text" name="author" placeholder="作者" style="min-width:0" class="flex-1 border rounded-lg px-3 py-2 text-sm outline-none">
-                    <input type="text" name="tags" placeholder="标签" style="min-width:0" class="flex-1 border rounded-lg px-3 py-2 text-sm outline-none">
+                <input type="file" name="files" multiple accept=".md,.txt,.csv,.json,.py,.js,.html,.css,.yaml,.yml,.toml,.log,.xml" class="input w-full">
+                <div class="dv-row">
+                    <input type="text" name="author" placeholder="作者" class="input" style="min-width:0;flex:1">
+                    <input type="text" name="tags" placeholder="标签" class="input" style="min-width:0;flex:1">
                 </div>
-                <button type="submit" class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700 transition w-full">上传到项目</button>
+                <button type="submit" class="btn primary w-full" style="width:100%;justify-content:center">上传到项目</button>
             </form>
+            </div>
         </div>
-        <div class="bg-white rounded-xl shadow-sm p-4">
-            <h3 class="text-sm font-semibold text-gray-700 mb-3">粘贴内容 → AI 自动归类</h3>
+        <div class="module" style="margin-bottom:0">
+            <div class="mh"><span class="ttl" style="font-size:14px">粘贴内容 → AI 自动归类</span></div>
+            <div class="inner">
             <form method="POST" action="/projects/{{ project.id }}/classify" class="space-y-3">
-                <textarea name="text" rows="4" required placeholder="粘贴聊天记录、会议纪要、录音转文字..." class="w-full border rounded-lg px-3 py-2 text-sm outline-none"></textarea>
-                <div class="dv-row flex gap-2">
-                    <select name="model" style="min-width:0" class="border rounded-lg px-3 py-2 text-sm outline-none">
+                <textarea name="text" rows="4" required placeholder="粘贴聊天记录、会议纪要、录音转文字..." class="input w-full"></textarea>
+                <div class="dv-row">
+                    <select name="model" class="input" style="min-width:0">
                         <option value="auto">自动</option>
                         <option value="deepseek">DeepSeek (省钱)</option>
                         <option value="claude">Claude</option>
                     </select>
-                    <button type="submit" style="min-width:0" class="flex-1 bg-violet-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-violet-700 transition">AI 分类入库</button>
+                    <button type="submit" class="btn ai" style="min-width:0;flex:1;justify-content:center">AI 分类入库</button>
                 </div>
             </form>
+            </div>
         </div>
     </div>
-    <div class="bg-white rounded-xl shadow-sm p-6">
-        <div class="flex items-center justify-between mb-4">
-            <h3 class="text-sm font-semibold text-gray-700">项目资料 ({{ project_notes|length }})</h3>
+    <div class="module">
+        <div class="mh">
+            <span class="ttl" style="font-size:14px">项目资料</span><span class="sub">· {{ project_notes|length }}</span>
+            <span class="sp"></span>
             {% if project_notes %}
-            <a href="/projects/{{ project.id }}/organize"
-                class="text-xs px-3 py-1.5 border border-violet-200 text-violet-700 rounded-lg hover:bg-violet-50 transition flex-shrink-0"
-                title="AI 读完所有笔记，按内容主题自动归类到编号文件夹">🤖 AI 智能整理</a>
+            <a href="/projects/{{ project.id }}/organize" class="btn ai" style="padding:5px 10px;font-size:12px"
+                title="AI 读完所有笔记，按内容主题自动归类到编号文件夹">{{ ic.icon('robot') }}AI 智能整理</a>
             {% endif %}
         </div>
+        <div class="inner">
         {% if project_notes %}
         <div class="space-y-2">
             {% for n in project_notes %}
-            <a href="/notes/{{ n.id }}" class="block p-3 border rounded-lg hover:bg-gray-50 transition {% if n.is_core %}bg-amber-50 border-amber-200{% endif %}">
+            <a href="/notes/{{ n.id }}" class="note" style="display:block;margin-bottom:8px;padding:11px 14px">
                 <div class="flex items-center gap-2 min-w-0">
-                    {% if n.is_core %}<span class="text-amber-500 flex-shrink-0 text-xs">⭐</span>{% endif %}
-                    {% if n.source_type == 'ai_classified' %}<span class="text-xs bg-violet-100 text-violet-600 px-1.5 py-0.5 rounded flex-shrink-0">AI分类</span>
-                    {% elif n.source_type == 'file_import' or n.source_type == 'upload' %}<span class="text-xs bg-green-100 text-green-600 px-1.5 py-0.5 rounded flex-shrink-0">文件</span>
-                    {% elif n.source_type == 'master_ai' %}<span class="text-xs bg-violet-100 text-violet-600 px-1.5 py-0.5 rounded flex-shrink-0">总AI</span>
-                    {% elif n.source_type == 'auto_progress' %}<span class="text-xs bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded flex-shrink-0">进度</span>
-                    {% else %}<span class="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded flex-shrink-0">手动</span>{% endif %}
-                    <span class="text-sm text-gray-800 truncate">{{ n.title }}</span>
+                    {% if n.is_core %}<span class="star flex-shrink-0" style="font-size:12px">{{ ic.icon('star') }}</span>{% endif %}
+                    {% if n.source_type == 'ai_classified' %}<span class="tag ai flex-shrink-0">AI分类</span>
+                    {% elif n.source_type == 'file_import' or n.source_type == 'upload' %}<span class="tag flex-shrink-0">文件</span>
+                    {% elif n.source_type == 'master_ai' %}<span class="tag ai flex-shrink-0">总AI</span>
+                    {% elif n.source_type == 'auto_progress' %}<span class="tag flex-shrink-0">进度</span>
+                    {% else %}<span class="tag flex-shrink-0" style="color:var(--ink-3);background:var(--panel-2)">手动</span>{% endif %}
+                    <span class="truncate" style="font-size:13.5px;color:var(--ink-1)">{{ n.title }}</span>
                 </div>
                 {% if n.tags or n.updated_at %}
-                <div class="flex items-center gap-2 mt-1.5 text-xs text-gray-400">
-                    {% if n.tags %}{% for tag in n.tags.split(',')[:3] %}<span class="text-violet-400">#{{ tag.strip() }}</span>{% endfor %}{% endif %}
-                    <span class="ml-auto flex-shrink-0">{{ n.updated_at[:10] if n.updated_at else '' }}</span>
+                <div class="flex items-center gap-2 mt-1.5 text-xs" style="color:var(--ink-3)">
+                    {% if n.tags %}{% for tag in n.tags.split(',')[:3] %}<span style="color:var(--accent)">#{{ tag.strip() }}</span>{% endfor %}{% endif %}
+                    <span class="ml-auto flex-shrink-0" style="font-family:var(--mono)">{{ n.updated_at[:10] if n.updated_at else '' }}</span>
                 </div>
                 {% endif %}
             </a>
             {% endfor %}
         </div>
         {% else %}
-        <div class="text-center text-gray-400 py-8">还没有项目资料，上传文件或粘贴内容即可</div>
+        <div class="empty">还没有项目资料，上传文件或粘贴内容即可</div>
         {% endif %}
+        </div>
     </div>
 </div>
 
 <!-- ===== 记录（决策 + 支出合并）===== -->
-<div id="records-view" class="space-y-4" style="display:none">
-    <div class="flex gap-2">
-        <button class="rec-tab active" id="rec-btn-d" onclick="showRec('d')">决策 ({{ project_decisions|length }} 条)</button>
-        <button class="rec-tab" id="rec-btn-e" onclick="showRec('e')">支出 (¥{{ expense_total }})</button>
+<div id="records-view" style="display:none">
+    <div class="rec-tabs">
+        <button class="tab on" id="rec-btn-d" onclick="showRec('d')">决策 ({{ project_decisions|length }} 条)</button>
+        <button class="tab" id="rec-btn-e" onclick="showRec('e')">支出 (¥{{ expense_total }})</button>
     </div>
     <script>
     function showRec(t){
         document.getElementById('rec-d').style.display=t==='d'?'block':'none';
         document.getElementById('rec-e').style.display=t==='e'?'block':'none';
-        document.getElementById('rec-btn-d').className='rec-tab'+(t==='d'?' active':'');
-        document.getElementById('rec-btn-e').className='rec-tab'+(t==='e'?' active':'');
+        document.getElementById('rec-btn-d').className='tab'+(t==='d'?' on':'');
+        document.getElementById('rec-btn-e').className='tab'+(t==='e'?' on':'');
     }
     </script>
 
     <!-- 决策 -->
-    <div id="rec-d" class="bg-white rounded-xl shadow-sm p-6">
-        <h3 class="text-sm font-semibold text-gray-700 mb-4">项目决策记录</h3>
+    <div id="rec-d" class="module">
+        <div class="mh"><span class="ttl" style="font-size:14px">项目决策记录</span></div>
+        <div class="inner">
         {% if project_decisions %}
         <div class="space-y-4">
             {% for d in project_decisions %}
-            <div class="border-l-4 {% if d.made_by == 'AI' %}border-violet-400{% else %}border-blue-400{% endif %} pl-4 py-2">
+            <div style="border-left:3px solid {% if d.made_by == 'AI' %}var(--ai){% else %}var(--accent){% endif %};padding-left:14px;padding-top:4px;padding-bottom:4px">
                 <div class="flex flex-wrap items-center gap-2 mb-1">
-                    <span class="text-xs px-2 py-0.5 rounded {% if d.made_by == 'AI' %}bg-violet-100 text-violet-600{% else %}bg-blue-100 text-blue-600{% endif %}">{{ d.made_by or '未知' }}</span>
-                    <h4 class="font-medium text-gray-800 text-sm">{{ d.title }}</h4>
-                    <span class="text-xs text-gray-400">{{ d.created_at[:16] if d.created_at else '' }}</span>
+                    <span class="tag {% if d.made_by == 'AI' %}ai{% endif %}">{{ d.made_by or '未知' }}</span>
+                    <h4 style="font-size:13.5px;font-weight:500;color:var(--ink-1)">{{ d.title }}</h4>
+                    <span class="text-xs" style="color:var(--ink-3)">{{ d.created_at[:16] if d.created_at else '' }}</span>
                 </div>
-                {% if d.decision %}<p class="text-sm text-gray-700">{{ d.decision }}</p>{% endif %}
-                {% if d.reason %}<p class="text-xs text-gray-500 mt-1">原因: {{ d.reason }}</p>{% endif %}
+                {% if d.decision %}<p style="font-size:13px;color:var(--ink-2)">{{ d.decision }}</p>{% endif %}
+                {% if d.reason %}<p class="text-xs mt-1" style="color:var(--ink-3)">原因: {{ d.reason }}</p>{% endif %}
             </div>
             {% endfor %}
         </div>
         {% else %}
-        <div class="text-center text-gray-400 py-6">还没有决策记录</div>
+        <div class="empty">还没有决策记录</div>
         {% endif %}
+        </div>
     </div>
 
     <!-- 支出 -->
-    <div id="rec-e" style="display:none" class="space-y-4">
-        <div class="bg-white rounded-xl shadow-sm p-4">
-            <h3 class="text-sm font-semibold text-gray-700 mb-3">记一笔支出</h3>
-            <form method="POST" action="/projects/{{ project.id }}/expenses/new" class="flex flex-wrap gap-3 items-end">
-                <div class="flex-1" style="min-width:160px">
-                    <label class="block text-xs text-gray-500 mb-1">支出项目</label>
-                    <input type="text" name="title" required placeholder="如: 抖音广告投放" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+    <div id="rec-e" style="display:none">
+        <div class="module">
+            <div class="mh"><span class="ttl" style="font-size:14px">记一笔支出</span></div>
+            <div class="inner">
+            <form method="POST" action="/projects/{{ project.id }}/expenses/new" class="field-row">
+                <div style="flex:1;min-width:160px">
+                    <label class="label" style="display:block;margin-bottom:4px">支出项目</label>
+                    <input type="text" name="title" required placeholder="如: 抖音广告投放" class="input w-full">
                 </div>
-                <div class="w-28">
-                    <label class="block text-xs text-gray-500 mb-1">金额 (¥)</label>
-                    <input type="number" step="0.01" name="amount" required placeholder="0.00" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                <div style="width:112px">
+                    <label class="label" style="display:block;margin-bottom:4px">金额 (¥)</label>
+                    <input type="number" step="0.01" name="amount" required placeholder="0.00" class="input w-full">
                 </div>
-                <div class="w-32">
-                    <label class="block text-xs text-gray-500 mb-1">分类</label>
-                    <select name="category" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                <div style="width:128px">
+                    <label class="label" style="display:block;margin-bottom:4px">分类</label>
+                    <select name="category" class="input w-full">
                         {% for c in ['广告推广','服务器','域名','软件订阅','素材版权','外包','其他'] %}
                         <option value="{{ c }}">{{ c }}</option>{% endfor %}
                     </select>
                 </div>
-                <div class="flex-1" style="min-width:120px">
-                    <label class="block text-xs text-gray-500 mb-1">备注 (可选)</label>
-                    <input type="text" name="note" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                <div style="flex:1;min-width:120px">
+                    <label class="label" style="display:block;margin-bottom:4px">备注 (可选)</label>
+                    <input type="text" name="note" class="input w-full">
                 </div>
-                <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 transition">记账</button>
+                <button type="submit" class="btn primary">记账</button>
             </form>
-        </div>
-        <div class="bg-white rounded-xl shadow-sm p-6">
-            <div class="flex items-center justify-between mb-4">
-                <h3 class="text-sm font-semibold text-gray-700">支出明细 ({{ expenses|length }} 笔)</h3>
-                <div class="text-sm text-gray-600">合计: <span class="font-bold text-red-600">¥{{ expense_total }}</span> <span class="text-xs text-gray-400 ml-1">+ AI ${{ project_cost }}</span></div>
             </div>
+        </div>
+        <div class="module">
+            <div class="mh">
+                <span class="ttl" style="font-size:14px">支出明细</span><span class="sub">· {{ expenses|length }} 笔</span>
+                <span class="sp"></span>
+                <span class="text-sm" style="color:var(--ink-2)">合计: <b style="color:var(--down);font-family:var(--mono)">¥{{ expense_total }}</b> <span class="text-xs" style="color:var(--ink-3)">+ AI ${{ project_cost }}</span></span>
+            </div>
+            <div class="inner">
             {% if expenses %}
             <div class="space-y-2">
                 {% for e in expenses %}
-                <div class="flex items-center justify-between p-3 border rounded-lg">
+                <div class="flex items-center justify-between" style="padding:11px 14px;border:1px solid var(--border);border-radius:var(--r-sm)">
                     <div class="flex items-center gap-3 min-w-0">
-                        <span class="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded flex-shrink-0">{{ e.category }}</span>
-                        <span class="text-sm text-gray-800 truncate">{{ e.title }}</span>
-                        {% if e.note %}<span class="text-xs text-gray-400">{{ e.note }}</span>{% endif %}
+                        <span class="tag flex-shrink-0" style="color:var(--ink-3);background:var(--panel-2)">{{ e.category }}</span>
+                        <span class="truncate" style="font-size:13.5px;color:var(--ink-1)">{{ e.title }}</span>
+                        {% if e.note %}<span class="text-xs" style="color:var(--ink-3)">{{ e.note }}</span>{% endif %}
                     </div>
                     <div class="flex items-center gap-3 flex-shrink-0">
-                        <span class="text-sm font-medium text-red-600">¥{{ e.amount }}</span>
-                        <span class="text-xs text-gray-400">{{ e.created_at[:10] if e.created_at else '' }}</span>
+                        <span style="font-size:13.5px;font-weight:600;color:var(--down);font-family:var(--mono)">¥{{ e.amount }}</span>
+                        <span class="text-xs" style="color:var(--ink-3)">{{ e.created_at[:10] if e.created_at else '' }}</span>
                         <form method="POST" action="/projects/{{ project.id }}/expenses/{{ e.id }}/delete" onsubmit="return confirm('删除？')">
-                            <button class="text-xs text-gray-400 hover:text-red-600">删除</button>
+                            <button class="iconbtn danger">{{ ic.icon('trash') }}</button>
                         </form>
                     </div>
                 </div>
                 {% endfor %}
             </div>
             {% else %}
-            <div class="text-center text-gray-400 py-6">还没有支出记录</div>
+            <div class="empty">还没有支出记录</div>
             {% endif %}
+            </div>
         </div>
     </div>
 </div>
 
 <!-- ===== AI指挥（项目AI + AI拆解 + 作战室）===== -->
-<div id="ai-view" class="space-y-4" style="display:none">
+<div id="ai-view" style="display:none">
 
     <!-- 项目 AI 对话 -->
-    <div class="bg-white rounded-xl shadow-sm p-4">
-        <div class="flex items-start justify-between mb-3">
-            <div>
-                <h3 class="text-sm font-semibold text-gray-700">💬 [{{ project.code }}]「{{ project.name }}」专属 AI</h3>
-                <p class="text-xs text-gray-400 mt-1">只懂本项目（核心档+所有任务+笔记）。可以让它当场干活、追加任务、启停自动执行。</p>
-            </div>
+    <div class="module">
+        <div class="mh">
+            <span class="ic">{{ ic.icon('robot') }}</span>
+            <span class="ttl" style="font-size:14px">[{{ project.code }}]「{{ project.name }}」专属 AI</span>
+            <span class="sp"></span>
             <form method="POST" action="/projects/{{ project.id }}/ai-clear" onsubmit="return confirm('清空本项目所有对话？')">
-                <button class="text-xs px-3 py-1 border rounded-lg text-gray-500 hover:bg-gray-50 flex-shrink-0">清空</button>
+                <button class="btn" style="padding:5px 10px;font-size:12px">清空</button>
             </form>
         </div>
+        <div class="inner">
+        <p class="text-xs mb-3" style="color:var(--ink-3)">只懂本项目（核心档+所有任务+笔记）。可以让它当场干活、追加任务、启停自动执行。</p>
         <div id="projai-messages" class="space-y-3 mb-3" style="min-height:200px;max-height:500px;overflow-y:auto">
-            <div class="text-center text-gray-400 text-sm py-10" id="projai-empty">
+            <div class="empty text-sm" id="projai-empty" style="padding:40px 12px">
                 还没有对话。试试说："这个项目目前进度怎么样？" 或 "帮我新建一个任务：撰写品牌故事"
             </div>
         </div>
         <form id="projai-form" class="space-y-2">
-            <select id="projai-sender" class="border rounded-lg px-2 py-2 text-sm outline-none" style="width:80px">
+            <select id="projai-sender" class="input" style="width:80px">
                 <option value="Gaga">Gaga</option>
                 <option value="An">An</option>
             </select>
             <div class="flex gap-2">
-                <textarea id="projai-input" required rows="2" placeholder="跟项目 AI 说点什么..."
-                    class="flex-1 border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-violet-500 resize-none"></textarea>
-                <button type="submit" id="projai-send" class="bg-violet-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-violet-700 transition self-stretch flex-shrink-0">发送</button>
+                <textarea id="projai-input" required rows="2" placeholder="跟项目 AI 说点什么..." class="input flex-1" style="resize:none"></textarea>
+                <button type="submit" id="projai-send" class="btn ai self-stretch flex-shrink-0">发送</button>
             </div>
         </form>
+        </div>
     </div>
 
     <!-- AI 拆解 -->
-    <div class="bg-white rounded-xl shadow-sm p-4" id="ai-decompose">
-        <h3 class="text-sm font-semibold text-gray-700 mb-3">🔧 AI 自动拆解任务</h3>
-        <form id="decompose-form" method="POST" action="/projects/{{ project.id }}/decompose" class="flex flex-wrap gap-3 items-end">
-            <div class="flex-1" style="min-width:200px">
-                <input type="text" name="goal" required placeholder="输入项目目标，AI 自动拆解为子任务..." value="{{ project.description }}"
-                    class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-violet-500 outline-none">
+    <div class="module" id="ai-decompose">
+        <div class="mh"><span class="ic">{{ ic.icon('robot') }}</span><span class="ttl" style="font-size:14px">AI 自动拆解任务</span></div>
+        <div class="inner">
+        <form id="decompose-form" method="POST" action="/projects/{{ project.id }}/decompose" class="field-row">
+            <div style="flex:1;min-width:200px">
+                <input type="text" name="goal" required placeholder="输入项目目标，AI 自动拆解为子任务..." value="{{ project.description }}" class="input w-full">
             </div>
-            <div class="w-32">
-                <select name="model" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+            <div style="width:128px">
+                <select name="model" class="input w-full">
                     <option value="auto">自动</option>
                     <option value="claude">Claude</option>
                     <option value="openai">OpenAI</option>
                     <option value="deepseek">DeepSeek</option>
                 </select>
             </div>
-            <button type="submit" id="decompose-btn" class="bg-violet-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-violet-700 transition" style="white-space:nowrap">AI 拆解</button>
+            <button type="submit" id="decompose-btn" class="btn ai" style="white-space:nowrap">AI 拆解</button>
         </form>
+        </div>
         <script>
         document.getElementById('decompose-form').addEventListener('submit', function() {
             var btn = document.getElementById('decompose-btn');
             btn.disabled = true;
-            btn.innerHTML = '<span style="display:inline-block;width:12px;height:12px;border:2px solid #fff;border-top-color:transparent;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:6px"></span>拆解中…';
+            btn.innerHTML = '<span style="display:inline-block;width:12px;height:12px;border:2px solid var(--ai);border-top-color:transparent;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:6px"></span>拆解中…';
             btn.classList.add('btn-loading');
         });
         </script>
     </div>
 
     <!-- 作战室 Worker 状态 -->
-    <div class="bg-white rounded-xl shadow-sm p-4">
-        <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
-            <div>
-                <h3 class="text-sm font-semibold text-gray-700">🛰️ 实时 Worker 状态</h3>
-                <p class="text-xs text-gray-400 mt-0.5">最多 3 个 worker 同时干活。进入此 Tab 自动刷新。</p>
-            </div>
-            <div class="flex items-center gap-4 text-xs text-gray-500 flex-shrink-0">
-                <span>运行中: <span id="wr-running" class="font-medium text-gray-700">--</span></span>
-                <span>AI累计: $<span id="wr-spent" class="font-medium text-gray-700">--</span></span>
-            </div>
+    <div class="module war">
+        <div class="mh">
+            <span class="ic">{{ ic.icon('satellite') }}</span>
+            <span class="ttl" style="font-size:14px">实时 Worker 状态</span>
+            <span class="sub">· 最多 3 个同时干活，进入此 Tab 自动刷新</span>
+            <span class="sp"></span>
+            <span class="text-xs" style="color:var(--ink-3)">运行中: <span id="wr-running" style="color:var(--ink-1);font-weight:600">--</span></span>
+            <span class="text-xs" style="color:var(--ink-3);margin-left:12px">AI累计: $<span id="wr-spent" style="color:var(--ink-1);font-weight:600">--</span></span>
         </div>
-        <div id="warroom-list" class="space-y-2 mb-4"></div>
-        <h4 class="text-xs font-semibold text-gray-600 mb-2">最近执行记录（含工具调用步骤）</h4>
+        <div class="inner">
+        <div id="warroom-list" class="mb-4"></div>
+        <h4 class="text-xs font-semibold mb-2" style="color:var(--ink-2)">最近执行记录（含工具调用步骤）</h4>
         {% if runs_with_tools %}
         <div class="space-y-2">
             {% for r in runs_with_tools %}
-            <details class="border rounded-lg p-3">
+            <details style="border:1px solid var(--border);border-radius:var(--r-sm);padding:10px 12px">
                 <summary class="cursor-pointer">
                     <div class="flex items-center gap-2 mb-1">
-                        <span class="text-xs bg-violet-100 text-violet-700 px-2 py-0.5 rounded flex-shrink-0" style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.model }}</span>
-                        <span class="text-sm text-gray-800 truncate">{{ r.task_title or '(无标题)' }}</span>
+                        <span class="tag ai flex-shrink-0" style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.model }}</span>
+                        <span class="truncate" style="font-size:13px;color:var(--ink-1)">{{ r.task_title or '(无标题)' }}</span>
                     </div>
-                    <div class="text-xs text-gray-400">${{ '%.4f' % r.cost }} · {{ r.created_at[5:16].replace('T',' ') if r.created_at }}</div>
+                    <div class="text-xs" style="color:var(--ink-3)">${{ '%.4f' % r.cost }} · {{ r.created_at[5:16].replace('T',' ') if r.created_at }}</div>
                 </summary>
-                <div class="mt-2 text-xs text-gray-600 bg-gray-50 rounded p-3" style="white-space:pre-wrap;max-height:300px;overflow-y:auto">{{ r.response[-2000:] if r.response else '' }}</div>
+                <div class="mt-2 text-xs" style="white-space:pre-wrap;max-height:300px;overflow-y:auto;background:var(--panel-2);border-radius:var(--r-sm);padding:10px 12px;color:var(--ink-2)">{{ r.response[-2000:] if r.response else '' }}</div>
             </details>
             {% endfor %}
         </div>
         {% else %}
-        <p class="text-xs text-gray-400 text-center py-3">还没有执行记录</p>
+        <p class="empty" style="padding:12px">还没有执行记录</p>
         {% endif %}
+        </div>
     </div>
 </div>
 
 <!-- 看板状态变化提示（任务被自动执行推进后弹出） -->
 <div id="board-sync-chip" onclick="location.reload()">
-    <span style="display:inline-block;width:14px;height:14px;border:2px solid #fff;border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite"></span>
+    <span style="display:inline-block;width:14px;height:14px;border:2px solid var(--on-accent);border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite"></span>
     任务状态有更新，点击刷新
 </div>
 
@@ -534,13 +614,12 @@ function switchView(name){
 <div class="fab-root">
     <div class="ddmenu" id="fab-menu" style="bottom:calc(100% + 8px);top:auto;right:0">
         <button onclick="switchView('ai');_closeFab();setTimeout(function(){var e=document.getElementById('ai-decompose');if(e)e.scrollIntoView({behavior:'smooth'})},150)"
-            class="w-full text-left px-4 py-3 text-sm text-violet-700 hover:bg-violet-50">🤖 AI 拆解</button>
-        <div class="border-t border-gray-100"></div>
+            class="w-full text-left px-4 py-3 text-sm" style="width:100%;color:var(--ai)">{{ ic.icon('robot') }} AI 拆解</button>
+        <div style="border-top:1px solid var(--border)"></div>
         <button onclick="_closeFab();document.getElementById('manual-overlay').style.display='block'"
-            class="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50">✍️ 手动添加</button>
+            class="w-full text-left px-4 py-3 text-sm" style="width:100%">{{ ic.icon('edit') }} 手动添加</button>
     </div>
-    <button onclick="event.stopPropagation();document.getElementById('fab-menu').classList.toggle('open')"
-        class="w-12 h-12 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition flex items-center justify-center text-2xl leading-none">+</button>
+    <button onclick="event.stopPropagation();document.getElementById('fab-menu').classList.toggle('open')" class="fab-btn">+</button>
 </div>
 <script>
 function _closeFab(){document.getElementById('fab-menu').classList.remove('open');}
@@ -549,31 +628,30 @@ document.addEventListener('click',function(){_closeFab();document.getElementById
 
 <!-- 手动添加浮层 -->
 <div id="manual-overlay" onclick="event.stopPropagation()">
-    <div class="bg-white rounded-xl shadow-xl border p-4">
+    <div class="panel">
         <div class="flex items-center justify-between mb-3">
-            <span class="text-sm font-semibold text-gray-700">添加任务</span>
-            <button onclick="document.getElementById('manual-overlay').style.display='none'" class="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
+            <span class="text-sm font-semibold" style="color:var(--ink-1)">添加任务</span>
+            <button onclick="document.getElementById('manual-overlay').style.display='none'" class="iconbtn">{{ ic.icon('x') }}</button>
         </div>
         <form method="POST" action="/projects/{{ project.id }}/tasks/new" class="space-y-3">
-            <input type="text" name="title" required placeholder="任务标题..."
-                class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+            <input type="text" name="title" required placeholder="任务标题..." class="input w-full">
             <div class="flex gap-2">
-                <select name="assignee" class="flex-1 border rounded-lg px-3 py-2 text-sm outline-none">
+                <select name="assignee" class="input flex-1">
                     <option value="ai">AI 执行</option>
                     <option value="">人工</option>
                 </select>
-                <select name="ai_model" class="w-28 border rounded-lg px-3 py-2 text-sm outline-none">
+                <select name="ai_model" class="input" style="width:112px">
                     <option value="auto">自动</option>
                     <option value="claude">Claude</option>
                     <option value="openai">OpenAI</option>
                     <option value="deepseek">DeepSeek</option>
                 </select>
-                <select name="priority" class="w-20 border rounded-lg px-3 py-2 text-sm outline-none">
+                <select name="priority" class="input" style="width:80px">
                     <option value="1">P1</option><option value="2">P2</option>
                     <option value="3" selected>P3</option><option value="4">P4</option><option value="5">P5</option>
                 </select>
             </div>
-            <button type="submit" class="w-full bg-blue-600 text-white py-2 rounded-lg text-sm hover:bg-blue-700 transition">添加任务</button>
+            <button type="submit" class="btn primary w-full" style="width:100%;justify-content:center">添加任务</button>
         </form>
     </div>
 </div>
@@ -593,27 +671,25 @@ document.addEventListener('click',function(){_closeFab();document.getElementById
     /* ---- 作战室 ---- */
     function _esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML;}
     function renderWorkers(data){
-        document.getElementById('wr-running').textContent = data.auto_running ? '✅ 是' : '⏹ 否';
+        document.getElementById('wr-running').textContent = data.auto_running ? '是' : '否';
         document.getElementById('wr-spent').textContent = (data.ai_spent||0).toFixed(4);
         var list = document.getElementById('warroom-list');
         if (!data.workers || !data.workers.length){
-            list.innerHTML = '<div class="text-center text-gray-400 text-sm py-4">'
-                + (data.auto_running ? '⏳ 自动执行运行中，等待派工…' : '没有 worker 在跑。点击头部状态按钮可启动自动执行。')
+            list.innerHTML = '<div class="empty" style="padding:16px">'
+                + (data.auto_running ? '自动执行运行中，等待派工…' : '没有 worker 在跑。点击头部状态按钮可启动自动执行。')
                 + '</div>';
             return;
         }
-        list.innerHTML = data.workers.map(function(w){
-            return '<div class="border rounded-lg p-3 border-l-4 border-green-500">'
-                +'<div class="flex items-center justify-between">'
-                +'<div class="flex-1 min-w-0">'
-                +'<div class="text-sm font-medium text-gray-800 truncate">🤖 '+_esc(w.task_title||'(无标题)')+'</div>'
-                +'<div class="text-xs text-gray-500 mt-1">第 '+(w.step||0)+' 步 · <span class="text-blue-600">'+_esc(w.tool||'...')+'</span></div>'
-                +(w.args_brief?'<div class="text-xs text-gray-400 mt-1 truncate font-mono">'+_esc(w.args_brief)+'</div>':'')
+        list.innerHTML = data.workers.map(function(w,i){
+            return '<div class="worker">'
+                +'<span class="dot live-dot" style="background:var(--accent)"></span>'
+                +'<span class="wname">worker#'+(i+1)+'</span>'
+                +'<span class="wstep">第 <b>'+(w.step||0)+'</b> 步 · '+_esc(w.task_title||'(无标题)')+' · <span style="color:var(--accent)">'+_esc(w.tool||'...')+'</span>'
+                +(w.args_brief?'<br><span style="font-size:11px;color:var(--ink-3);font-family:var(--mono)">'+_esc(w.args_brief)+'</span>':'')
+                +'</span>'
+                +'<a href="/tasks/'+w.task_id+'" class="wpct" style="font-size:12px;font-weight:500;color:var(--accent);text-decoration:none;white-space:nowrap">查看→</a>'
                 +'</div>'
-                +'<a href="/tasks/'+w.task_id+'" class="text-xs text-blue-600 hover:underline ml-2 flex-shrink-0">查看</a>'
-                +'</div>'
-                +'<div class="mt-2 bg-gray-200 rounded-full overflow-hidden" style="height:4px"><div class="wr-bar"></div></div>'
-                +'</div>';
+                +'<div style="margin:-4px 0 4px 26px;background:var(--border);border-radius:9999px;overflow:hidden;height:3px"><div class="wr-bar"></div></div>';
         }).join('');
     }
     function checkBoardSync(sig){
@@ -631,10 +707,10 @@ document.addEventListener('click',function(){_closeFab();document.getElementById
         document.getElementById('projai-empty')&&document.getElementById('projai-empty').remove();
         var id='pm-u-'+Date.now()+'-'+Math.random().toString(36).slice(2,7);
         box.insertAdjacentHTML('beforeend','<div class="flex justify-end"><div class="max-w-[80%]">'
-            +'<div class="bg-blue-600 text-white rounded-lg rounded-br-none px-4 py-3"><div id="'+id+'" class="text-sm leading-relaxed" style="white-space:pre-wrap">'+_esc(text)+'</div></div>'
+            +'<div style="background:var(--accent);color:var(--on-accent);border-radius:10px 10px 2px 10px;padding:10px 14px"><div id="'+id+'" class="text-sm leading-relaxed" style="white-space:pre-wrap">'+_esc(text)+'</div></div>'
             +'<div class="flex items-center justify-end gap-2 mt-1">'
-            +'<button onclick="copyMsg(\''+id+'\',this)" class="text-xs text-gray-400 hover:text-blue-600 transition">📋 复制</button>'
-            +'<span class="text-xs text-gray-400">'+(time||nowHM())+'</span>'
+            +'<button onclick="copyMsg(\''+id+'\',this)" class="text-xs" style="color:var(--ink-3)">复制</button>'
+            +'<span class="text-xs" style="color:var(--ink-3)">'+(time||nowHM())+'</span>'
             +'</div></div></div>');
         box.scrollTop=box.scrollHeight;
     }
@@ -642,26 +718,26 @@ document.addEventListener('click',function(){_closeFab();document.getElementById
         document.getElementById('projai-empty')&&document.getElementById('projai-empty').remove();
         var id='pm-'+Date.now()+'-'+Math.random().toString(36).slice(2,7);
         box.insertAdjacentHTML('beforeend','<div class="flex justify-start"><div class="max-w-[85%] w-full">'
-            +'<div class="text-xs font-semibold text-violet-600 mb-1">💬 项目 AI</div>'
-            +'<div class="bg-gray-100 text-gray-800 rounded-lg rounded-bl-none px-4 py-3"><div id="'+id+'" class="text-sm leading-relaxed" style="white-space:pre-wrap">'+_esc(text)+'</div></div>'
+            +'<div class="text-xs font-semibold mb-1" style="color:var(--ai)">项目 AI</div>'
+            +'<div style="background:var(--panel-2);color:var(--ink-1);border-radius:10px 10px 10px 2px;padding:10px 14px"><div id="'+id+'" class="text-sm leading-relaxed" style="white-space:pre-wrap">'+_esc(text)+'</div></div>'
             +'<div class="flex items-center justify-between mt-1">'
-            +'<span class="text-xs text-gray-400">'+(time||nowHM())+'</span>'
-            +'<button onclick="copyMsg(\''+id+'\',this)" class="text-xs text-gray-400 hover:text-violet-600 transition">📋 复制</button>'
+            +'<span class="text-xs" style="color:var(--ink-3)">'+(time||nowHM())+'</span>'
+            +'<button onclick="copyMsg(\''+id+'\',this)" class="text-xs" style="color:var(--ink-3)">复制</button>'
             +'</div></div></div>');
         box.scrollTop=box.scrollHeight;
     }
     window.copyMsg = window.copyMsg || function(elemId,btn){
         var el=document.getElementById(elemId); if(!el) return;
         var text=el.innerText||el.textContent||'';
-        function ok(){var o=btn.innerHTML;btn.innerHTML='✅ 已复制';btn.classList.add('text-green-600');setTimeout(function(){btn.innerHTML=o;btn.classList.remove('text-green-600');},1500);}
+        function ok(){var o=btn.innerHTML;btn.innerHTML='已复制';btn.style.color='var(--up)';setTimeout(function(){btn.innerHTML=o;btn.style.color='';},1500);}
         if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(ok,function(){window.prompt('复制此内容：',text);});}
         else{var ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();try{document.execCommand('copy');ok();}catch(e){window.prompt('复制此内容：',text);}document.body.removeChild(ta);}
     };
     function addThinking(){
         box.insertAdjacentHTML('beforeend','<div class="flex justify-start" id="projai-thinking"><div>'
-            +'<div class="bg-violet-50 border border-violet-200 text-violet-700 rounded-lg px-4 py-3 text-sm flex items-center gap-2">'
-            +'<span style="display:inline-block;width:14px;height:14px;border:2px solid #8b5cf6;border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite"></span>'
-            +'⚙️ AI 执行中 <span id="projai-elapsed">0</span> 秒…</div></div></div>');
+            +'<div style="background:var(--ai-soft);border:1px solid var(--ai);color:var(--ai);border-radius:10px;padding:10px 14px;font-size:13px;display:flex;align-items:center;gap:8px">'
+            +'<span style="display:inline-block;width:14px;height:14px;border:2px solid var(--ai);border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite"></span>'
+            +'AI 执行中 <span id="projai-elapsed">0</span> 秒…</div></div></div>');
         box.scrollTop=box.scrollHeight;
         var start=Date.now();
         thinkingTimer=setInterval(function(){var el=document.getElementById('projai-elapsed');if(el)el.textContent=Math.floor((Date.now()-start)/1000);else{clearInterval(thinkingTimer);thinkingTimer=null;}},1000);
@@ -680,7 +756,7 @@ document.addEventListener('click',function(){_closeFab();document.getElementById
     function send(){
         if(busy)return;
         var text=input.value.trim(); if(!text)return;
-        busy=true;sendBtn.disabled=true;sendBtn.textContent='发送中…';sendBtn.classList.add('opacity-60');
+        busy=true;sendBtn.disabled=true;sendBtn.textContent='发送中…';sendBtn.style.opacity='0.6';
         addUserMsg(text);input.value='';
         try{localStorage.removeItem(DRAFT_KEY);}catch(e){}
         addThinking();
@@ -692,7 +768,7 @@ document.addEventListener('click',function(){_closeFab();document.getElementById
             });})
             .then(function(data){var t=document.getElementById('projai-thinking');if(t)t.remove();if(thinkingTimer){clearInterval(thinkingTimer);thinkingTimer=null;}addAiMsg(data.reply||'(无回复)');})
             .catch(function(err){var t=document.getElementById('projai-thinking');if(t)t.remove();if(thinkingTimer){clearInterval(thinkingTimer);thinkingTimer=null;}addAiMsg('[出错了] '+(err&&err.message?err.message:err));})
-            .finally(function(){busy=false;sendBtn.disabled=false;sendBtn.textContent='发送';sendBtn.classList.remove('opacity-60');input.focus();});
+            .finally(function(){busy=false;sendBtn.disabled=false;sendBtn.textContent='发送';sendBtn.style.opacity='';input.focus();});
     }
 
     /* ---- Tab 切换钩子 ---- */
