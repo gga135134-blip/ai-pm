@@ -72,7 +72,7 @@
           display:flex; flex-direction:column; padding:16px 12px; gap:7px; }
         .side .brand{ font-weight:700; letter-spacing:-.01em; font-size:16px; display:flex; align-items:center; gap:9px; padding:6px 10px 14px; color:var(--ink-1); text-decoration:none; }
         .side .brand .mk{ color:var(--accent); font-size:18px; }
-        .side .grp-l{ font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-3); padding:12px 10px 5px; }
+        .side .grp-l{ font-size:12px; font-weight:600; letter-spacing:.06em; color:var(--ink-3); padding:12px 10px 5px; }
         .side a{ display:flex; align-items:center; gap:11px; font-size:13.5px; color:var(--ink-2); text-decoration:none;
           padding:9px 11px; border-radius:9px; position:relative;
           background:var(--bg); border:1px solid var(--border); }
@@ -296,6 +296,12 @@
         .hover\:text-violet-600:hover { color: #7c3aed; }
         .focus\:ring-violet-500:focus { box-shadow: 0 0 0 2px rgba(139,92,246,.4); }
         /* 全局交互状态 */
+        /* 滚动条跟随主题（深色下默认白条很刺眼） */
+        * { scrollbar-color: var(--panel-2) transparent; scrollbar-width: thin; }
+        ::-webkit-scrollbar { width: 10px; height: 10px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--panel-2); border-radius: 999px; border: 2px solid transparent; background-clip: padding-box; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--ink-3); background-clip: padding-box; }
         :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
         button:disabled, input:disabled, select:disabled, textarea:disabled { opacity: 0.5; cursor: not-allowed; }
         .btn-loading { opacity: 0.7; pointer-events: none; }
@@ -341,6 +347,11 @@
         /* 输入控件 */
         input, textarea, select { background-color: var(--panel-2); color: var(--ink-1); border-color: var(--border); }
         input::placeholder, textarea::placeholder { color: var(--ink-3); }
+        /* 旧页面字号偏小 / 标题与下方信息挤在一起 */
+        .text-xs { font-size: .8125rem !important; line-height: 1.15rem !important; }
+        .text-sm { font-size: .9rem !important; }
+        h1, h2, h3, h4 { line-height: 1.35; }
+        h1 + div, h2 + div, h3 + div { margin-top: 6px; }
         /* 状态徽章：深浅色统一走 token（原定义是硬编码蓝，与青色主色不搭） */
         .status-draft   { background: var(--panel-2);            color: var(--ink-2); }
         .status-pending { background: var(--panel-2);            color: var(--ink-3); }
