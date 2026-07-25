@@ -52,6 +52,18 @@
 /* ---- tag list toggle ---- */
 .tag-toggle{font-size:11.5px;color:var(--accent);background:none;border:none;cursor:pointer;padding:5px 9px}
 
+/* 移动端侧栏折叠：桌面不显示这个按钮 */
+.kb-side-toggle{ display:none; }
+@media (max-width:900px){
+    .kb-side-toggle{ display:flex; align-items:center; gap:9px; width:100%;
+        background:var(--panel-2); color:var(--ink-1); border:1px solid var(--border);
+        border-radius:var(--r-sm); padding:11px 12px; font-size:14px; font-weight:500;
+        font-family:var(--sans); cursor:pointer; min-height:44px; }
+    .kb-side-toggle .kb-side-arrow{ margin-left:auto; display:inline-flex; transform:rotate(90deg); transition:transform .15s; }
+    .kb-side.collapsed .kb-side-arrow{ transform:rotate(0deg); }
+    .kb-side.collapsed #kb-side-body{ display:none; }
+    .kb-side-toggle + #kb-side-body{ margin-top:12px; }
+}
 @media (max-width:767px){
   .kb-list{margin-top:14px}
   .note-body-col{padding-right:0 !important}
@@ -147,7 +159,13 @@ async function imaSync() {
 
 <div class="kb">
     <!-- ===== 侧栏：搜索 + 文件夹 / 项目 / 标签 三级层级 ===== -->
-    <div class="kb-side">
+    <div class="kb-side" id="kb-side">
+        <!-- 移动端：折叠/展开侧栏（桌面隐藏） -->
+        <button type="button" class="kb-side-toggle" onclick="toggleSide()" aria-expanded="true" aria-controls="kb-side-body">
+            {{ ic.icon('folder') }}<span>文件夹 / 项目 / 标签</span>
+            <span class="kb-side-arrow">{{ ic.icon('chevron') }}</span>
+        </button>
+        <div id="kb-side-body">
         <form method="GET" action="/notes" class="kb-search">
             {{ ic.icon('search') }}
             <input type="text" name="q" value="{{ current_q }}" placeholder="搜索笔记…"
@@ -245,6 +263,23 @@ async function imaSync() {
             {% endif %}
         </div>
         <script>
+        /* 移动端折叠侧栏，选择记忆在 localStorage */
+        function toggleSide() {
+            var el = document.getElementById('kb-side');
+            var collapsed = el.classList.toggle('collapsed');
+            el.querySelector('.kb-side-toggle').setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+            try { localStorage.setItem('kb-side-collapsed', collapsed ? '1' : '0'); } catch (e) {}
+        }
+        (function () {
+            try {
+                if (localStorage.getItem('kb-side-collapsed') === '1') {
+                    var el = document.getElementById('kb-side');
+                    el.classList.add('collapsed');
+                    el.querySelector('.kb-side-toggle').setAttribute('aria-expanded', 'false');
+                }
+            } catch (e) {}
+        })();
+
         function toggleTags(total) {
             var items = document.querySelectorAll('.tag-item');
             var btn = document.getElementById('tag-toggle');
@@ -253,6 +288,7 @@ async function imaSync() {
             btn.textContent = collapsed ? '收起' : '展开全部 (' + total + ' 个)';
         }
         </script>
+        </div><!-- /kb-side-body -->
     </div><!-- /kb-side -->
 
     <!-- ===== 笔记列表 ===== -->
