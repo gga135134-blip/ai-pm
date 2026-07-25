@@ -12,6 +12,8 @@
 .nd-side{width:240px;flex-shrink:0}
 .nd-header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:16px}
 .nd-title{font-family:var(--display);font-size:22px;font-weight:600;color:var(--ink-1);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+/* 核心档金色星标：base.html 的规则限定在 .note-h 下，这里容器是 .nd-title，需自己声明 */
+.nd-title .core{color:var(--warn);display:inline-flex}
 .nd-actions{display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end}
 /* Markdown 渲染样式 */
 .md-body{word-break:break-word;overflow-wrap:anywhere;line-height:1.85;font-size:14.5px;color:var(--ink-2)}
