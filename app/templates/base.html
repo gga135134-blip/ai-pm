@@ -69,20 +69,20 @@
 
         /* ---------- LEFT SIDEBAR ---------- */
         .side{ width:230px; flex:none; background:var(--rail); border-right:1px solid var(--border);
-          display:flex; flex-direction:column; padding:16px 12px; gap:4px; }
+          display:flex; flex-direction:column; padding:16px 12px; gap:7px; }
         .side .brand{ font-weight:700; letter-spacing:-.01em; font-size:16px; display:flex; align-items:center; gap:9px; padding:6px 10px 14px; color:var(--ink-1); text-decoration:none; }
         .side .brand .mk{ color:var(--accent); font-size:18px; }
         .side .grp-l{ font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-3); padding:12px 10px 5px; }
         .side a{ display:flex; align-items:center; gap:11px; font-size:13.5px; color:var(--ink-2); text-decoration:none;
-          padding:9px 11px; border-radius:9px; position:relative; }
+          padding:9px 11px; border-radius:9px; position:relative;
+          background:var(--bg); border:1px solid var(--border); }
         .side a .icon{ font-size:17px; color:var(--ink-3); flex:none; }
-        .side a:hover{ background:var(--panel-2); color:var(--ink-1); }
+        .side a:hover{ border-color:var(--ink-3); color:var(--ink-1); }
         .side a:hover .icon{ color:var(--ink-2); }
-        .side a.on{ background:var(--rail-active); color:var(--accent); font-weight:550; }
+        .side a.on{ background:var(--accent-soft); border-color:var(--accent); color:var(--accent); font-weight:600; }
         .side a.on .icon{ color:var(--accent); }
-        .side a.on::before{ content:""; position:absolute; left:-12px; top:9px; bottom:9px; width:3px; border-radius:0 3px 3px 0; background:var(--accent); }
-        .side .foot{ margin-top:auto; padding-top:12px; border-top:1px solid var(--border); display:flex; flex-direction:column; gap:4px; }
-        .side .tgl{ font-family:var(--sans); font-size:13px; color:var(--ink-2); background:transparent;
+        .side .foot{ margin-top:auto; padding-top:14px; border-top:1px solid var(--border); display:flex; flex-direction:column; gap:7px; }
+        .side .tgl{ font-family:var(--sans); font-size:13px; color:var(--ink-2); background:var(--bg);
           border:1px solid var(--border); border-radius:9px; padding:8px 11px; cursor:pointer; display:flex; align-items:center; gap:10px; width:100%; }
         .side .tgl .icon{ font-size:16px; color:var(--ink-3); }
         .side .tgl:hover{ color:var(--ink-1); border-color:var(--accent); }
