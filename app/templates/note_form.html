@@ -1,99 +1,96 @@
 {% extends "base.html" %}
+{% import "_icons.html" as ic %}
 {% block title %}{{ '编辑笔记' if note else '新建笔记' }} - AI 项目管理{% endblock %}
+{% block topbar %}
+<span class="crumb">
+    <a href="/notes" style="color:inherit;text-decoration:none">知识库</a> /
+    {% if note %}<a href="/notes/{{ note.id }}" style="color:inherit;text-decoration:none">{{ note.title }}</a> / <b>编辑</b>
+    {% else %}<b>新建</b>
+    {% endif %}
+</span>
+{% endblock %}
 {% block content %}
 <style>
 .nf-grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
 .nf-grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
-.nf-thumb{width:96px;height:96px}
+.nf-thumb{width:96px;height:96px;object-fit:cover;border-radius:var(--r-sm);border:1px solid var(--border)}
+.nf-hint{font-size:11.5px;color:var(--ink-3);margin-top:5px}
+.nf-hint code{background:var(--panel-2);padding:1px 5px;border-radius:4px}
 @media(max-width:767px){
   .nf-grid3,.nf-grid2{grid-template-columns:1fr}
   .nf-thumb{width:80px;height:80px}
 }
 </style>
-<div class="max-w-3xl mx-auto">
-    <div class="mb-4 text-sm text-gray-400">
-        <a href="/notes" class="hover:text-gray-600">← 知识库</a> /
-        {% if note %}
-        <a href="/notes/{{ note.id }}" class="hover:text-gray-600">{{ note.title }}</a> /
-        <span class="text-gray-600">编辑</span>
-        {% else %}
-        <span class="text-gray-600">新建</span>
-        {% endif %}
-    </div>
-    <h1 class="text-2xl font-bold text-gray-800 mb-6">{{ '编辑笔记' if note else '新建笔记' }}</h1>
-    <form method="POST" enctype="multipart/form-data" action="{{ '/notes/' + note.id + '/edit' if note else '/notes/new' }}" class="bg-white rounded-lg shadow-sm p-6 space-y-4">
-        <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">标题</label>
-            <input type="text" name="title" value="{{ note.title if note else '' }}" required placeholder="笔记标题"
-                class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
-        </div>
-        <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">内容 (支持 Markdown)</label>
-            <textarea name="content" rows="16" placeholder="写点什么..."
-                class="w-full border rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none" style="tab-size:4">{{ note.content if note else '' }}</textarea>
-            <p class="text-xs text-gray-400 mt-1">支持表格、标题、列表、加粗等。表格写法：<code class="bg-gray-100 px-1 rounded">| 列1 | 列2 |</code> 下一行 <code class="bg-gray-100 px-1 rounded">| --- | --- |</code></p>
-        </div>
-        <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">图片 (可选)</label>
-            {% if note and note.image_path %}
-            <div class="flex flex-wrap gap-3 mb-2">
-                {% for img in note.image_path.split(',') %}
-                {% if img.strip() %}
-                <div class="relative">
-                    <img src="{{ img.strip() }}" class="nf-thumb object-cover rounded-lg border">
-                    <label class="absolute bottom-1 left-1 bg-white/90 rounded px-1.5 py-0.5 text-xs flex items-center gap-1 cursor-pointer shadow-sm">
-                        <input type="checkbox" name="keep_images" value="{{ img.strip() }}" checked> 保留
-                    </label>
-                </div>
-                {% endif %}
-                {% endfor %}
+<div style="max-width:720px;margin:0 auto">
+    <h1 class="pname" style="font-size:22px;margin-bottom:18px">{{ '编辑笔记' if note else '新建笔记' }}</h1>
+    <form method="POST" enctype="multipart/form-data" action="{{ '/notes/' + note.id + '/edit' if note else '/notes/new' }}" class="module">
+        <div class="inner">
+            <div class="field">
+                <label class="label">标题</label>
+                <input type="text" name="title" value="{{ note.title if note else '' }}" required placeholder="笔记标题" class="input">
             </div>
-            <p class="text-xs text-gray-400 mb-2">取消勾选「保留」并保存，即可删除该图。</p>
-            {% endif %}
-            <input type="file" name="images" multiple accept="image/png,image/jpeg,image/gif,image/webp"
-                class="w-full border rounded-lg px-3 py-2 text-sm">
-            <p class="text-xs text-gray-400 mt-1">支持 png/jpg/gif/webp，单张最大 8MB，可多选。保存后在笔记里以画廊显示。</p>
-        </div>
-        <div class="nf-grid3">
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">作者</label>
-                <input type="text" name="author" value="{{ note.author if note else '' }}" placeholder="Gaga / An"
-                    class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+            <div class="field">
+                <label class="label">内容 (支持 Markdown)</label>
+                <textarea name="content" rows="16" placeholder="写点什么..." class="input" style="tab-size:4;font-family:var(--mono);resize:vertical">{{ note.content if note else '' }}</textarea>
+                <p class="nf-hint">支持表格、标题、列表、加粗等。表格写法：<code>| 列1 | 列2 |</code> 下一行 <code>| --- | --- |</code></p>
             </div>
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">文件夹</label>
-                <input type="text" name="folder" list="folder-list" value="{{ note.folder if note and note.folder else pre_folder }}" placeholder="如: 资料/竞品分析"
-                    class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
-                <datalist id="folder-list">
-                    {% for f in folders %}<option value="{{ f }}">{% endfor %}
-                </datalist>
-                <p class="text-xs text-gray-400 mt-1">用 / 分层，如 资料/竞品</p>
-            </div>
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">标签 (逗号分隔)</label>
-                <input type="text" name="tags" value="{{ note.tags if note else '' }}" placeholder="会议记录,产品设计,重要"
-                    class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
-            </div>
-        </div>
-        <div class="nf-grid2">
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">关联项目 (可选)</label>
-                <select name="project_id" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
-                    <option value="">不关联</option>
-                    {% for p in projects %}
-                    <option value="{{ p.id }}" {{ 'selected' if (note and note.project_id == p.id) or (pre_project == p.id) }}>{{ p.name }}</option>
+            <div class="field">
+                <label class="label">图片 (可选)</label>
+                {% if note and note.image_path %}
+                <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:8px">
+                    {% for img in note.image_path.split(',') %}
+                    {% if img.strip() %}
+                    <div style="position:relative">
+                        <img src="{{ img.strip() }}" class="nf-thumb">
+                        <label style="position:absolute;bottom:4px;left:4px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:2px 6px;font-size:11px;display:flex;align-items:center;gap:4px;cursor:pointer;color:var(--ink-2)">
+                            <input type="checkbox" name="keep_images" value="{{ img.strip() }}" checked> 保留
+                        </label>
+                    </div>
+                    {% endif %}
                     {% endfor %}
-                </select>
+                </div>
+                <p class="nf-hint" style="margin-bottom:8px">取消勾选「保留」并保存，即可删除该图。</p>
+                {% endif %}
+                <input type="file" name="images" multiple accept="image/png,image/jpeg,image/gif,image/webp" class="input" style="padding:6px 10px">
+                <p class="nf-hint">支持 png/jpg/gif/webp，单张最大 8MB，可多选。保存后在笔记里以画廊显示。</p>
             </div>
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">关联任务 ID (可选)</label>
-                <input type="text" name="task_id" value="{{ note.task_id if note and note.task_id else pre_task }}" placeholder="留空或粘贴任务 ID"
-                    class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+            <div class="nf-grid3">
+                <div class="field">
+                    <label class="label">作者</label>
+                    <input type="text" name="author" value="{{ note.author if note else '' }}" placeholder="Gaga / An" class="input">
+                </div>
+                <div class="field">
+                    <label class="label">文件夹</label>
+                    <input type="text" name="folder" list="folder-list" value="{{ note.folder if note and note.folder else pre_folder }}" placeholder="如: 资料/竞品分析" class="input">
+                    <datalist id="folder-list">
+                        {% for f in folders %}<option value="{{ f }}">{% endfor %}
+                    </datalist>
+                    <p class="nf-hint">用 / 分层，如 资料/竞品</p>
+                </div>
+                <div class="field">
+                    <label class="label">标签 (逗号分隔)</label>
+                    <input type="text" name="tags" value="{{ note.tags if note else '' }}" placeholder="会议记录,产品设计,重要" class="input">
+                </div>
             </div>
-        </div>
-        <div class="flex gap-3 pt-2">
-            <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded-lg text-sm hover:bg-blue-700 transition">保存</button>
-            <a href="{{ '/notes/' + note.id if note else '/notes' }}" class="px-6 py-2 rounded-lg text-sm text-gray-600 hover:bg-gray-100 transition">取消</a>
+            <div class="nf-grid2">
+                <div class="field">
+                    <label class="label">关联项目 (可选)</label>
+                    <select name="project_id" class="input">
+                        <option value="">不关联</option>
+                        {% for p in projects %}
+                        <option value="{{ p.id }}" {{ 'selected' if (note and note.project_id == p.id) or (pre_project == p.id) }}>{{ p.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="field">
+                    <label class="label">关联任务 ID (可选)</label>
+                    <input type="text" name="task_id" value="{{ note.task_id if note and note.task_id else pre_task }}" placeholder="留空或粘贴任务 ID" class="input">
+                </div>
+            </div>
+            <div style="display:flex;gap:10px;padding-top:6px">
+                <button type="submit" class="btn primary">{{ ic.icon('check') }}保存</button>
+                <a href="{{ '/notes/' + note.id if note else '/notes' }}" class="btn ghost">取消</a>
+            </div>
         </div>
     </form>
 </div>

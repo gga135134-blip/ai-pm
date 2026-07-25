@@ -1,49 +1,49 @@
 {% extends "base.html" %}
+{% import "_icons.html" as ic %}
 {% block title %}AI 智能整理 - 选项目{% endblock %}
+{% block topbar %}
+<span class="crumb"><a href="/notes" style="color:inherit;text-decoration:none">知识库</a> / <b>AI 智能整理</b></span>
+{% endblock %}
 {% block content %}
-<div class="mb-4 text-sm text-gray-400">
-    <a href="/notes" class="hover:text-gray-600">知识库</a> /
-    <span class="text-gray-600">AI 智能整理</span>
-</div>
-
-<div class="max-w-2xl">
-    <h1 class="text-xl font-bold text-gray-800 mb-1">🤖 AI 智能整理</h1>
-    <p class="text-sm text-gray-400 mb-5">整理是按项目来的——AI 读完一个项目的全部笔记，按内容主题生成编号文件夹。选一个项目开始：</p>
+<div style="max-width:640px">
+    <div class="phead" style="margin-bottom:6px">
+        <span class="pname" style="font-size:20px;display:flex;align-items:center;gap:9px"><span style="color:var(--ai)">{{ ic.icon('robot') }}</span>AI 智能整理</span>
+    </div>
+    <p style="font-size:13px;color:var(--ink-3);margin:0 0 18px">整理是按项目来的——AI 读完一个项目的全部笔记，按内容主题生成编号文件夹。选一个项目开始：</p>
 
     {% if projects or unfiled_count %}
-    <div class="space-y-2">
+    <div>
         {% for p in projects %}
-        <a href="/projects/{{ p.id }}/organize"
-           class="flex items-center justify-between bg-white rounded-xl shadow-sm p-4 hover:shadow-md transition {% if p.note_count == 0 %}opacity-60{% endif %}">
-            <div class="min-w-0">
-                <div class="text-sm font-medium text-gray-800 truncate">
-                    {% if p.code %}<span class="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded mr-1">{{ p.code }}</span>{% endif %}
+        <a href="/projects/{{ p.id }}/organize" class="card frow" style="display:flex;align-items:center;justify-content:space-between;text-decoration:none;padding:14px 15px{% if p.note_count == 0 %};opacity:.6{% endif %}">
+            <div style="min-width:0">
+                <div style="font-size:13.5px;font-weight:500;color:var(--ink-1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                    {% if p.code %}<span class="pcode" style="background:var(--panel-2);padding:1px 6px;border-radius:5px;margin-right:6px">{{ p.code }}</span>{% endif %}
                     {{ p.name }}
                 </div>
-                <div class="text-xs text-gray-400 mt-0.5">{{ p.note_count }} 篇笔记</div>
+                <div style="font-size:11.5px;color:var(--ink-3);margin-top:3px">{{ p.note_count }} 篇笔记</div>
             </div>
-            <span class="text-sm text-violet-600 flex-shrink-0 ml-3">整理 →</span>
+            <span style="font-size:12.5px;color:var(--ai);flex-shrink:0;margin-left:12px">整理 {{ ic.icon('arrow-up', 'rot90') }}</span>
         </a>
         {% endfor %}
 
         {% if unfiled_count %}
-        <a href="/projects/__unfiled__/organize"
-           class="flex items-center justify-between bg-white rounded-xl shadow-sm p-4 hover:shadow-md transition border border-dashed border-amber-200">
-            <div class="min-w-0">
-                <div class="text-sm font-medium text-amber-700 truncate">📂 未分类 / 个人零散笔记</div>
-                <div class="text-xs text-gray-400 mt-0.5">{{ unfiled_count }} 篇 · 不属于任何项目，会归到「个人」区</div>
+        <a href="/projects/__unfiled__/organize" class="card frow" style="display:flex;align-items:center;justify-content:space-between;text-decoration:none;padding:14px 15px;border-style:dashed;border-color:var(--warn)">
+            <div style="min-width:0">
+                <div style="font-size:13.5px;font-weight:500;color:var(--warn);display:flex;align-items:center;gap:7px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ ic.icon('folder') }}未分类 / 个人零散笔记</div>
+                <div style="font-size:11.5px;color:var(--ink-3);margin-top:3px">{{ unfiled_count }} 篇 · 不属于任何项目，会归到「个人」区</div>
             </div>
-            <span class="text-sm text-violet-600 flex-shrink-0 ml-3">整理 →</span>
+            <span style="font-size:12.5px;color:var(--ai);flex-shrink:0;margin-left:12px">整理 {{ ic.icon('arrow-up', 'rot90') }}</span>
         </a>
         {% endif %}
     </div>
-    <p class="text-xs text-gray-400 mt-4">项目笔记归到「项目名/编号_主题」；未分类的归到「个人/编号_主题」，不会动你已经分好的文件夹（如 Gaga）。</p>
+    <p style="font-size:11.5px;color:var(--ink-3);margin-top:14px">项目笔记归到「项目名/编号_主题」；未分类的归到「个人/编号_主题」，不会动你已经分好的文件夹（如 Gaga）。</p>
     {% else %}
-    <div class="bg-white rounded-xl shadow-sm p-10 text-center">
-        <div class="text-3xl mb-3">📁</div>
-        <p class="text-gray-600">还没有项目。先去创建项目，再来整理它的笔记。</p>
-        <a href="/projects" class="inline-block mt-4 text-sm bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition">去项目页 →</a>
+    <div class="card" style="text-align:center;padding:40px 12px">
+        <div style="color:var(--ink-3);display:flex;justify-content:center;margin-bottom:10px"><span style="font-size:28px;display:inline-flex">{{ ic.icon('folder') }}</span></div>
+        <p style="color:var(--ink-2);font-size:13.5px">还没有项目。先去创建项目，再来整理它的笔记。</p>
+        <a href="/projects" class="btn primary" style="margin-top:14px;display:inline-flex">去项目页 {{ ic.icon('arrow-up', 'rot90') }}</a>
     </div>
     {% endif %}
 </div>
+<style>.rot90{transform:rotate(90deg)}</style>
 {% endblock %}
