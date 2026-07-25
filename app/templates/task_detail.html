@@ -1,100 +1,129 @@
 {% extends "base.html" %}
+{% import "_icons.html" as ic %}
 {% block title %}{{ task.title }} - AI 项目管理{% endblock %}
+{% block topbar %}
+<span class="crumb">
+    <a href="/projects" style="color:inherit;text-decoration:none">项目</a> {{ ic.icon('chevron') }}
+    <a href="/projects/{{ project.id }}" style="color:inherit;text-decoration:none">{{ project.name }}</a> {{ ic.icon('chevron') }}
+    <b>{{ task.title }}</b>
+</span>
+{% endblock %}
 {% block content %}
 <style>
-.td-layout{display:grid;grid-template-columns:2fr 1fr;gap:24px;align-items:start}
+.td-layout{display:grid;grid-template-columns:2fr 1fr;gap:20px;align-items:start}
 .td-layout > *{min-width:0}  /* 关键：允许子项收缩，否则长串撑破列宽 */
 .td-layout [style*="pre-wrap"]{word-break:break-word;overflow-wrap:anywhere}
 @media(max-width:767px){ .td-layout{grid-template-columns:1fr} }
+
+/* ---- page-local pill states (base.html only ships .pill.run) ---- */
+.pill.off{ color:var(--ink-3); background:var(--panel-2); }
+.pill.warn{ color:var(--warn); background:rgba(240,168,104,.14); }
+.pill.done{ color:var(--up); background:rgba(63,203,134,.14); }
+.pill.blocked{ color:var(--down); background:rgba(255,98,87,.14); }
+.pill.reviewing{ color:var(--ai); background:var(--ai-soft); }
+
+/* ---- instrument-style execution log ---- */
+.exec-run{ background:var(--bg); border:1px solid var(--border); border-radius:var(--r-sm); padding:12px 14px; margin-bottom:10px; }
+.exec-run .rh{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; }
+.exec-run .rh .sp{ flex:1; }
+.exec-run .meta{ font-family:var(--mono); font-size:11px; color:var(--ink-3); }
+.exec-log{ background:var(--panel-2); border:1px solid var(--border); border-radius:var(--r-sm); padding:10px 12px; font-family:var(--mono); font-size:12px; line-height:1.7; color:var(--ink-2); white-space:pre-wrap; max-height:280px; overflow-y:auto; }
+.exec-run summary{ font-family:var(--mono); font-size:11.5px; color:var(--ink-3); cursor:pointer; }
+.exec-run summary:hover{ color:var(--ink-2); }
+.exec-run .prompt-box{ font-family:var(--mono); font-size:11.5px; color:var(--ink-3); background:var(--panel-2); border-radius:var(--r-sm); padding:8px 10px; margin-top:6px; white-space:pre-wrap; max-height:160px; overflow-y:auto; }
+
+/* ---- sidebar attribute rows ---- */
+.attr-row{ display:flex; justify-content:space-between; font-size:13px; padding:4px 0; }
+.attr-row .k{ color:var(--ink-3); }
+.attr-row .v{ color:var(--ink-1); }
 </style>
-<div class="mb-4 text-sm text-gray-400">
-    <a href="/projects" class="hover:text-gray-600">项目</a> /
-    <a href="/projects/{{ project.id }}" class="hover:text-gray-600">{{ project.name }}</a> /
-    <span class="text-gray-600">{{ task.title }}</span>
-</div>
 
 <div class="td-layout">
     <!-- 主要信息 -->
     <div class="space-y-4">
-        <div class="bg-white rounded-lg shadow-sm p-6">
-            <div class="flex items-center justify-between mb-4">
-                <h1 class="text-xl font-bold text-gray-800">{{ task.title }}</h1>
-                <span class="text-xs px-2 py-1 rounded status-{{ task.status }}">{{ task.status }}</span>
+        <div class="module">
+            <div class="inner">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;flex-wrap:wrap">
+                <span class="pname" style="font-size:19px">{{ task.title }}</span>
+                {% set pill_map = {'pending':'off','running':'run','reviewing':'reviewing','blocked':'blocked','done':'done','failed':'blocked'} %}
+                <span class="pill {{ pill_map.get(task.status, 'off') }}"><span class="d"></span>{{ task.status }}</span>
             </div>
             {% if task.description %}
-            <div class="text-sm text-gray-600 mb-4" style="white-space:pre-wrap">{{ task.description }}</div>
+            <div style="font-size:13.5px;color:var(--ink-2);white-space:pre-wrap;line-height:1.7">{{ task.description }}</div>
             {% endif %}
             {% if task.result %}
-            <div class="mt-4 border-t pt-4">
-                <h3 class="text-sm font-semibold text-gray-700 mb-2">执行结果</h3>
-                <div class="text-sm text-gray-600 bg-gray-50 rounded-lg p-4" style="white-space:pre-wrap;max-height:400px;overflow-y:auto">{{ task.result }}</div>
+            <div style="margin-top:16px;border-top:1px solid var(--border);padding-top:14px">
+                <h3 style="font-size:12.5px;font-weight:600;color:var(--ink-2);margin-bottom:8px">执行结果</h3>
+                <div style="font-size:13px;color:var(--ink-2);background:var(--panel-2);border-radius:var(--r-sm);padding:12px 14px;white-space:pre-wrap;max-height:400px;overflow-y:auto">{{ task.result }}</div>
             </div>
             {% endif %}
 
             {# AI 卡住/审核未过时，让董事会能直接回答问题或补充信息，AI 立刻接着干 #}
             {% if task.status in ['blocked', 'reviewing'] and task.assignee == 'ai' %}
-            <div class="mt-4 border-t pt-4 bg-amber-50 rounded-lg p-4 -mx-2">
-                <h3 class="text-sm font-semibold text-amber-800 mb-2">💬 回答 AI 的问题 / 补充信息</h3>
-                <p class="text-xs text-amber-700 mb-3">AI 卡住了在等你回话。在下面写下你的回答或补充资料，提交后 AI 会立刻接着干（你的回答会自动追加到任务描述里）。</p>
+            <div style="margin-top:16px;border-top:1px solid var(--border);padding-top:14px;background:rgba(240,168,104,.08);border-radius:var(--r-sm);padding:14px;margin-left:-2px;margin-right:-2px">
+                <h3 style="font-size:13px;font-weight:600;color:var(--warn);margin-bottom:6px">回答 AI 的问题 / 补充信息</h3>
+                <p style="font-size:12px;color:var(--warn);opacity:.85;margin-bottom:10px">AI 卡住了在等你回话。在下面写下你的回答或补充资料，提交后 AI 会立刻接着干（你的回答会自动追加到任务描述里）。</p>
                 <form method="POST" action="/tasks/{{ task.id }}/answer">
                     <textarea name="reply" rows="5" required placeholder="例如：产品是瑶族瑶药精油，主打草本疗愈；目标市场北美 25-45 岁女性；竞品 doTERRA、Young Living…"
-                        class="w-full border border-amber-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-amber-400"></textarea>
-                    <div class="flex justify-end mt-2">
-                        <button type="submit" class="text-sm px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition font-medium">提交并让 AI 继续 →</button>
+                        class="input" style="width:100%;resize:vertical;border-color:rgba(240,168,104,.35)"></textarea>
+                    <div style="display:flex;justify-content:flex-end;margin-top:8px">
+                        <button type="submit" class="btn" style="color:var(--warn);border-color:rgba(240,168,104,.35)">提交并让 AI 继续 →</button>
                     </div>
                 </form>
             </div>
             {% endif %}
+            </div>
         </div>
 
-        <!-- AI 执行记录 -->
-        <div class="bg-white rounded-lg shadow-sm p-6">
-            <h2 class="text-lg font-semibold text-gray-700 mb-4">AI 执行记录</h2>
+        <!-- AI 执行记录：仪器日志风格 -->
+        <div class="module">
+            <div class="mh"><span class="ic">{{ ic.icon('robot') }}</span><span class="ttl" style="font-size:15px">🔧 执行过程</span>{% if runs %}<span class="sub">· {{ runs|length }} 次</span>{% endif %}</div>
+            <div class="inner">
             {% if runs %}
-            <div class="space-y-3">
+            <div>
                 {% for run in runs %}
-                <div class="border rounded-lg p-4">
-                    <div class="flex items-center justify-between mb-2">
-                        <div class="flex items-center gap-2">
-                            <span class="text-xs font-medium px-2 py-0.5 bg-violet-100 text-violet-700 rounded">{{ run.model }}</span>
-                            <span class="text-xs px-2 py-0.5 rounded status-{{ run.status }}">{{ run.status }}</span>
-                        </div>
-                        <div class="text-xs text-gray-400">
-                            {{ run.tokens_used }} tokens / ${{ '%.4f' % run.cost }}
-                        </div>
+                <div class="exec-run">
+                    <div class="rh">
+                        <span class="tag ai">{{ run.model }}</span>
+                        <span class="pill {{ pill_map.get(run.status, 'off') }}" style="padding:2px 9px"><span class="d"></span>{{ run.status }}</span>
+                        <span class="sp"></span>
+                        <span class="meta">{{ run.tokens_used }} tokens · ${{ '%.4f' % run.cost }}</span>
                     </div>
                     {% if run.prompt %}
-                    <details class="mb-2">
-                        <summary class="text-xs text-gray-500 cursor-pointer hover:text-gray-700">Prompt</summary>
-                        <div class="text-xs text-gray-600 bg-gray-50 rounded p-3 mt-1" style="white-space:pre-wrap;max-height:160px;overflow-y:auto">{{ run.prompt }}</div>
+                    <details>
+                        <summary>Prompt</summary>
+                        <div class="prompt-box">{{ run.prompt }}</div>
                     </details>
                     {% endif %}
                     {% if run.response %}
-                    <div class="text-sm text-gray-700 bg-blue-50 rounded p-3" style="white-space:pre-wrap;max-height:240px;overflow-y:auto">{{ run.response }}</div>
+                    <div class="exec-log" style="margin-top:8px">{{ run.response }}</div>
                     {% endif %}
-                    <div class="text-xs text-gray-400 mt-2">{{ run.created_at[:16].replace('T',' ') if run.created_at else '' }}</div>
+                    <div class="meta" style="margin-top:8px">{{ run.created_at[:16].replace('T',' ') if run.created_at else '' }}</div>
                 </div>
                 {% endfor %}
             </div>
             {% else %}
-            <div class="text-center text-gray-400 py-6">暂无执行记录</div>
+            <div class="empty">暂无执行记录</div>
             {% endif %}
+            </div>
         </div>
 
         <!-- 子任务 -->
         {% if subtasks %}
-        <div class="bg-white rounded-lg shadow-sm p-6">
-            <h2 class="text-lg font-semibold text-gray-700 mb-4">子任务</h2>
+        <div class="module">
+            <div class="mh"><span class="ic">{{ ic.icon('kanban') }}</span><span class="ttl" style="font-size:15px">子任务</span></div>
+            <div class="inner">
             <div class="space-y-2">
                 {% for st in subtasks %}
-                <a href="/tasks/{{ st.id }}" class="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 transition">
-                    <span class="text-sm text-gray-800">{{ st.title }}</span>
-                    <div class="flex items-center gap-2">
-                        <span class="text-xs text-gray-400">{{ st.assignee or '未分配' }}</span>
-                        <span class="text-xs px-2 py-0.5 rounded status-{{ st.status }}">{{ st.status }}</span>
+                <a href="/tasks/{{ st.id }}" class="card" style="display:flex;align-items:center;justify-content:space-between;text-decoration:none;color:inherit;margin-bottom:8px">
+                    <span style="font-size:13.5px;color:var(--ink-1)">{{ st.title }}</span>
+                    <div style="display:flex;align-items:center;gap:8px">
+                        <span style="font-size:11.5px;color:var(--ink-3)">{{ st.assignee or '未分配' }}</span>
+                        <span class="pill {{ pill_map.get(st.status, 'off') }}" style="padding:2px 9px"><span class="d"></span>{{ st.status }}</span>
                     </div>
                 </a>
                 {% endfor %}
+            </div>
             </div>
         </div>
         {% endif %}
@@ -102,131 +131,120 @@
 
     <!-- 侧边栏 -->
     <div class="space-y-4">
-        <div class="bg-white rounded-lg shadow-sm p-4">
-            <h3 class="text-sm font-semibold text-gray-700 mb-3">属性</h3>
-            <div class="space-y-3 text-sm">
-                <div class="flex justify-between">
-                    <span class="text-gray-500">执行者</span>
-                    <span class="text-gray-800">{{ task.assignee or '未分配' }}</span>
-                </div>
-                <div class="flex justify-between">
-                    <span class="text-gray-500">AI 模型</span>
-                    <span class="text-gray-800">{{ task.ai_model }}</span>
-                </div>
-                <div class="flex justify-between">
-                    <span class="text-gray-500">优先级</span>
-                    <span class="{% if task.priority <= 2 %}text-red-500 font-medium{% else %}text-gray-800{% endif %}">P{{ task.priority }}</span>
-                </div>
-                <div class="flex justify-between">
-                    <span class="text-gray-500">进度</span>
-                    <span class="text-gray-800">{{ task.progress }}%</span>
-                </div>
-                <div class="flex justify-between">
-                    <span class="text-gray-500">需要人工</span>
-                    <span class="text-gray-800">{{ '是' if task.needs_human else '否' }}</span>
-                </div>
-                <div class="flex justify-between">
-                    <span class="text-gray-500">创建时间</span>
-                    <span class="text-gray-800 text-xs">{{ task.created_at[:16].replace('T',' ') if task.created_at else '' }}</span>
-                </div>
+        <div class="module">
+            <div class="mh"><span class="ttl" style="font-size:13.5px">属性</span></div>
+            <div class="inner">
+            <div class="attr-row"><span class="k">执行者</span><span class="v">{{ task.assignee or '未分配' }}</span></div>
+            <div class="attr-row"><span class="k">AI 模型</span><span class="v">{{ task.ai_model }}</span></div>
+            <div class="attr-row"><span class="k">优先级</span><span class="v" {% if task.priority <= 2 %}style="color:var(--down);font-weight:600"{% endif %}>P{{ task.priority }}</span></div>
+            <div class="attr-row"><span class="k">进度</span><span class="v">{{ task.progress }}%</span></div>
+            <div class="attr-row"><span class="k">需要人工</span><span class="v">{{ '是' if task.needs_human else '否' }}</span></div>
+            <div class="attr-row"><span class="k">创建时间</span><span class="v" style="font-family:var(--mono);font-size:12px">{{ task.created_at[:16].replace('T',' ') if task.created_at else '' }}</span></div>
             </div>
         </div>
 
         <!-- 费用预估 -->
         {% if task.assignee == 'ai' and task.status in ['pending', 'blocked'] %}
-        <div class="bg-white rounded-lg shadow-sm p-4" id="cost-box">
-            <h3 class="text-sm font-semibold text-gray-700 mb-2">费用预估</h3>
-            <a href="/tasks/{{ task.id }}/estimate" class="text-xs text-blue-600 hover:underline" id="est-link"
-               onclick="fetch(this.href).then(r=>r.text()).then(h=>{document.getElementById('cost-box').innerHTML='<h3 class=\'text-sm font-semibold text-gray-700 mb-2\'>费用预估</h3>'+h});return false;">
+        <div class="module" id="cost-box">
+            <div class="mh"><span class="ttl" style="font-size:13.5px">费用预估</span></div>
+            <div class="inner">
+            <a href="/tasks/{{ task.id }}/estimate" style="font-size:12px;color:var(--accent)" id="est-link"
+               onclick="fetch(this.href).then(r=>r.text()).then(h=>{document.getElementById('cost-box').innerHTML='<div class=\'mh\'><span class=\'ttl\' style=\'font-size:13.5px\'>费用预估</span></div><div class=\'inner\'>'+h+'</div>'});return false;">
                 点击计算预估费用
             </a>
+            </div>
         </div>
         {% endif %}
 
         <!-- AI 操作 -->
-        <div class="bg-white rounded-lg shadow-sm p-4 space-y-2">
-            <h3 class="text-sm font-semibold text-gray-700 mb-3">AI 操作</h3>
+        <div class="module">
+            <div class="mh"><span class="ttl" style="font-size:13.5px">AI 操作</span></div>
+            <div class="inner space-y-2">
             {% if task.status in ['pending', 'blocked'] and task.assignee == 'ai' %}
             <form method="POST" action="/tasks/{{ task.id }}/execute">
-                <button class="w-full text-sm px-3 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition">
-                    {{ 'AI 重新执行' if task.status == 'blocked' else 'AI 执行任务' }}
+                <button class="btn ai" style="width:100%;justify-content:center">
+                    {{ ic.icon('robot') }}{{ 'AI 重新执行' if task.status == 'blocked' else 'AI 执行任务' }}
                 </button>
             </form>
-            <p class="text-xs text-gray-400">执行后自动触发 AI 质量审核</p>
+            <p style="font-size:11.5px;color:var(--ink-3)">执行后自动触发 AI 质量审核</p>
             {% endif %}
             {% if task.status == 'reviewing' %}
             <form method="POST" action="/tasks/{{ task.id }}/review">
-                <button class="w-full text-sm px-3 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition">手动触发 AI 审核</button>
+                <button class="btn ai" style="width:100%;justify-content:center">手动触发 AI 审核</button>
             </form>
             {% endif %}
             {% if not (task.status in ['pending', 'blocked'] and task.assignee == 'ai') and task.status != 'reviewing' %}
-            <p class="text-xs text-gray-400 text-center py-2">当前状态无可用 AI 操作</p>
+            <p style="font-size:11.5px;color:var(--ink-3);text-align:center;padding:8px 0">当前状态无可用 AI 操作</p>
             {% endif %}
+            </div>
         </div>
 
         <!-- 任务交接 -->
-        <div class="bg-white rounded-lg shadow-sm p-4 space-y-2">
-            <h3 class="text-sm font-semibold text-gray-700 mb-3">任务交接</h3>
+        <div class="module">
+            <div class="mh"><span class="ttl" style="font-size:13.5px">任务交接</span></div>
+            <div class="inner space-y-2">
             {% if task.assignee == 'ai' %}
             <form method="POST" action="/tasks/{{ task.id }}/handoff" class="space-y-2">
                 <input type="hidden" name="to" value="human">
-                <input type="text" name="assignee_name" placeholder="接手人姓名 (Gaga / An)"
-                    class="w-full text-sm px-3 py-2 border rounded-lg outline-none">
-                <button class="w-full text-sm px-3 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition">
+                <input type="text" name="assignee_name" placeholder="接手人姓名 (Gaga / An)" class="input" style="width:100%">
+                <button class="btn" style="width:100%;justify-content:center;color:var(--warn);border-color:rgba(240,168,104,.35)">
                     我来接手 (AI → 人工)
                 </button>
             </form>
             {% else %}
             <form method="POST" action="/tasks/{{ task.id }}/handoff">
                 <input type="hidden" name="to" value="ai">
-                <button class="w-full text-sm px-3 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition">
+                <button class="btn ai" style="width:100%;justify-content:center">
                     交给 AI (人工 → AI)
                 </button>
             </form>
             {% endif %}
-            <p class="text-xs text-gray-400">任务会被重置为待处理状态</p>
+            <p style="font-size:11.5px;color:var(--ink-3)">任务会被重置为待处理状态</p>
+            </div>
         </div>
 
         <!-- 手动操作 -->
-        <div class="bg-white rounded-lg shadow-sm p-4 space-y-2">
-            <h3 class="text-sm font-semibold text-gray-700 mb-3">手动操作</h3>
+        <div class="module">
+            <div class="mh"><span class="ttl" style="font-size:13.5px">手动操作</span></div>
+            <div class="inner space-y-2">
             {% if task.status == 'pending' %}
             <form method="POST" action="/tasks/{{ task.id }}/status">
                 <input type="hidden" name="status" value="running">
-                <button class="w-full text-sm px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">开始执行</button>
+                <button class="btn" style="width:100%;justify-content:center">开始执行</button>
             </form>
             {% endif %}
             {% if task.status == 'running' %}
             <form method="POST" action="/tasks/{{ task.id }}/status">
                 <input type="hidden" name="status" value="done">
-                <button class="w-full text-sm px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">标记完成</button>
+                <button class="btn primary" style="width:100%;justify-content:center">标记完成</button>
             </form>
             {% endif %}
             {% if task.status == 'reviewing' %}
             <form method="POST" action="/tasks/{{ task.id }}/status">
                 <input type="hidden" name="status" value="done">
-                <button class="w-full text-sm px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">人工通过</button>
+                <button class="btn primary" style="width:100%;justify-content:center">人工通过</button>
             </form>
             <form method="POST" action="/tasks/{{ task.id }}/status">
                 <input type="hidden" name="status" value="running">
-                <button class="w-full text-sm px-3 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition">打回重做</button>
+                <button class="btn" style="width:100%;justify-content:center;color:var(--warn);border-color:rgba(240,168,104,.35)">打回重做</button>
             </form>
             {% endif %}
             {% if task.status in ['blocked', 'failed'] %}
             <form method="POST" action="/tasks/{{ task.id }}/status">
                 <input type="hidden" name="status" value="pending">
-                <button class="w-full text-sm px-3 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition">重置任务</button>
+                <button class="btn" style="width:100%;justify-content:center">重置任务</button>
             </form>
             {% endif %}
             {% if task.status == 'blocked' %}
             <form method="POST" action="/tasks/{{ task.id }}/status">
                 <input type="hidden" name="status" value="done">
-                <button class="w-full text-sm px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">人工通过</button>
+                <button class="btn primary" style="width:100%;justify-content:center">人工通过</button>
             </form>
             {% endif %}
             <form method="POST" action="/tasks/{{ task.id }}/delete" onsubmit="return confirm('确定删除此任务？')">
-                <button class="w-full text-sm px-3 py-2 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition">删除任务</button>
+                <button class="btn" style="width:100%;justify-content:center;color:var(--down);border-color:rgba(255,98,87,.35)">删除任务</button>
             </form>
+            </div>
         </div>
     </div>
 </div>

@@ -1,18 +1,18 @@
-<div class="text-sm space-y-2">
-    <div class="flex justify-between">
-        <span class="text-gray-500">模型</span>
-        <span class="text-gray-800">{{ estimate.model_label }}</span>
+<div style="font-size:13px;font-family:var(--mono)">
+    <div style="display:flex;justify-content:space-between;padding:4px 0">
+        <span style="color:var(--ink-3);font-family:var(--sans)">模型</span>
+        <span style="color:var(--ink-1)">{{ estimate.model_label }}</span>
     </div>
-    <div class="flex justify-between">
-        <span class="text-gray-500">预估输入</span>
-        <span class="text-gray-800">~{{ estimate.input_tokens_est }} tokens</span>
+    <div style="display:flex;justify-content:space-between;padding:4px 0">
+        <span style="color:var(--ink-3);font-family:var(--sans)">预估输入</span>
+        <span style="color:var(--ink-1)">~{{ estimate.input_tokens_est }} tokens</span>
     </div>
-    <div class="flex justify-between">
-        <span class="text-gray-500">预估输出</span>
-        <span class="text-gray-800">~{{ estimate.output_tokens_est }} tokens</span>
+    <div style="display:flex;justify-content:space-between;padding:4px 0">
+        <span style="color:var(--ink-3);font-family:var(--sans)">预估输出</span>
+        <span style="color:var(--ink-1)">~{{ estimate.output_tokens_est }} tokens</span>
     </div>
-    <div class="flex justify-between border-t pt-2 mt-2">
-        <span class="text-gray-700 font-medium">预估费用</span>
-        <span class="text-purple-600 font-bold">${{ '%.4f' % estimate.cost_est }}</span>
+    <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--border);padding-top:8px;margin-top:6px">
+        <span style="color:var(--ink-2);font-family:var(--sans);font-weight:600">预估费用</span>
+        <span style="color:var(--ai);font-weight:700;font-size:15px">${{ '%.4f' % estimate.cost_est }}</span>
     </div>
 </div>
