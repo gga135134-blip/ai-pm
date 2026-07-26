@@ -40,8 +40,10 @@
         body { font-family: var(--sans); margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center; }
         .login-wrap{ width:100%; max-width:380px; padding:16px; }
         .login-head{ text-align:center; margin-bottom:24px; }
-        .login-head .mk{ color:var(--accent); font-size:34px; line-height:1; margin-bottom:10px; }
-        .login-head h1{ font-family:var(--display); font-size:22px; font-weight:600; margin:0; color:var(--ink-1); }
+        .login-head .mk{ color:var(--accent); display:flex; justify-content:center; margin-bottom:12px; }
+        .login-head .wm{ font-family:var(--display); font-size:32px; font-weight:600; letter-spacing:.06em; color:var(--ink-1); line-height:1.1; }
+        .login-head .wm i{ font-style:normal; color:var(--accent); }
+        .login-head h1{ font-family:var(--sans); font-size:14px; font-weight:500; margin:8px 0 0; color:var(--ink-2); letter-spacing:.02em; }
         .login-head p{ font-size:13px; color:var(--ink-3); margin:6px 0 0; }
         .login-card{ background:var(--bg); border:1px solid var(--border); border-radius:var(--r); box-shadow:var(--shadow-lg); padding:26px; }
         .login-err{ margin-bottom:16px; background:rgba(255,98,87,.12); border:1px solid rgba(255,98,87,.3); color:var(--down); font-size:13px; border-radius:var(--r-sm); padding:11px 14px; }
@@ -57,8 +59,14 @@
 <body>
     <div class="login-wrap">
         <div class="login-head">
-            <div class="mk">&#9670;</div>
-            <h1>AI 项目管理平台</h1>
+            <div class="mk">
+                <svg width="52" height="52" viewBox="0 0 52 52" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+                    <circle cx="26" cy="26" r="18" opacity=".3"/><circle cx="26" cy="26" r="11" opacity=".55"/>
+                    <circle cx="26" cy="26" r="3.5" fill="currentColor" stroke="none"/><path d="M26 26 41 15"/>
+                </svg>
+            </div>
+            <div class="wm">AI<i>·</i>PM</div>
+            <h1>项目管理平台</h1>
             <p>请登录后继续</p>
         </div>
         <div class="login-card">

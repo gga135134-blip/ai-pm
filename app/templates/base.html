@@ -70,8 +70,11 @@
         /* ---------- LEFT SIDEBAR ---------- */
         .side{ width:230px; flex:none; background:var(--rail); border-right:1px solid var(--border);
           display:flex; flex-direction:column; padding:16px 12px; gap:7px; }
-        .side .brand{ font-weight:700; letter-spacing:-.01em; font-size:16px; display:flex; align-items:center; gap:9px; padding:6px 10px 14px; color:var(--ink-1); text-decoration:none; }
-        .side .brand .mk{ color:var(--accent); font-size:18px; }
+        /* 品牌：作战室雷达标记 + 宋体 AI·PM 字标 */
+        .side .brand{ display:flex; align-items:center; gap:10px; padding:6px 10px 14px; color:var(--ink-1); text-decoration:none; }
+        .side .brand .mk{ color:var(--accent); flex:none; display:inline-flex; }
+        .side .brand .wm{ font-family:var(--display); font-size:19px; font-weight:600; letter-spacing:.05em; }
+        .side .brand .wm i{ font-style:normal; color:var(--accent); }
         .side .grp-l{ font-size:12px; font-weight:600; letter-spacing:.06em; color:var(--ink-3); padding:12px 10px 5px; }
         .side a{ display:flex; align-items:center; gap:11px; font-size:13.5px; color:var(--ink-2); text-decoration:none;
           padding:9px 11px; border-radius:9px; position:relative;
@@ -303,7 +306,13 @@
     {% set path = request.url.path %}
     <div class="app-shell">
         <aside class="side">
-            <a href="/" class="brand"><span class="mk">&#9670;</span>AI-PM</a>
+            <a href="/" class="brand" title="AI 项目管理平台">
+                <span class="mk"><svg width="26" height="26" viewBox="0 0 52 52" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true">
+                    <circle cx="26" cy="26" r="18" opacity=".3"/><circle cx="26" cy="26" r="11" opacity=".55"/>
+                    <circle cx="26" cy="26" r="3.5" fill="currentColor" stroke="none"/><path d="M26 26 41 15"/>
+                </svg></span>
+                <span class="wm">AI<i>·</i>PM</span>
+            </a>
             <div class="grp-l">工作区</div>
             <a href="/chat" class="{% if path.startswith('/chat') %}on{% endif %}">{{ ic.icon('robot') }}AI Chat</a>
             <a href="/" class="{% if path == '/' %}on{% endif %}">{{ ic.icon('chart') }}总览</a>
