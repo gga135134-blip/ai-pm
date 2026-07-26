@@ -6,6 +6,9 @@
 {% endblock %}
 {% block content %}
 <style>
+  /* base.html 只定义了 .pill.run，这两个变体本页自带（已发=成功语义，待发=中性） */
+  .pill.done{ color:var(--up); background:rgba(63,203,134,.14); }
+  .pill.off{ color:var(--ink-3); background:var(--panel-2); }
   /* ---- stage stepper ---- */
   .mc-steps{ display:flex; gap:6px; overflow-x:auto; margin-bottom:14px; -webkit-overflow-scrolling:touch; }
   .mc-step{ flex:0 0 auto; font-size:12px; font-weight:500; padding:5px 12px; border-radius:999px; white-space:nowrap; background:var(--panel-2); color:var(--ink-3); border:1px solid var(--border); }
