@@ -1,33 +1,53 @@
 {% extends "base.html" %}
+{% import "_icons.html" as ic %}
 {% block title %}AI 智能分类 - 知识库{% endblock %}
+{% block topbar %}
+<span class="crumb"><a href="/notes" style="color:inherit;text-decoration:none">知识库</a> / <b>AI 智能分类</b></span>
+{% endblock %}
 {% block content %}
-<div class="mb-4 text-sm text-gray-400">
-    <a href="/notes" class="hover:text-gray-600">知识库</a> / <span class="text-gray-600">AI 智能分类</span>
-</div>
-<h1 class="text-2xl font-bold text-gray-800 mb-6">AI 智能分类</h1>
-<p class="text-sm text-gray-500 mb-6">把聊天记录、会议内容、录音转文字粘贴进来，AI 自动识别不同信息层：知识框架、进度跟进、关键决策、阶段状态、灵感想法</p>
+<style>
+.cls-wrap{ max-width:760px; }
+.cls-head h1{ font-family:var(--display); font-size:23px; font-weight:600; margin:0 0 6px; display:flex; align-items:center; gap:9px; }
+.cls-head h1 .icon{ color:var(--ai); font-size:20px; }
+.cls-head p{ font-size:13px; color:var(--ink-3); margin:0 0 20px; line-height:1.6; }
+.cls-textarea{ font-family:var(--mono); tab-size:4; min-height:220px; resize:vertical; }
+.cls-grid{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.cls-type{ font-size:11px; font-weight:600; padding:2px 9px; border-radius:6px; display:inline-block; }
+/* 五层分类是「类别」不是「状态」——用围绕品牌色相派生的分类色板，
+   不借用 --up/--down 语义色（红只该表示出错，绿只该表示成功） */
+.cls-wrap{ --cat-knowledge:#2FD3C5; --cat-progress:#59B4E8; --cat-decision:#D8A657; --cat-status:#93A4C4; --cat-idea:#9B85FF; }
+[data-theme="light"] .cls-wrap{ --cat-knowledge:#127C77; --cat-progress:#2A6EA6; --cat-decision:#9A6B12; --cat-status:#55637F; --cat-idea:#5B4BD1; }
+.item-row{ display:flex; align-items:center; gap:10px; }
+.item-row a{ font-size:13.5px; font-weight:500; color:var(--ink-1); text-decoration:none; }
+.item-row a:hover{ color:var(--accent); }
+</style>
 
-<div class="max-w-3xl grid gap-6">
-    <div class="bg-white rounded-lg shadow-sm p-6">
-        <form method="POST" action="/notes/classify" class="space-y-4">
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">粘贴内容</label>
+<div class="cls-wrap">
+    <div class="cls-head">
+        <h1>{{ ic.icon('tag') }}AI 智能分类</h1>
+        <p>把聊天记录、会议内容、录音转文字粘贴进来，AI 自动识别不同信息层：知识框架、进度跟进、关键决策、阶段状态、灵感想法</p>
+    </div>
+
+    <div class="card" style="padding:20px">
+        <form method="POST" action="/notes/classify">
+            <div class="field">
+                <label class="label">粘贴内容</label>
                 <textarea name="text" rows="12" required placeholder="把聊天记录、会议纪要、录音转文字粘贴到这里..."
-                    class="w-full border rounded-lg px-3 py-2 text-sm font-mono outline-none focus:ring-2 focus:ring-purple-500" style="tab-size:4"></textarea>
+                    class="input cls-textarea"></textarea>
             </div>
-            <div class="grid grid-cols-2 gap-4">
-                <div>
-                    <label class="block text-xs text-gray-500 mb-1">关联项目</label>
-                    <select name="project_id" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+            <div class="cls-grid" style="margin-bottom:16px">
+                <div class="field" style="margin-bottom:0">
+                    <label class="label">关联项目</label>
+                    <select name="project_id" class="input">
                         <option value="">不关联</option>
                         {% for p in projects %}
                         <option value="{{ p.id }}">{{ p.name }}</option>
                         {% endfor %}
                     </select>
                 </div>
-                <div>
-                    <label class="block text-xs text-gray-500 mb-1">使用模型</label>
-                    <select name="model" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                <div class="field" style="margin-bottom:0">
+                    <label class="label">使用模型</label>
+                    <select name="model" class="input">
                         <option value="auto">自动</option>
                         <option value="claude">Claude</option>
                         <option value="openai">OpenAI</option>
@@ -35,28 +55,23 @@
                     </select>
                 </div>
             </div>
-            <button type="submit" class="bg-violet-600 text-white px-6 py-2 rounded-lg text-sm hover:bg-violet-700 transition">AI 分类提取</button>
+            <button type="submit" class="btn primary">{{ ic.icon('tag') }}AI 分类提取</button>
         </form>
     </div>
 
     {% if result %}
-    <div class="bg-white rounded-lg shadow-sm p-6">
-        <h2 class="text-lg font-semibold text-gray-700 mb-4">提取结果（{{ result|length }} 条）</h2>
-        <div class="space-y-3">
-            {% set type_colors = {'knowledge': 'blue', 'progress': 'green', 'decision': 'orange', 'status': 'purple', 'idea': 'pink'} %}
-            {% set type_labels = {'knowledge': '知识', 'progress': '进度', 'decision': '决策', 'status': '状态', 'idea': '想法'} %}
-            {% for item in result %}
-            <div class="border rounded-lg p-4">
-                <div class="flex items-center gap-2 mb-2">
-                    <span class="text-xs px-2 py-0.5 rounded bg-{{ type_colors.get(item.type, 'gray') }}-100 text-{{ type_colors.get(item.type, 'gray') }}-700">
-                        {{ type_labels.get(item.type, item.type) }}
-                    </span>
-                    <a href="/notes/{{ item.id }}" class="text-sm font-medium text-gray-800 hover:text-blue-600">{{ item.title }}</a>
-                </div>
-            </div>
-            {% endfor %}
+    <div class="card" style="padding:20px;margin-top:18px">
+        <div class="modhead" style="margin-bottom:14px">{{ ic.icon('check') }}提取结果（{{ result|length }} 条）<span class="rule"></span></div>
+        {% set type_colors = {'knowledge': 'var(--cat-knowledge)', 'progress': 'var(--cat-progress)', 'decision': 'var(--cat-decision)', 'status': 'var(--cat-status)', 'idea': 'var(--cat-idea)'} %}
+        {% set type_labels = {'knowledge': '知识', 'progress': '进度', 'decision': '决策', 'status': '状态', 'idea': '想法'} %}
+        {% for item in result %}
+        <div class="card item-row" style="margin-bottom:8px">
+            {% set clr = type_colors.get(item.type, 'var(--ink-3)') %}
+            <span class="cls-type" style="color:{{ clr }};background:color-mix(in srgb, {{ clr }} 15%, transparent)">{{ type_labels.get(item.type, item.type) }}</span>
+            <a href="/notes/{{ item.id }}">{{ item.title }}</a>
         </div>
-        <a href="/notes" class="inline-block mt-4 text-sm text-blue-600 hover:underline">返回知识库查看</a>
+        {% endfor %}
+        <a href="/notes" class="btn ghost" style="margin-top:8px">{{ ic.icon('arrow-up') }}返回知识库查看</a>
     </div>
     {% endif %}
 </div>

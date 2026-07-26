@@ -1,27 +1,52 @@
 {% extends "base.html" %}
+{% import "_icons.html" as ic %}
 {% block title %}母题{% endblock %}
+{% block topbar %}
+<span class="crumb"><a href="/study" style="color:inherit;text-decoration:none">学习</a> {{ ic.icon('chevron') }} <b>母题</b></span>
+{% endblock %}
 {% block content %}
+<style>
+.study-shell{max-width:640px}
+.record-bar{position:fixed;bottom:0;left:0;right:0;background:var(--bg);border-top:1px solid var(--border);
+  display:flex;gap:8px;padding:12px;max-width:640px;margin:0 auto;box-shadow:var(--shadow-lg)}
+.record-bar .btn{flex:1;justify-content:center;padding:12px;font-size:14px;font-weight:600;border:none}
+.record-bar .btn.know{color:var(--up);background:rgba(63,203,134,.14)}
+.record-bar .btn.dontknow{color:var(--down);background:rgba(255,98,87,.14)}
+.variant-ans summary{font-size:11.5px;color:var(--accent);cursor:pointer}
+.variant-ans .a{font-size:12.5px;color:var(--ink-2);margin-top:5px}
+.variant-ans .a .note{color:var(--ink-3)}
+</style>
 {% if arch %}
-<div class="max-w-2xl mx-auto px-3 py-4 pb-24">
-  <span class="text-xs text-purple-500">{{ arch.subject }} 母题</span>
-  <div class="bg-white rounded-lg shadow-sm p-4 mt-1 text-sm text-gray-900 whitespace-pre-wrap">{{ arch.stem }}</div>
-  <div class="mt-3 text-sm text-gray-700 bg-gray-50 rounded-lg p-3 whitespace-pre-wrap">🧭 解题逻辑：{{ arch.solution_logic }}</div>
-  <h3 class="text-sm font-semibold text-gray-600 mt-4 mb-2">变体练习</h3>
-  {% for v in arch.variants %}
-  <div class="bg-white rounded-lg shadow-sm p-3 mb-2 text-sm">
-    <div class="text-gray-800 whitespace-pre-wrap">{{ v.stem }}</div>
-    <details class="mt-2"><summary class="text-xs text-purple-500">看答案</summary>
-      <div class="text-xs text-gray-600 mt-1">{{ v.answer }}　<span class="text-gray-400">{{ v.note }}</span></div></details>
-  </div>
-  {% endfor %}
+<div class="study-shell" style="padding-bottom:24px">
+    <div style="font-size:11.5px;color:var(--accent);margin-bottom:8px">{{ arch.subject }} 母题</div>
+    <div class="module">
+        <div class="inner">
+            <div style="font-size:14px;color:var(--ink-1);line-height:1.8;white-space:pre-wrap">{{ arch.stem }}</div>
+            <div style="margin-top:14px;padding:12px 14px;border-radius:var(--r-sm);background:var(--panel-2);font-size:13px;color:var(--ink-2);white-space:pre-wrap">
+                解题逻辑：{{ arch.solution_logic }}
+            </div>
+        </div>
+    </div>
+
+    <div class="modhead" style="margin-top:20px"><span>变体练习</span><span class="rule"></span></div>
+    {% for v in arch.variants %}
+    <div class="card" style="padding:12px 14px;margin-bottom:8px">
+        <div style="font-size:13.5px;color:var(--ink-1);white-space:pre-wrap">{{ v.stem }}</div>
+        <details class="variant-ans" style="margin-top:8px">
+            <summary>看答案</summary>
+            <div class="a">{{ v.answer }}　<span class="note">{{ v.note }}</span></div>
+        </details>
+    </div>
+    {% endfor %}
 </div>
-<form method="post" action="/study/record"
-      class="fixed bottom-0 inset-x-0 bg-white border-t flex gap-2 p-3 max-w-2xl mx-auto">
-  <input type="hidden" name="item_type" value="archetype">
-  <input type="hidden" name="item_id" value="{{ arch.id }}">
-  <input type="hidden" name="subject" value="{{ arch.subject }}">
-  <button name="action" value="会" class="flex-1 py-3 rounded-lg bg-green-500 text-white font-medium">会</button>
-  <button name="action" value="不会" class="flex-1 py-3 rounded-lg bg-red-400 text-white font-medium">不会</button>
+<form method="post" action="/study/record" class="record-bar">
+    <input type="hidden" name="item_type" value="archetype">
+    <input type="hidden" name="item_id" value="{{ arch.id }}">
+    <input type="hidden" name="subject" value="{{ arch.subject }}">
+    <button name="action" value="会" class="btn know">会</button>
+    <button name="action" value="不会" class="btn dontknow">不会</button>
 </form>
-{% else %}<p class="p-4 text-gray-500">母题不存在</p>{% endif %}
+{% else %}
+<div class="study-shell"><div class="empty">母题不存在</div></div>
+{% endif %}
 {% endblock %}

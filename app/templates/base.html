@@ -13,132 +13,338 @@
         }catch(e){}
       })();
     </script>
+    <script>
+      /* 尽早应用保存的主题，避免刷新白屏闪烁 */
+      (function(){
+        try{
+          var t = localStorage.getItem('ui-theme');
+          if(!t){ t = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'; }
+          if(t === 'light'){ document.documentElement.setAttribute('data-theme','light'); }
+        }catch(e){}
+      })();
+      function toggleTheme(){
+        var el = document.documentElement;
+        var light = el.getAttribute('data-theme') === 'light';
+        if(light){ el.removeAttribute('data-theme'); localStorage.setItem('ui-theme','dark'); }
+        else{ el.setAttribute('data-theme','light'); localStorage.setItem('ui-theme','light'); }
+      }
+    </script>
     <link href="/static/tailwind.min.css" rel="stylesheet">
     <style>
-        /* 颜色系统 token */
-        :root {
-            --c-primary:   #2563eb; /* blue-600  主操作 */
-            --c-primary-h: #1d4ed8; /* blue-700  hover */
-            --c-ai:        #7c3aed; /* violet-600 AI专属 */
-            --c-ai-h:      #6d28d9; /* violet-700 hover */
-            --c-success:   #16a34a; /* green-600  成功/启动 */
-            --c-danger:    #dc2626; /* red-600    危险/删除 */
-            --c-warning:   #d97706; /* amber-600  警告/驳回 */
+        /* ============================================================
+           ai-pm 设计系统 — 全局 token · Steel Cyan · 标题思源宋体
+           ============================================================ */
+        :root{
+          --page:#0d1917; --bg:#132422; --panel-2:#1a2d2a; --border:rgba(255,255,255,.09);
+          --ink-1:#e8f0f1; --ink-2:#a6b3b5; --ink-3:#7e8c8f;
+          --accent:#2FD3C5; --accent-soft:rgba(47,211,197,.14); --on-accent:#06110f;
+          --ai:#9B85FF; --ai-soft:rgba(155,133,255,.15);
+          --up:#3FCB86; --down:#FF6257; --warn:#F0A868;
+          --glow:rgba(47,211,197,.28);
+          --shadow:0 1px 3px rgba(0,0,0,.38); --shadow-lg:0 24px 60px -40px rgba(0,0,0,.8);
+          --rail:#0a1513; --rail-active:var(--accent-soft);
+          --r:14px; --r-sm:9px;
+          --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+          --sans:system-ui,-apple-system,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
+          --display:"Songti SC",SimSun,serif;
         }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-        .status-draft { background: #e5e7eb; color: #374151; }
-        .status-active { background: #dbeafe; color: #1d4ed8; }
-        .status-paused { background: #fef3c7; color: #92400e; }
-        .status-done { background: #d1fae5; color: #065f46; }
-        .status-pending { background: #f3f4f6; color: #6b7280; }
-        .status-running { background: #dbeafe; color: #1d4ed8; }
-        .status-reviewing { background: #ede9fe; color: #5b21b6; }
-        .status-blocked { background: #fee2e2; color: #991b1b; }
-        .status-failed { background: #fee2e2; color: #991b1b; }
-        /* 移动端响应式（本地 tailwind 裁剪版没有 md: 断点）*/
-    .nav-desktop { display: flex; }
-    .nav-mobile-btn { display: none; }
-    #mob-menu { display: none; }
-    @media (max-width: 767px) {
-        .nav-desktop { display: none !important; }
-        .nav-mobile-btn { display: flex !important; }
-    }
-    /* 本地 tailwind 裁剪版缺失的颜色类，手动补齐 */
-        .bg-orange-500 { background-color: #f97316; }
-        .hover\:bg-orange-600:hover { background-color: #ea580c; }
-        .bg-amber-500 { background-color: #f59e0b; }
-        .hover\:bg-amber-600:hover { background-color: #d97706; }
-        .bg-amber-600 { background-color: #d97706; }
-        .hover\:bg-amber-700:hover { background-color: #b45309; }
-        .bg-amber-50 { background-color: #fffbeb; }
-        .hover\:bg-amber-100:hover { background-color: #fef3c7; }
-        .bg-amber-400 { background-color: #fbbf24; }
-        .text-amber-600 { color: #d97706; }
-        .text-amber-700 { color: #b45309; }
-        .text-amber-800 { color: #92400e; }
-        .border-amber-200 { border-color: #fde68a; }
-        .border-amber-300 { border-color: #fcd34d; }
-        .focus\:ring-amber-400:focus { box-shadow: 0 0 0 2px rgba(251,191,36,.4); }
-        /* violet — AI 专属色 */
-        .bg-violet-50  { background-color: #f5f3ff; }
-        .bg-violet-100 { background-color: #ede9fe; }
-        .bg-violet-600 { background-color: #7c3aed; }
-        .text-violet-600 { color: #7c3aed; }
-        .text-violet-700 { color: #6d28d9; }
-        .border-violet-200 { border-color: #ddd6fe; }
-        .border-violet-400 { border-color: #a78bfa; }
-        .border-violet-500 { border-color: #8b5cf6; }
-        .hover\:bg-violet-50:hover  { background-color: #f5f3ff; }
-        .hover\:bg-violet-100:hover { background-color: #ede9fe; }
-        .hover\:bg-violet-700:hover { background-color: #6d28d9; }
-        .hover\:text-violet-600:hover { color: #7c3aed; }
-        .focus\:ring-violet-500:focus { box-shadow: 0 0 0 2px rgba(139,92,246,.4); }
+        [data-theme="light"]{
+          --page:#eef2f1; --bg:#ffffff; --panel-2:#f2f6f5; --border:rgba(16,44,42,.10);
+          --ink-1:#0f2322; --ink-2:#3a4b4a; --ink-3:#63736f;
+          --accent:#127C77; --accent-soft:rgba(18,124,119,.10); --on-accent:#ffffff;
+          --ai:#5B4BD1; --ai-soft:rgba(91,75,209,.10);
+          --up:#2C7A62; --down:#C0453C; --warn:#B0730F;
+          --glow:rgba(18,124,119,.24);
+          --shadow:0 1px 3px rgba(19,61,58,.06); --shadow-lg:0 24px 60px -40px rgba(19,61,58,.30);
+          --rail:#e7edeb; --rail-active:var(--accent-soft);
+        }
+
+        * { box-sizing: border-box; }
+        html, body { background: var(--page); color: var(--ink-1); }
+        body { font-family: var(--sans); min-height: 100vh; }
+        .icon{ width:1em; height:1em; stroke:currentColor; fill:none; stroke-width:1.9; stroke-linecap:round; stroke-linejoin:round; vertical-align:-.14em; display:inline-block; }
+
+        /* ---------- LAYOUT SHELL ---------- */
+        .app-shell{ display:flex; min-height:100vh; }
+
+        /* ---------- LEFT SIDEBAR ---------- */
+        .side{ width:230px; flex:none; background:var(--rail); border-right:1px solid var(--border);
+          display:flex; flex-direction:column; padding:16px 12px; gap:7px; }
+        /* 品牌：作战室雷达标记 + 宋体 AI·PM 字标 */
+        .side .brand{ display:flex; align-items:center; gap:10px; padding:6px 10px 14px; color:var(--ink-1); text-decoration:none; }
+        .side .brand .mk{ color:var(--accent); flex:none; display:inline-flex; }
+        .side .brand .wm{ font-family:var(--display); font-size:19px; font-weight:600; letter-spacing:.05em; }
+        .side .brand .wm i{ font-style:normal; color:var(--accent); }
+        .side .grp-l{ font-size:12px; font-weight:600; letter-spacing:.06em; color:var(--ink-3); padding:12px 10px 5px; }
+        .side a{ display:flex; align-items:center; gap:11px; font-size:13.5px; color:var(--ink-2); text-decoration:none;
+          padding:9px 11px; border-radius:9px; position:relative;
+          background:var(--bg); border:1px solid var(--border); }
+        .side a .icon{ font-size:17px; color:var(--ink-3); flex:none; }
+        .side a:hover{ border-color:var(--ink-3); color:var(--ink-1); }
+        .side a:hover .icon{ color:var(--ink-2); }
+        .side a.on{ background:var(--accent-soft); border-color:var(--accent); color:var(--accent); font-weight:600; }
+        .side a.on .icon{ color:var(--accent); }
+        .side .foot{ margin-top:auto; padding-top:14px; border-top:1px solid var(--border); display:flex; flex-direction:column; gap:7px; }
+        .side .tgl{ font-family:var(--sans); font-size:13px; color:var(--ink-2); background:var(--bg);
+          border:1px solid var(--border); border-radius:9px; padding:8px 11px; cursor:pointer; display:flex; align-items:center; gap:10px; width:100%; }
+        .side .tgl .icon{ font-size:16px; color:var(--ink-3); }
+        .side .tgl:hover{ color:var(--ink-1); border-color:var(--accent); }
+        .side .font-size-select{ font-family:var(--sans); font-size:12.5px; color:var(--ink-2); background:var(--bg);
+          border:1px solid var(--border); border-radius:9px; padding:7px 9px; cursor:pointer; width:100%; }
+
+        /* ---------- MAIN ---------- */
+        .main{ flex:1; min-width:0; display:flex; flex-direction:column; }
+        .topbar{ height:52px; flex:none; border-bottom:1px solid var(--border); background:var(--bg);
+          display:flex; align-items:center; gap:8px; padding:0 22px; }
+        .topbar .crumb{ font-size:13px; color:var(--ink-3); display:flex; align-items:center; gap:6px; }
+        .topbar .crumb b{ color:var(--ink-1); font-weight:600; }
+        .topbar .sp{ flex:1; }
+        .topbar .search{ display:flex; align-items:center; gap:8px; background:var(--panel-2); border:1px solid var(--border);
+          border-radius:999px; padding:6px 13px; font-size:12.5px; color:var(--ink-3); min-width:180px; }
+
+        .scroll{ overflow:auto; padding:22px 24px 26px; flex:1; }
+        .modhead{ display:flex; align-items:center; gap:9px; font-size:11.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--ink-3); margin:0 0 13px; font-weight:600; }
+        .modhead .icon{ font-size:15px; color:var(--accent); }
+        .modhead .rule{ flex:1; height:1px; background:var(--border); }
+
+        /* project header */
+        .phead{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:20px; }
+        .pname{ font-family:var(--display); font-size:27px; font-weight:600; letter-spacing:0; }
+        .pill{ font-size:11.5px; font-weight:600; padding:3px 11px; border-radius:999px; display:inline-flex; align-items:center; gap:6px; }
+        .pill .d{ width:6px; height:6px; border-radius:50%; background:currentColor; }
+        .pill.run{ color:var(--accent); background:var(--accent-soft); }
+        .pcode{ font-family:var(--mono); font-size:12px; color:var(--ink-3); }
+        .star{ color:var(--warn); }
+        .sp{ flex:1; }
+        .cost{ font-size:13px; color:var(--ink-2); }
+        .cost b{ font-family:var(--mono); color:var(--ink-1); font-weight:600; font-size:15px; }
+        .btn{ font-family:var(--sans); font-size:13px; font-weight:550; padding:7px 14px; border-radius:var(--r-sm); cursor:pointer; display:inline-flex; align-items:center; gap:6px; border:1px solid var(--border); background:var(--panel-2); color:var(--ink-1); }
+        .btn .icon{ font-size:15px; }
+        .btn:hover{ border-color:var(--accent); }
+        .btn.primary{ background:var(--accent); color:var(--on-accent); border-color:transparent; box-shadow:0 6px 20px -8px var(--glow); }
+        .btn.primary:hover{ filter:brightness(1.06); }
+        .btn.ai{ color:var(--ai); background:var(--ai-soft); border-color:transparent; }
+        .btn.ghost{ background:transparent; }
+
+        /* tab strip */
+        .tab{ font-size:14px; font-weight:500; color:var(--ink-3); padding:8px 2px; margin-right:18px; background:none; border:none; border-bottom:2px solid transparent; cursor:pointer; }
+        .tab:hover{ color:var(--ink-1); }
+        .tab.on{ color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
+
+        /* KPI */
+        .kpis{ display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:26px; }
+        .kpi{ background:var(--bg); border:1px solid var(--border); border-radius:var(--r); padding:15px 16px; box-shadow:var(--shadow); }
+        .kpi .top{ display:flex; align-items:center; justify-content:space-between; margin-bottom:11px; }
+        .kpi .chip{ width:36px; height:36px; border-radius:10px; background:var(--accent-soft); color:var(--accent); display:inline-flex; align-items:center; justify-content:center; }
+        .kpi .chip .icon{ font-size:19px; }
+        .kpi .chip.ai{ background:var(--ai-soft); color:var(--ai); }
+        .kpi .chip.up{ background:rgba(63,203,134,.14); color:var(--up); }
+        .kpi .chip.warn{ background:rgba(240,168,104,.14); color:var(--warn); }
+        .kpi .delta{ font-size:11.5px; font-weight:600; display:inline-flex; align-items:center; gap:3px; }
+        .kpi .delta.up{ color:var(--up); } .kpi .delta.dn{ color:var(--down); } .kpi .delta.mut{ color:var(--ink-3); }
+        .kpi .lbl{ font-size:12.5px; color:var(--ink-3); }
+        .kpi .val{ font-size:31px; font-weight:700; font-variant-numeric:tabular-nums; letter-spacing:-.02em; margin-top:3px; font-family:var(--mono); }
+        .kpi .spark{ margin-top:8px; display:block; width:100%; height:24px; color:var(--accent); }
+
+        /* MODULE panel — makes 看板 / 作战室 clearly separate blocks */
+        .module{ background:var(--bg); border:1px solid var(--border); border-radius:var(--r); box-shadow:var(--shadow); margin-bottom:18px; overflow:hidden; }
+        .module > .mh{ display:flex; align-items:center; gap:10px; padding:13px 18px; border-bottom:1px solid var(--border); background:var(--panel-2); }
+        .module > .mh .ic{ color:var(--accent); display:inline-flex; } .module > .mh .ic .icon{ font-size:17px; }
+        .module > .mh .ttl{ font-size:18px; font-weight:650; letter-spacing:-.01em; }
+        .module > .mh .sub{ font-size:12px; color:var(--ink-3); }
+        .module > .mh .sp{ flex:1; }
+        .module > .inner{ padding:16px 18px; }
+
+        /* kanban */
+        .cols{ display:grid; grid-template-columns:repeat(3,1fr) 46px; gap:14px; align-items:start; }
+        .col-h{ display:flex; align-items:center; justify-content:space-between; font-size:13px; font-weight:600; color:var(--ink-2); margin-bottom:10px; }
+        .col-h .c{ font-family:var(--mono); color:var(--ink-3); font-weight:500; background:var(--panel-2); border-radius:999px; padding:1px 8px; font-size:11px; }
+        .card{ background:var(--bg); border:1px solid var(--border); border-radius:var(--r-sm); padding:11px 12px; margin-bottom:10px; }
+        .card:hover{ border-color:var(--accent); }
+        .card .ct{ font-size:13.5px; font-weight:500; }
+        .card .cm{ font-size:11.5px; color:var(--ink-3); margin-top:5px; display:flex; align-items:center; gap:6px; }
+        .card .lane{ height:2px; border-radius:2px; margin:-11px -12px 9px; }
+        .card .lane.run{ background:var(--accent); } .card .lane.rev{ background:var(--warn); }
+        .col-empty{ background:var(--panel-2); border:1px dashed var(--border); border-radius:var(--r-sm); min-height:64px; display:flex; align-items:center; justify-content:center; writing-mode:vertical-rl; font-size:11px; color:var(--ink-3); padding:6px 2px; text-align:center; }
+
+        /* war room — visually distinct via accent glow strip + inset bg */
+        .module.war{ border-color:rgba(47,211,197,.25); }
+        .module.war > .mh{ background:linear-gradient(90deg,var(--accent-soft),transparent); }
+        .worker{ display:grid; grid-template-columns:14px 96px 1fr auto; align-items:center; gap:12px; padding:10px 0; border-top:1px solid var(--border); font-size:13px; }
+        .worker:first-child{ border-top:0; }
+        .dot{ width:9px; height:9px; border-radius:50%; }
+        .wname{ font-family:var(--mono); font-size:12.5px; color:var(--ink-2); }
+        .wstep{ font-family:var(--mono); font-size:13px; color:var(--ink-3); }
+        .wstep b{ color:var(--accent); font-weight:600; font-size:15px; }
+        .wpct{ font-family:var(--mono); font-size:15px; font-weight:600; color:var(--ink-1); }
+        @keyframes pulse{ 0%,100%{opacity:1; transform:scale(1)} 50%{opacity:.4; transform:scale(.82)} }
+        .live-dot{ animation:pulse 1.5s ease-in-out infinite; }
+        @media (prefers-reduced-motion:reduce){ .live-dot{ animation:none; } }
+
+        /* knowledge base — bigger sidebar, clearer hierarchy */
+        .kb{ display:grid; grid-template-columns:248px 1fr; gap:22px; }
+        .kb-side{ background:var(--bg); border:1px solid var(--border); border-radius:var(--r); padding:14px; box-shadow:var(--shadow); align-self:start; }
+        .kb-search{ display:flex; align-items:center; gap:8px; background:var(--panel-2); border:1px solid var(--border); border-radius:9px; padding:8px 11px; font-size:12.5px; color:var(--ink-3); margin-bottom:14px; }
+        .kb-grp{ margin-bottom:16px; }
+        .kb-grp:last-child{ margin-bottom:0; }
+        .kb-grp .gh{ display:flex; align-items:center; justify-content:space-between; font-size:10.5px; letter-spacing:.13em; text-transform:uppercase; color:var(--ink-3); font-weight:600; padding:0 4px 7px; border-bottom:1px solid var(--border); margin-bottom:7px; }
+        .kb-grp .gh .add{ color:var(--accent); cursor:pointer; font-size:13px; }
+        /* level 1 — top folder: bigger, stronger ink, folder icon */
+        .frow{ display:flex; align-items:center; gap:9px; font-size:14px; font-weight:500; color:var(--ink-1); padding:7px 9px; border-radius:8px; cursor:pointer; }
+        .frow .icon{ font-size:15px; color:var(--ink-2); flex:none; }
+        .frow:hover{ background:var(--panel-2); }
+        .frow.on{ background:var(--accent-soft); color:var(--accent); font-weight:600; }
+        .frow.on .icon{ color:var(--accent); }
+        /* level 2 — sub folder: smaller, lighter ink, deeper indent + connector, NO icon */
+        .frow.child{ margin-left:23px; font-size:12.5px; font-weight:400; color:var(--ink-3); padding-left:13px; border-left:1.5px solid var(--border); border-radius:0 8px 8px 0; }
+        .frow.child:hover{ color:var(--ink-2); }
+        .frow .c{ margin-left:auto; font-size:11px; color:var(--ink-3); font-family:var(--mono); }
+        .frow.on .c{ color:var(--accent); }
+
+        .note{ background:var(--bg); border:1px solid var(--border); border-radius:var(--r); padding:15px 17px; margin-bottom:12px; box-shadow:var(--shadow); position:relative; }
+        .note:hover{ border-color:var(--accent); }
+        .note-h{ display:flex; align-items:center; gap:9px; }
+        .note-h .nt{ font-size:16px; font-weight:600; letter-spacing:-.01em; }
+        .note-h .core{ color:var(--warn); font-size:13px; }
+        .note-ex{ font-size:13.5px; color:var(--ink-2); line-height:1.65; margin:9px 0 0; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+        .note-m{ display:flex; align-items:center; gap:8px; margin-top:12px; font-size:11.5px; color:var(--ink-3); }
+        .tag{ font-size:11px; color:var(--accent); background:var(--accent-soft); padding:2px 9px; border-radius:6px; }
+        .tag.ai{ color:var(--ai); background:var(--ai-soft); }
+        .note-folder{ font-family:var(--mono); }
+        .note-time{ margin-left:auto; font-family:var(--mono); }
+        .note-acts{ position:absolute; top:13px; right:15px; display:flex; gap:2px; opacity:0; transition:opacity .12s; }
+        .note:hover .note-acts{ opacity:1; }
+        .iconbtn{ width:28px; height:28px; border-radius:7px; border:1px solid transparent; background:transparent; color:var(--ink-3); cursor:pointer; display:inline-flex; align-items:center; justify-content:center; }
+        .iconbtn .icon{ font-size:15px; }
+        .iconbtn:hover{ background:var(--panel-2); color:var(--ink-1); border-color:var(--border); }
+        .iconbtn.danger:hover{ color:var(--down); }
+
+        .foot-note{ font-size:12.5px; color:var(--ink-3); padding:14px 24px; border-top:1px solid var(--border); background:var(--bg); }
+        .foot-note b{ color:var(--ink-2); font-weight:600; }
+        .swrow{ display:flex; flex-wrap:wrap; gap:12px; margin-top:8px; }
+        .sw{ display:flex; align-items:center; gap:7px; font-size:11px; color:var(--ink-3); }
+        .sw i{ width:16px; height:16px; border-radius:5px; border:1px solid var(--border); display:inline-block; }
+
+        /* form field primitives */
+        .field{ display:flex; flex-direction:column; gap:6px; margin-bottom:14px; }
+        .label{ font-size:12.5px; color:var(--ink-3); font-weight:600; }
+        .input{ font-family:var(--sans); font-size:13.5px; color:var(--ink-1); background:var(--bg); border:1px solid var(--border); border-radius:var(--r-sm); padding:8px 12px; }
+        .input:focus{ outline:none; border-color:var(--accent); }
+
+        /* misc states */
+        .empty{ color:var(--ink-3); font-size:13px; text-align:center; padding:24px; }
+        .skeleton{ background:linear-gradient(90deg,var(--panel-2) 25%,var(--border) 37%,var(--panel-2) 63%); background-size:400% 100%; animation:skeleton-loading 1.4s ease infinite; border-radius:var(--r-sm); }
+        @keyframes skeleton-loading{ 0%{background-position:100% 50%} 100%{background-position:0 50%} }
+
+        /* content reflow — nav STAYS on the left, only the content columns stack */
+        @media (max-width:900px){
+          .kpis{ grid-template-columns:repeat(2,1fr); }
+          .cols{ grid-template-columns:1fr; }
+          .col-empty{ writing-mode:horizontal-tb; min-height:auto; }
+          .kb{ grid-template-columns:1fr; }
+          .side{ width:196px; }
+          .topbar .search{ display:none; }
+        }
+        /* real phones — sidebar collapses to a horizontal top bar */
+        /* 移动端触摸目标 ≥44px（手机是主要使用场景） */
+        @media (max-width:767px){
+          .frow, .btn, .tab, .side a, .side .tgl, .side .font-size-select{ min-height:44px; }
+          .side a{ padding-top:10px; padding-bottom:10px; }
+          /* 行内嵌链接时，让链接自己承担 44px 高度（行只出左右内边距），
+             否则可点区域只有内容盒高度，点到上下留白会落空 */
+          .frow{ padding-top:0; padding-bottom:0; }
+          .frow > a{ align-self:stretch; display:flex; align-items:center; min-height:44px; }
+          .iconbtn{ min-width:40px; min-height:40px; }
+          .kb-grp .frow.child{ min-height:40px; }
+        }
+        @media (max-width:560px){
+          .app-shell{ flex-direction:column; min-height:0; }
+          .side{ width:100%; flex-direction:row; align-items:center; overflow-x:auto; padding:10px 12px; gap:2px; }
+          .side .brand{ padding:6px 10px; }
+          .side .grp-l{ display:none; }
+          .side a{ white-space:nowrap; }
+          .side a.on::before{ display:none; }
+          .side .foot{ margin:0 0 0 auto; border:0; padding:0; flex-direction:row; }
+          .worker{ grid-template-columns:14px 1fr auto; }
+          .worker .wname{ display:none; }
+        }
+
         /* 全局交互状态 */
-        :focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; border-radius: 4px; }
+        /* 滚动条跟随主题（深色下默认白条很刺眼） */
+        * { scrollbar-color: var(--panel-2) transparent; scrollbar-width: thin; }
+        ::-webkit-scrollbar { width: 10px; height: 10px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--panel-2); border-radius: 999px; border: 2px solid transparent; background-clip: padding-box; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--ink-3); background-clip: padding-box; }
+        :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
         button:disabled, input:disabled, select:disabled, textarea:disabled { opacity: 0.5; cursor: not-allowed; }
         .btn-loading { opacity: 0.7; pointer-events: none; }
+
+        /* 表单控件基础样式（全站） */
+        input, textarea, select { background-color: var(--panel-2); color: var(--ink-1); border-color: var(--border); }
+        input::placeholder, textarea::placeholder { color: var(--ink-3); }
+        /* 标题与其下方信息行的呼吸间距 */
+        h1, h2, h3, h4 { line-height: 1.35; }
+        h1 + div, h2 + div, h3 + div { margin-top: 6px; }
+        /* tailwind 小字号偏小，抬到可读区间（本 style 在 tailwind 之后，无需 !important） */
+        .text-xs { font-size: .8125rem; line-height: 1.15rem; }
+        .text-sm { font-size: .9rem; }
+        /* 状态徽章：走 token，深浅色统一 */
+        .status-draft   { background: var(--panel-2);            color: var(--ink-2); }
+        .status-pending { background: var(--panel-2);            color: var(--ink-3); }
+        .status-active,
+        .status-running { background: var(--accent-soft);        color: var(--accent); }
+        .status-paused  { background: rgba(240,168,104,.16);     color: var(--warn); }
+        .status-done    { background: rgba(63,203,134,.16);      color: var(--up); }
+        .status-reviewing { background: var(--ai-soft);          color: var(--ai); }
+        .status-blocked,
+        .status-failed  { background: rgba(255,98,87,.16);       color: var(--down); }
     </style>
 </head>
-<body class="bg-gray-50 min-h-screen text-base">
-    <nav class="bg-white shadow-sm border-b sticky top-0 z-50">
-        {% set path = request.url.path %}
-        <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-            <a href="/" class="text-xl font-bold text-gray-800">AI-PM</a>
-
-            <!-- 桌面端导航 -->
-            <div class="nav-desktop items-center gap-5 text-sm">
-                <a href="/chat" class="text-gray-600 hover:text-gray-900 pb-0.5 {% if path.startswith('/chat') %}border-b-2 border-purple-500 font-medium{% endif %}">AI Chat</a>
-                <a href="/" class="text-gray-600 hover:text-gray-900 pb-0.5 {% if path == '/' %}border-b-2 border-purple-500 font-medium{% endif %}">总览</a>
-                <a href="/projects" class="text-gray-600 hover:text-gray-900 pb-0.5 {% if path.startswith('/projects') %}border-b-2 border-purple-500 font-medium{% endif %}">项目</a>
-                <a href="/notes" class="text-gray-600 hover:text-gray-900 pb-0.5 {% if path.startswith('/notes') %}border-b-2 border-purple-500 font-medium{% endif %}">知识库</a>
-                <a href="/study" class="text-gray-600 hover:text-gray-900 pb-0.5 {% if path.startswith('/study') %}border-b-2 border-purple-500 font-medium{% endif %}">🎓 学习</a>
-                <a href="/media" class="text-gray-600 hover:text-gray-900 pb-0.5 {% if path.startswith('/media') %}border-b-2 border-purple-500 font-medium{% endif %}">🎬 自媒体</a>
-                <a href="/finance" class="text-gray-600 hover:text-gray-900 pb-0.5 {% if path.startswith('/finance') %}border-b-2 border-purple-500 font-medium{% endif %}">财务</a>
-                <a href="/settings" class="text-gray-600 hover:text-gray-900 pb-0.5 {% if path.startswith('/settings') %}border-b-2 border-purple-500 font-medium{% endif %}">设置</a>
-                <select onchange="setFontSize(this.value)" title="调整全站字号（看不清就调大）"
-                    class="font-size-select text-gray-600 border rounded-lg px-2 py-1 outline-none cursor-pointer" style="font-size:.8rem">
+<body>
+    {% import "_icons.html" as ic %}
+    {% set path = request.url.path %}
+    <div class="app-shell">
+        <aside class="side">
+            <a href="/" class="brand" title="AI 项目管理平台">
+                <span class="mk"><svg width="26" height="26" viewBox="0 0 52 52" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true">
+                    <circle cx="26" cy="26" r="18" opacity=".3"/><circle cx="26" cy="26" r="11" opacity=".55"/>
+                    <circle cx="26" cy="26" r="3.5" fill="currentColor" stroke="none"/><path d="M26 26 41 15"/>
+                </svg></span>
+                <span class="wm">AI<i>·</i>PM</span>
+            </a>
+            <div class="grp-l">工作区</div>
+            <a href="/chat" class="{% if path.startswith('/chat') %}on{% endif %}">{{ ic.icon('robot') }}AI Chat</a>
+            <a href="/" class="{% if path == '/' %}on{% endif %}">{{ ic.icon('chart') }}总览</a>
+            <a href="/projects" class="{% if path.startswith('/projects') %}on{% endif %}">{{ ic.icon('folder') }}项目</a>
+            <a href="/notes" class="{% if path.startswith('/notes') %}on{% endif %}">{{ ic.icon('doc') }}知识库</a>
+            <a href="/study" class="{% if path.startswith('/study') %}on{% endif %}">{{ ic.icon('file') }}学习</a>
+            <a href="/media" class="{% if path.startswith('/media') %}on{% endif %}">{{ ic.icon('play') }}自媒体</a>
+            <a href="/finance" class="{% if path.startswith('/finance') %}on{% endif %}">{{ ic.icon('dollar') }}财务</a>
+            <div class="foot">
+                <a href="/settings" class="{% if path.startswith('/settings') %}on{% endif %}">{{ ic.icon('gear') }}设置</a>
+                <select onchange="setFontSize(this.value)" title="调整全站字号（看不清就调大）" class="font-size-select">
                     <option value="16">字号·标准</option>
                     <option value="18">字号·大</option>
                     <option value="20">字号·特大</option>
                     <option value="22">字号·超大</option>
                 </select>
-                <a href="/logout" class="text-xs text-gray-400 hover:text-gray-600 ml-2">退出</a>
+                <button class="tgl" onclick="toggleTheme()">{{ ic.icon('sun') }}深/浅色</button>
+                <a href="/logout">退出</a>
             </div>
+        </aside>
 
-            <!-- 移动端汉堡按钮 -->
-            <button id="mob-btn" class="nav-mobile-btn p-2 rounded-lg text-gray-600 hover:bg-gray-100" onclick="var m=document.getElementById('mob-menu');m.style.display=m.style.display==='block'?'none':'block'">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
-                </svg>
-            </button>
-        </div>
-
-        <!-- 移动端下拉菜单 -->
-        <div id="mob-menu" class="hidden md:hidden border-t bg-white">
-            <div class="px-4 py-2 space-y-1 text-sm">
-                <a href="/chat" class="flex items-center gap-3 px-3 py-2.5 rounded-lg {% if path.startswith('/chat') %}bg-purple-50 text-purple-700 font-medium{% else %}text-gray-700 hover:bg-gray-50{% endif %}">💬 AI Chat</a>
-                <a href="/" class="flex items-center gap-3 px-3 py-2.5 rounded-lg {% if path == '/' %}bg-purple-50 text-purple-700 font-medium{% else %}text-gray-700 hover:bg-gray-50{% endif %}">📊 总览</a>
-                <a href="/projects" class="flex items-center gap-3 px-3 py-2.5 rounded-lg {% if path.startswith('/projects') %}bg-purple-50 text-purple-700 font-medium{% else %}text-gray-700 hover:bg-gray-50{% endif %}">📁 项目</a>
-                <a href="/notes" class="flex items-center gap-3 px-3 py-2.5 rounded-lg {% if path.startswith('/notes') %}bg-purple-50 text-purple-700 font-medium{% else %}text-gray-700 hover:bg-gray-50{% endif %}">📚 知识库</a>
-                <a href="/study" class="flex items-center gap-3 px-3 py-2.5 rounded-lg {% if path.startswith('/study') %}bg-purple-50 text-purple-700 font-medium{% else %}text-gray-700 hover:bg-gray-50{% endif %}">🎓 学习</a>
-                <a href="/media" class="flex items-center gap-3 px-3 py-2.5 rounded-lg {% if path.startswith('/media') %}bg-purple-50 text-purple-700 font-medium{% else %}text-gray-700 hover:bg-gray-50{% endif %}">🎬 自媒体</a>
-                <a href="/finance" class="flex items-center gap-3 px-3 py-2.5 rounded-lg {% if path.startswith('/finance') %}bg-purple-50 text-purple-700 font-medium{% else %}text-gray-700 hover:bg-gray-50{% endif %}">💰 财务</a>
-                <a href="/settings" class="flex items-center gap-3 px-3 py-2.5 rounded-lg {% if path.startswith('/settings') %}bg-purple-50 text-purple-700 font-medium{% else %}text-gray-700 hover:bg-gray-50{% endif %}">⚙️ 设置</a>
-                <div class="border-t my-1"></div>
-                <div class="px-3 py-2.5">
-                    <label class="block text-xs text-gray-400 mb-1">🔠 字号（看不清就调大）</label>
-                    <select onchange="setFontSize(this.value)" class="font-size-select w-full border rounded-lg px-3 py-2 text-sm outline-none">
-                        <option value="16">标准</option>
-                        <option value="18">大</option>
-                        <option value="20">特大</option>
-                        <option value="22">超大</option>
-                    </select>
-                </div>
-                <div class="border-t my-1"></div>
-                <a href="/logout" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-400 hover:bg-gray-50">🚪 退出登录</a>
+        <div class="main">
+            <div class="topbar">
+                {% block topbar %}{% endblock %}
+                <span class="tb-spacer" style="flex:1"></span>
+                <span class="search">{{ ic.icon('search') }} 搜索…</span>
             </div>
+            <main class="scroll">
+                {% block content %}{% endblock %}
+            </main>
         </div>
-    </nav>
+    </div>
     <script>
       /* 字号调整：改 html 根字号，整站 rem 等比缩放（文字+间距一起放大，布局不乱） */
       function setFontSize(px){
@@ -154,8 +360,5 @@
           document.querySelectorAll('.font-size-select').forEach(function(s){ s.value = saved; });
       })();
     </script>
-    <main class="max-w-7xl mx-auto px-4 py-4 md:py-6">
-        {% block content %}{% endblock %}
-    </main>
 </body>
 </html>

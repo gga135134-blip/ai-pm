@@ -1,52 +1,54 @@
 {% extends "base.html" %}
+{% import "_icons.html" as ic %}
 {% block title %}回收站 - 知识库{% endblock %}
+{% block topbar %}
+<span class="crumb"><a href="/notes" style="color:inherit;text-decoration:none">知识库</a> / <b>回收站</b></span>
+{% endblock %}
 {% block content %}
-<div class="mb-4 text-sm text-gray-400">
-    <a href="/notes" class="hover:text-gray-600">知识库</a> / <span class="text-gray-600">回收站</span>
-</div>
-
-<div class="flex items-center justify-between mb-4">
+<div class="phead" style="margin-bottom:18px">
     <div>
-        <h1 class="text-2xl font-bold text-gray-800">回收站</h1>
-        <p class="text-sm text-gray-400 mt-1">删除的笔记保留 {{ keep_days }} 天，到期自动清除</p>
+        <span class="pname" style="font-size:20px;display:flex;align-items:center;gap:9px">{{ ic.icon('trash') }}回收站</span>
+        <p style="font-size:12.5px;color:var(--ink-3);margin:5px 0 0">删除的笔记保留 {{ keep_days }} 天，到期自动清除</p>
     </div>
+    <span class="sp"></span>
     {% if trashed %}
     <form method="POST" action="/notes/trash/purge" onsubmit="return confirm('确定清空回收站？{{ trashed|length }} 条笔记将被彻底删除，不可恢复！')">
         <input type="hidden" name="ids" value="">
-        <button class="bg-red-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-red-700 transition">清空回收站</button>
+        <button type="submit" class="btn" style="color:var(--down);border-color:rgba(255,98,87,.35)">{{ ic.icon('trash') }}清空回收站</button>
     </form>
     {% endif %}
 </div>
 
 {% if trashed %}
-<div class="space-y-2">
+<div>
     {% for t in trashed %}
-    <div class="bg-white rounded-lg shadow-sm p-4 flex items-center justify-between gap-3">
-        <div class="flex-1 min-w-0">
-            <h3 class="font-medium text-gray-700 truncate">{{ t.title }}</h3>
-            <div class="flex items-center gap-3 mt-1 text-xs text-gray-400">
-                {% if t.folder %}<span class="bg-yellow-50 text-yellow-700 px-2 py-0.5 rounded">&#128193; {{ t.folder }}</span>{% endif %}
+    <div class="note" style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+        <div style="flex:1;min-width:0">
+            <h3 style="font-size:14px;font-weight:600;color:var(--ink-1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin:0">{{ t.title }}</h3>
+            <div style="display:flex;align-items:center;gap:10px;margin-top:6px;font-size:11.5px;color:var(--ink-3)">
+                {% if t.folder %}<span class="note-folder">{{ ic.icon('folder') }} {{ t.folder }}</span>{% endif %}
                 <span>删除于 {{ t.deleted_at[:16] }}</span>
-                <span class="{% if t.days_left <= 7 %}text-red-500{% endif %}">{{ t.days_left }} 天后自动清除</span>
+                <span {% if t.days_left <= 7 %}style="color:var(--down)"{% endif %}>{{ t.days_left }} 天后自动清除</span>
             </div>
         </div>
-        <div class="flex gap-2 flex-shrink-0">
+        <div style="display:flex;gap:8px;flex-shrink:0">
             <form method="POST" action="/notes/trash/restore">
                 <input type="hidden" name="ids" value="{{ t.id }}">
-                <button class="text-sm px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">还原</button>
+                <button type="submit" class="btn primary" style="padding:6px 12px;font-size:12.5px">{{ ic.icon('check') }}还原</button>
             </form>
             <form method="POST" action="/notes/trash/purge" onsubmit="return confirm('彻底删除「{{ t.title }}」？不可恢复！')">
                 <input type="hidden" name="ids" value="{{ t.id }}">
-                <button class="text-sm px-3 py-1.5 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition">彻底删除</button>
+                <button type="submit" class="btn" style="padding:6px 12px;font-size:12.5px;color:var(--down);border-color:rgba(255,98,87,.35)">{{ ic.icon('trash') }}彻底删除</button>
             </form>
         </div>
     </div>
     {% endfor %}
 </div>
 {% else %}
-<div class="bg-white rounded-lg shadow-sm p-12 text-center">
-    <div class="text-gray-400 text-lg">回收站是空的</div>
-    <a href="/notes" class="text-blue-600 hover:underline text-sm mt-2 inline-block">返回知识库</a>
+<div class="empty" style="padding:56px 12px">
+    {{ ic.icon('trash') }}
+    <p style="margin:10px 0 12px;color:var(--ink-2)">回收站是空的</p>
+    <a href="/notes" style="color:var(--accent)">返回知识库</a>
 </div>
 {% endif %}
 {% endblock %}

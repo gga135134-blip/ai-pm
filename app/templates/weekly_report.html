@@ -1,40 +1,46 @@
 {% extends "base.html" %}
+{% import "_icons.html" as ic %}
 {% block title %}周报 - AI 项目管理{% endblock %}
+{% block topbar %}
+<span class="crumb"><a href="/notes" style="color:inherit;text-decoration:none">知识库</a> {{ ic.icon('chevron') }} <b>AI 周报</b></span>
+{% endblock %}
 {% block content %}
-<div class="mb-4 text-sm text-gray-400">
-    <a href="/notes" class="hover:text-gray-600">知识库</a> / <span class="text-gray-600">AI 周报</span>
+<div class="phead" style="margin-bottom:6px">
+    <span class="pname" style="font-size:22px">AI 自动周报</span>
 </div>
-<h1 class="text-2xl font-bold text-gray-800 mb-6">AI 自动周报</h1>
-<p class="text-sm text-gray-500 mb-6">AI 根据本周的任务、笔记、决策自动生成周报，省得你们开周会</p>
+<p style="font-size:13px;color:var(--ink-3);margin:0 0 18px">AI 根据本周的任务、笔记、决策自动生成周报，省得你们开周会</p>
 
-<div class="max-w-3xl grid gap-6">
-    <div class="bg-white rounded-lg shadow-sm p-6">
-        <form method="POST" action="/notes/weekly" class="flex items-center gap-4">
-            <div>
-                <label class="block text-xs text-gray-500 mb-1">使用模型</label>
-                <select name="model" class="border rounded-lg px-3 py-2 text-sm outline-none">
+<div style="max-width:760px">
+    <div class="module">
+        <div class="inner">
+        <form method="POST" action="/notes/weekly" style="display:flex;align-items:end;gap:14px">
+            <div class="field" style="margin-bottom:0">
+                <label class="label">使用模型</label>
+                <select name="model" class="input">
                     <option value="auto">自动</option>
                     <option value="claude">Claude</option>
                     <option value="openai">OpenAI</option>
                     <option value="deepseek">DeepSeek (便宜)</option>
                 </select>
             </div>
-            <button type="submit" class="bg-violet-600 text-white px-6 py-2 rounded-lg text-sm hover:bg-violet-700 transition mt-4">生成本周周报</button>
+            <button type="submit" class="btn ai">{{ ic.icon('robot') }}生成本周周报</button>
         </form>
+        </div>
     </div>
 
     {% if report %}
-    <div class="bg-white rounded-lg shadow-sm p-6">
-        <div class="flex items-center justify-between mb-4">
-            <h2 class="text-lg font-semibold text-gray-700">周报内容</h2>
-            <div class="text-xs text-gray-400">
-                模型: {{ report.model }} / 费用: ${{ '%.4f' % report.cost }}
-                {% if report.note_id %}
-                | <a href="/notes/{{ report.note_id }}" class="text-blue-500 hover:underline">已保存到知识库</a>
-                {% endif %}
-            </div>
+    <div class="module">
+        <div class="mh">
+            <span class="ic">{{ ic.icon('doc') }}</span><span class="ttl">周报内容</span>
+            <span class="sp"></span>
+            <span class="sub" style="font-family:var(--mono)">
+                模型: {{ report.model }} · 费用: ${{ '%.4f' % report.cost }}
+                {% if report.note_id %} · <a href="/notes/{{ report.note_id }}" style="color:var(--accent)">已保存到知识库</a>{% endif %}
+            </span>
         </div>
-        <div class="text-sm text-gray-700 leading-relaxed" style="white-space:pre-wrap">{{ report.report }}</div>
+        <div class="inner">
+        <div class="card" style="font-size:14px;color:var(--ink-1);line-height:1.85;white-space:pre-wrap;padding:16px 18px">{{ report.report }}</div>
+        </div>
     </div>
     {% endif %}
 </div>

@@ -1,212 +1,236 @@
 {% extends "base.html" %}
+{% import "_icons.html" as ic %}
 {% block title %}设置 - AI 项目管理{% endblock %}
+{% block topbar %}
+<span class="crumb"><b>设置</b></span>
+{% endblock %}
 {% block content %}
-<h1 class="text-2xl font-bold text-gray-800 mb-6">设置</h1>
-<div class="max-w-2xl">
+<style>
+.st-wrap{ max-width:720px; margin:0 auto; }
+.st-msg{ margin-bottom:16px; font-size:13px; border-radius:var(--r-sm); padding:11px 14px; }
+.st-msg.info{ background:var(--accent-soft); color:var(--accent); border:1px solid rgba(47,211,197,.3); }
+.st-msg.ok{ background:rgba(63,203,134,.14); color:var(--up); border:1px solid rgba(63,203,134,.3); }
+.st-msg.err{ background:rgba(255,98,87,.14); color:var(--down); border:1px solid rgba(255,98,87,.3); }
+.st-note{ font-size:11.5px; color:var(--ink-3); margin-top:5px; }
+.st-userlist{ display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px; }
+.st-user{ display:inline-flex; align-items:center; gap:6px; background:var(--panel-2); border:1px solid var(--border); color:var(--ink-2); font-size:12.5px; padding:5px 11px; border-radius:999px; }
+.st-user .rm{ background:none; border:none; color:var(--ink-3); cursor:pointer; font-weight:700; line-height:1; padding:0; margin-left:2px; }
+.st-user .rm:hover{ color:var(--down); }
+.st-sub2{ display:grid; grid-template-columns:repeat(2,1fr); gap:16px; }
+.st-panel{ border:1px solid var(--border); border-radius:var(--r-sm); padding:14px; background:var(--panel-2); }
+.st-panel .ph{ font-size:13px; font-weight:600; color:var(--ink-1); margin-bottom:10px; }
+.st-subhead{ font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-3); font-weight:600; margin:20px 0 10px; padding-top:16px; border-top:1px solid var(--border); }
+.st-subhead:first-child{ margin-top:0; padding-top:0; border-top:0; }
+.st-fbrow{ display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+.st-fbrow .idx{ font-size:12.5px; color:var(--ink-3); width:64px; flex:none; }
+.st-rtrow{ display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+.st-rtrow .rl{ font-size:12.5px; color:var(--ink-2); width:88px; flex:none; }
+.st-table{ width:100%; font-size:12.5px; border-collapse:collapse; }
+.st-table th{ text-align:left; color:var(--ink-3); font-weight:600; padding:0 0 8px; border-bottom:1px solid var(--border); }
+.st-table td{ padding:8px 0; border-bottom:1px solid var(--border); color:var(--ink-2); }
+.st-table tr:last-child td{ border-bottom:0; }
+.st-save-hint{ font-size:11.5px; color:var(--ink-3); margin-left:10px; }
+@media(max-width:767px){ .st-sub2{ grid-template-columns:1fr; } }
+</style>
+<div class="st-wrap">
+
     {% if msg %}
-    <div class="mb-4 bg-blue-50 border border-blue-200 text-blue-700 text-sm rounded-lg px-4 py-3">{{ msg }}</div>
+    <div class="st-msg info">{{ msg }}</div>
     {% endif %}
 
-    <!-- 账号管理 -->
-    <div class="bg-white rounded-lg shadow-sm p-6 mb-6 border-l-4 border-green-500">
-        <h2 class="text-lg font-semibold text-gray-700 mb-1">账号管理</h2>
-        <p class="text-sm text-gray-500 mb-4">当前登录：<strong>{{ request.session.get('user') }}</strong>
-            &nbsp;·&nbsp;<a href="/logout" class="text-red-500 hover:underline text-sm">退出登录</a>
-        </p>
-
-        <!-- 现有用户 -->
-        <div class="mb-4">
-            <p class="text-sm font-medium text-gray-600 mb-2">现有用户</p>
-            <div class="flex flex-wrap gap-2">
+    <!-- ============ 账号信息 / 用户列表（删除各自独立提交） ============ -->
+    <div class="module">
+        <div class="mh">
+            <span class="ic">{{ ic.icon('settings') }}</span>
+            <span class="ttl">账号管理</span>
+            <span class="sub">当前登录：{{ request.session.get('user') }} &middot; <a href="/logout" style="color:var(--down)">退出登录</a></span>
+        </div>
+        <div class="inner">
+            <div class="label" style="margin-bottom:8px">现有用户</div>
+            <div class="st-userlist">
                 {% for u in users %}
-                <form method="POST" action="/settings/users/delete" onsubmit="return confirm('确认删除用户 {{ u }}？')">
+                <form method="POST" action="/settings/users/delete" onsubmit="return confirm('确认删除用户 {{ u }}？')" style="margin:0">
                     <input type="hidden" name="username" value="{{ u }}">
-                    <span class="inline-flex items-center gap-1 bg-gray-100 text-gray-700 text-sm px-3 py-1 rounded-full">
-                        👤 {{ u }}
+                    <span class="st-user">
+                        {{ ic.icon('eye') }} {{ u }}
                         {% if u != request.session.get('user') %}
-                        <button type="submit" class="text-red-400 hover:text-red-600 ml-1 font-bold leading-none">×</button>
+                        <button type="submit" class="rm" title="删除">&times;</button>
                         {% endif %}
                     </span>
                 </form>
                 {% endfor %}
             </div>
-        </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <!-- 添加用户 -->
-            <form method="POST" action="/settings/users/add" class="border rounded-lg p-4">
-                <p class="text-sm font-medium text-gray-700 mb-3">添加新用户</p>
-                <input name="username" placeholder="用户名" required
-                    class="w-full border rounded px-3 py-1.5 text-sm mb-2 focus:ring-2 focus:ring-green-400 outline-none">
-                <input name="password" type="password" placeholder="密码" required
-                    class="w-full border rounded px-3 py-1.5 text-sm mb-2 focus:ring-2 focus:ring-green-400 outline-none">
-                <input name="password2" type="password" placeholder="确认密码" required
-                    class="w-full border rounded px-3 py-1.5 text-sm mb-3 focus:ring-2 focus:ring-green-400 outline-none">
-                <button class="w-full bg-green-600 text-white py-1.5 rounded text-sm hover:bg-green-700 transition">添加</button>
-            </form>
+            <div class="st-sub2">
+                <!-- 添加用户：独立表单，独立提交按钮 -->
+                <form method="POST" action="/settings/users/add" class="st-panel">
+                    <div class="ph">添加新用户</div>
+                    <div class="field">
+                        <input name="username" placeholder="用户名" required class="input">
+                    </div>
+                    <div class="field">
+                        <input name="password" type="password" placeholder="密码" required class="input">
+                    </div>
+                    <div class="field" style="margin-bottom:12px">
+                        <input name="password2" type="password" placeholder="确认密码" required class="input">
+                    </div>
+                    <button type="submit" class="btn primary" style="width:100%;justify-content:center">{{ ic.icon('plus') }}添加用户</button>
+                </form>
 
-            <!-- 修改密码 -->
-            <form method="POST" action="/settings/users/change-password" class="border rounded-lg p-4">
-                <p class="text-sm font-medium text-gray-700 mb-3">修改密码</p>
-                <select name="username" class="w-full border rounded px-3 py-1.5 text-sm mb-2 focus:ring-2 focus:ring-blue-400 outline-none">
-                    {% for u in users %}<option value="{{ u }}">{{ u }}</option>{% endfor %}
-                </select>
-                <input name="old_password" type="password" placeholder="原密码" required
-                    class="w-full border rounded px-3 py-1.5 text-sm mb-2 focus:ring-2 focus:ring-blue-400 outline-none">
-                <input name="new_password" type="password" placeholder="新密码" required
-                    class="w-full border rounded px-3 py-1.5 text-sm mb-2 focus:ring-2 focus:ring-blue-400 outline-none">
-                <input name="new_password2" type="password" placeholder="确认新密码" required
-                    class="w-full border rounded px-3 py-1.5 text-sm mb-3 focus:ring-2 focus:ring-blue-400 outline-none">
-                <button class="w-full bg-blue-600 text-white py-1.5 rounded text-sm hover:bg-blue-700 transition">修改</button>
-            </form>
+                <!-- 修改密码：独立表单，独立提交按钮，不受下方"保存设置"影响 -->
+                <form method="POST" action="/settings/users/change-password" class="st-panel">
+                    <div class="ph">修改密码</div>
+                    <div class="field">
+                        <select name="username" class="input">
+                            {% for u in users %}<option value="{{ u }}">{{ u }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div class="field">
+                        <input name="old_password" type="password" placeholder="原密码" required class="input">
+                    </div>
+                    <div class="field">
+                        <input name="new_password" type="password" placeholder="新密码" required class="input">
+                    </div>
+                    <div class="field" style="margin-bottom:12px">
+                        <input name="new_password2" type="password" placeholder="确认新密码" required class="input">
+                    </div>
+                    <button type="submit" class="btn primary" style="width:100%;justify-content:center">{{ ic.icon('check') }}修改密码</button>
+                </form>
+            </div>
         </div>
     </div>
 
     {% set test_status = request.query_params.get('notify_test') %}
     {% if test_status == 'ok' %}
-    <div class="mb-4 bg-green-50 border border-green-200 text-green-700 text-sm rounded-lg px-4 py-3">
-        ✅ 测试通知已发送（渠道: {{ request.query_params.get('detail') }}），去手机上看看收到没有
-    </div>
+    <div class="st-msg ok">{{ ic.icon('check') }} 测试通知已发送（渠道: {{ request.query_params.get('detail') }}），去手机上看看收到没有</div>
     {% elif test_status == 'fail' %}
-    <div class="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3">
-        ❌ 通知发送失败：{{ request.query_params.get('detail') }}
-    </div>
+    <div class="st-msg err">{{ ic.icon('x') }} 通知发送失败：{{ request.query_params.get('detail') }}</div>
     {% endif %}
-    <form method="POST" action="/settings/test-notify" class="mb-4">
-        <button class="text-sm px-4 py-2 border border-blue-200 text-blue-600 rounded-lg hover:bg-blue-50 transition">📨 发送测试通知</button>
-        <span class="text-xs text-gray-400 ml-2">先保存下面的配置，再点这里测试</span>
+
+    <!-- ============ 公司运作手册（独立表单，独立提交） ============ -->
+    <form method="POST" action="/settings/manual" class="module">
+        <div class="mh">
+            <span class="ic">{{ ic.icon('doc') }}</span>
+            <span class="ttl">公司运作手册（AI 宪法）</span>
+        </div>
+        <div class="inner">
+            <p class="st-note" style="margin:0 0 10px">这份手册会自动注入到<strong style="color:var(--ink-1)">每一个 AI</strong>（总 AI、拆解、执行、审核）的认知里，让它们一进来就懂公司怎么运作。改这里 = 改所有 AI 的行为准则。支持 Markdown。</p>
+            <textarea name="company_manual" rows="16" class="input" style="width:100%;font-family:var(--mono);tab-size:2">{{ config.company_manual }}</textarea>
+            <button type="submit" class="btn primary" style="margin-top:12px">{{ ic.icon('check') }}保存手册</button>
+        </div>
     </form>
 
-    <!-- 公司宪法 / 运作手册 -->
-    <form method="POST" action="/settings/manual" class="bg-white rounded-lg shadow-sm p-6 mb-6 border-l-4 border-purple-500">
-        <h2 class="text-lg font-semibold text-gray-700 mb-1">公司运作手册（AI 宪法）</h2>
-        <p class="text-sm text-gray-500 mb-4">这份手册会自动注入到<strong>每一个 AI</strong>（总 AI、拆解、执行、审核）的认知里，让它们一进来就懂公司怎么运作。改这里 = 改所有 AI 的行为准则。支持 Markdown。</p>
-        <textarea name="company_manual" rows="20"
-            class="w-full border rounded-lg px-3 py-2 text-sm font-mono leading-relaxed focus:ring-2 focus:ring-violet-500 outline-none" style="tab-size:2">{{ config.company_manual }}</textarea>
-        <button type="submit" class="mt-3 bg-violet-600 text-white px-6 py-2 rounded-lg text-sm hover:bg-violet-700 transition">保存手册</button>
-    </form>
-    <form method="POST" action="/settings" class="space-y-6">
-        <!-- API Keys -->
-        <div class="bg-white rounded-lg shadow-sm p-6">
-            <h2 class="text-lg font-semibold text-gray-700 mb-4">AI 模型配置</h2>
-            <div class="space-y-4">
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Anthropic API Key (Claude)</label>
-                    <input type="password" name="anthropic_api_key" value="{{ config.anthropic_api_key }}" placeholder="sk-ant-..."
-                        class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">OpenAI API Key</label>
-                    <input type="password" name="openai_api_key" value="{{ config.openai_api_key }}" placeholder="sk-..."
-                        class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">DeepSeek API Key</label>
-                    <input type="password" name="deepseek_api_key" value="{{ config.deepseek_api_key }}" placeholder="sk-..."
-                        class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
-                    <p class="text-xs text-gray-400 mt-1">从 platform.deepseek.com 获取</p>
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">通义千问 API Key（阿里云百炼）</label>
-                    <input type="password" name="qwen_api_key" value="{{ config.qwen_api_key }}" placeholder="sk-..."
-                        class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
-                    <p class="text-xs text-gray-400 mt-1">从 bailian.console.aliyun.com 获取，文字用 qwen-plus，识图自动用 qwen-vl</p>
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">默认模型</label>
-                    <select name="default_ai_model" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
-                        {% for val, label in [('claude', 'Claude Sonnet'), ('openai', 'GPT-4o'), ('deepseek', 'DeepSeek V3'), ('qwen', '通义千问 Plus')] %}
-                        <option value="{{ val }}" {{ 'selected' if config.default_ai_model == val }}>{{ label }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-            </div>
+    <!-- ============ 主设置：API Keys / 备用策略 / 路由 / 通知（同一表单，同一 POST /settings） ============ -->
+    <form method="POST" action="/settings" class="module">
+        <div class="mh">
+            <span class="ic">{{ ic.icon('gear') }}</span>
+            <span class="ttl">主设置</span>
+            <span class="sub">AI 模型配置 · 备用策略 · 路由规则 · 通知渠道 — 下方一个按钮统一保存</span>
         </div>
-
-        <!-- 备用模型策略 -->
-        <div class="bg-white rounded-lg shadow-sm p-6">
-            <h2 class="text-lg font-semibold text-gray-700 mb-2">备用模型策略</h2>
-            <p class="text-sm text-gray-500 mb-4">主模型不可用时，按以下顺序自动切换备用模型</p>
-            <div class="space-y-3">
-                {% set all_models = ['claude', 'openai', 'deepseek', 'qwen'] %}
-                {% set fallback = config.fallback_order or all_models %}
-                {% for i in range(4) %}
-                <div class="flex items-center gap-3">
-                    <span class="text-sm text-gray-500 w-16">第 {{ i + 1 }} 优先</span>
-                    <select name="fallback_{{ i + 1 }}" class="flex-1 border rounded-lg px-3 py-2 text-sm outline-none">
-                        {% for val, label in [('claude', 'Claude Sonnet'), ('openai', 'GPT-4o'), ('deepseek', 'DeepSeek V3'), ('qwen', '通义千问 Plus')] %}
-                        <option value="{{ val }}" {{ 'selected' if (fallback[i] if i < fallback|length else all_models[i]) == val }}>{{ label }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                {% endfor %}
+        <div class="inner">
+            <!-- API Keys -->
+            <div class="st-subhead">AI 模型配置</div>
+            <div class="field">
+                <label class="label">Anthropic API Key (Claude)</label>
+                <input type="password" name="anthropic_api_key" value="{{ config.anthropic_api_key }}" placeholder="sk-ant-..." class="input">
             </div>
-        </div>
-
-        <!-- AI 路由规则 -->
-        <div class="bg-white rounded-lg shadow-sm p-6">
-            <h2 class="text-lg font-semibold text-gray-700 mb-2">AI 路由规则</h2>
-            <p class="text-sm text-gray-500 mb-4">按任务类型自动选择模型（"自动"使用默认模型）</p>
-            <div class="space-y-3">
-                {% for rule_name, rule_label in [('code', '代码/编程'), ('writing', '文案/写作'), ('analysis', '分析/研究'), ('review', '审核/质检')] %}
-                <div class="flex items-center gap-3">
-                    <span class="text-sm text-gray-600 w-24">{{ rule_label }}</span>
-                    <select name="route_{{ rule_name }}" class="flex-1 border rounded-lg px-3 py-2 text-sm outline-none">
-                        {% for val, label in [('auto', '自动'), ('claude', 'Claude'), ('openai', 'GPT-4o'), ('deepseek', 'DeepSeek'), ('qwen', '通义千问')] %}
-                        <option value="{{ val }}" {{ 'selected' if config.routes.get(rule_name) == val }}>{{ label }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                {% endfor %}
+            <div class="field">
+                <label class="label">OpenAI API Key</label>
+                <input type="password" name="openai_api_key" value="{{ config.openai_api_key }}" placeholder="sk-..." class="input">
             </div>
-        </div>
+            <div class="field">
+                <label class="label">DeepSeek API Key</label>
+                <input type="password" name="deepseek_api_key" value="{{ config.deepseek_api_key }}" placeholder="sk-..." class="input">
+                <p class="st-note">从 platform.deepseek.com 获取</p>
+            </div>
+            <div class="field">
+                <label class="label">通义千问 API Key（阿里云百炼）</label>
+                <input type="password" name="qwen_api_key" value="{{ config.qwen_api_key }}" placeholder="sk-..." class="input">
+                <p class="st-note">从 bailian.console.aliyun.com 获取，文字用 qwen-plus，识图自动用 qwen-vl</p>
+            </div>
+            <div class="field" style="margin-bottom:0">
+                <label class="label">默认模型</label>
+                <select name="default_ai_model" class="input">
+                    {% for val, label in [('claude', 'Claude Sonnet'), ('openai', 'GPT-4o'), ('deepseek', 'DeepSeek V3'), ('qwen', '通义千问 Plus')] %}
+                    <option value="{{ val }}" {{ 'selected' if config.default_ai_model == val }}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
 
-        <!-- 费用参考 -->
-        <div class="bg-white rounded-lg shadow-sm p-6">
-            <h2 class="text-lg font-semibold text-gray-700 mb-4">模型费用参考</h2>
-            <table class="w-full text-sm">
+            <!-- 备用模型策略 -->
+            <div class="st-subhead">备用模型策略</div>
+            <p class="st-note" style="margin:-4px 0 12px">主模型不可用时，按以下顺序自动切换备用模型</p>
+            {% set all_models = ['claude', 'openai', 'deepseek', 'qwen'] %}
+            {% set fallback = config.fallback_order or all_models %}
+            {% for i in range(4) %}
+            <div class="st-fbrow">
+                <span class="idx">第 {{ i + 1 }} 优先</span>
+                <select name="fallback_{{ i + 1 }}" class="input" style="flex:1">
+                    {% for val, label in [('claude', 'Claude Sonnet'), ('openai', 'GPT-4o'), ('deepseek', 'DeepSeek V3'), ('qwen', '通义千问 Plus')] %}
+                    <option value="{{ val }}" {{ 'selected' if (fallback[i] if i < fallback|length else all_models[i]) == val }}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endfor %}
+
+            <!-- AI 路由规则 -->
+            <div class="st-subhead">AI 路由规则</div>
+            <p class="st-note" style="margin:-4px 0 12px">按任务类型自动选择模型（"自动"使用默认模型）</p>
+            {% for rule_name, rule_label in [('code', '代码/编程'), ('writing', '文案/写作'), ('analysis', '分析/研究'), ('review', '审核/质检')] %}
+            <div class="st-rtrow">
+                <span class="rl">{{ rule_label }}</span>
+                <select name="route_{{ rule_name }}" class="input" style="flex:1">
+                    {% for val, label in [('auto', '自动'), ('claude', 'Claude'), ('openai', 'GPT-4o'), ('deepseek', 'DeepSeek'), ('qwen', '通义千问')] %}
+                    <option value="{{ val }}" {{ 'selected' if config.routes.get(rule_name) == val }}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endfor %}
+
+            <!-- 费用参考（信息展示，非表单字段） -->
+            <div class="st-subhead">模型费用参考</div>
+            <table class="st-table">
                 <thead>
-                    <tr class="text-left text-gray-500 border-b">
-                        <th class="pb-2">模型</th>
-                        <th class="pb-2">输入 ($/1M tokens)</th>
-                        <th class="pb-2">输出 ($/1M tokens)</th>
-                    </tr>
+                    <tr><th>模型</th><th>输入 ($/1M tokens)</th><th>输出 ($/1M tokens)</th></tr>
                 </thead>
-                <tbody class="text-gray-700">
-                    <tr class="border-b"><td class="py-2">Claude Sonnet</td><td>$3.00</td><td>$15.00</td></tr>
-                    <tr class="border-b"><td class="py-2">GPT-4o</td><td>$5.00</td><td>$15.00</td></tr>
-                    <tr class="border-b"><td class="py-2">DeepSeek V3</td><td>$0.14</td><td>$0.28</td></tr>
-                    <tr class="border-b"><td class="py-2">通义千问 Plus</td><td>$0.11</td><td>$0.28</td></tr>
-                    <tr><td class="py-2">通义千问 VL（识图）</td><td>$0.21</td><td>$0.62</td></tr>
+                <tbody>
+                    <tr><td>Claude Sonnet</td><td>$3.00</td><td>$15.00</td></tr>
+                    <tr><td>GPT-4o</td><td>$5.00</td><td>$15.00</td></tr>
+                    <tr><td>DeepSeek V3</td><td>$0.14</td><td>$0.28</td></tr>
+                    <tr><td>通义千问 Plus</td><td>$0.11</td><td>$0.28</td></tr>
+                    <tr><td>通义千问 VL（识图）</td><td>$0.21</td><td>$0.62</td></tr>
                 </tbody>
             </table>
-        </div>
 
-        <!-- 通知 -->
-        <div class="bg-white rounded-lg shadow-sm p-6">
-            <h2 class="text-lg font-semibold text-gray-700 mb-4">通知配置</h2>
-            <div class="space-y-4">
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Server酱 SendKey</label>
-                    <input type="text" name="serverchan_key" value="{{ config.serverchan_key }}" placeholder="SCT..."
-                        class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
-                    <p class="text-xs text-gray-400 mt-1">用于微信推送通知，从 sct.ftqq.com 获取</p>
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">PushPlus Token</label>
-                    <input type="text" name="pushplus_token" value="{{ config.pushplus_token }}" placeholder=""
-                        class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">飞书机器人 Webhook</label>
-                    <input type="text" name="feishu_webhook" value="{{ config.feishu_webhook }}" placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/..."
-                        class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
-                    <p class="text-xs text-gray-400 mt-1">飞书群 → 设置 → 群机器人 → 添加"自定义机器人"，复制 Webhook 地址。多渠道都配置时按 Server酱 → PushPlus → 飞书 顺序尝试</p>
-                </div>
+            <!-- 通知配置 -->
+            <div class="st-subhead">通知配置</div>
+            <div class="field">
+                <label class="label">Server酱 SendKey</label>
+                <input type="text" name="serverchan_key" value="{{ config.serverchan_key }}" placeholder="SCT..." class="input">
+                <p class="st-note">用于微信推送通知，从 sct.ftqq.com 获取</p>
+            </div>
+            <div class="field">
+                <label class="label">PushPlus Token</label>
+                <input type="text" name="pushplus_token" value="{{ config.pushplus_token }}" placeholder="" class="input">
+            </div>
+            <div class="field" style="margin-bottom:14px">
+                <label class="label">飞书机器人 Webhook</label>
+                <input type="text" name="feishu_webhook" value="{{ config.feishu_webhook }}" placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/..." class="input">
+                <p class="st-note">飞书群 → 设置 → 群机器人 → 添加"自定义机器人"，复制 Webhook 地址。多渠道都配置时按 Server酱 → PushPlus → 飞书 顺序尝试</p>
+            </div>
+
+            <div style="display:flex;align-items:center;padding-top:6px">
+                <button type="submit" class="btn primary">{{ ic.icon('check') }}保存主设置</button>
+                <span class="st-save-hint">仅保存本面板内（API/备用/路由/通知）字段，不影响上方密码与用户管理</span>
             </div>
         </div>
-
-        <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded-lg text-sm hover:bg-blue-700 transition">保存设置</button>
     </form>
+
+    <!-- ============ 发送测试通知：独立表单，独立提交，与主设置无关 ============ -->
+    <form method="POST" action="/settings/test-notify">
+        <button class="btn">{{ ic.icon('bell') }}发送测试通知</button>
+        <span class="st-save-hint">先保存上方「主设置」里的通知配置，再点这里测试</span>
+    </form>
+
 </div>
 {% endblock %}

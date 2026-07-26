@@ -1,82 +1,134 @@
 {% extends "base.html" %}
+{% import "_icons.html" as ic %}
 {% block title %}知识库 - AI 项目管理{% endblock %}
+{% block topbar %}
+<span class="crumb"><b>知识库</b></span>
+{% endblock %}
 {% block content %}
 <style>
-.notes-layout { display:flex; gap:24px; }
-.notes-sidebar { width:192px; flex-shrink:0; }
-.notes-sidebar-toggle { display:none; }
-.nb-ddmenu { display:none; position:absolute; top:calc(100% + 4px); left:0; z-index:50;
-    background:#fff; border:1px solid #e5e7eb; border-radius:8px;
-    box-shadow:0 4px 16px rgba(0,0,0,.12); min-width:180px; overflow:hidden; }
-.nb-ddmenu.open { display:block; }
-@media (max-width:767px) {
-    .notes-layout { flex-direction:column; gap:0; }
-    .notes-sidebar { width:100%; margin-bottom:12px; }
-    .notes-sidebar-toggle { display:flex; align-items:center; justify-content:space-between;
-        padding:10px 12px; background:#f9fafb; border:1px solid #e5e7eb; border-radius:8px;
-        font-size:14px; font-weight:500; color:#374151; cursor:pointer; margin-bottom:8px; }
-    .notes-sidebar-inner { display:none; }
-    .notes-sidebar-inner.open { display:block; }
+/* ---- header dropdown (same pattern as project_detail.html) ---- */
+.ddmenu{display:none;position:absolute;left:0;top:calc(100% + 4px);z-index:50;background:var(--bg);border:1px solid var(--border);border-radius:var(--r-sm);box-shadow:var(--shadow-lg);min-width:220px;overflow:hidden}
+.ddmenu.right{left:auto;right:0}
+.ddmenu.open{display:block}
+.ddmenu a, .ddmenu button{display:block;width:100%;text-align:left;color:var(--ink-1);font-size:13px;padding:9px 14px;background:none;border:none;cursor:pointer;font-family:var(--sans);text-decoration:none}
+.ddmenu a:hover, .ddmenu button:hover{background:var(--panel-2)}
+.ddmenu .sect{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);padding:9px 14px 4px;font-weight:600}
+.ddmenu .div{border-top:1px solid var(--border);margin:4px 0}
+.ddmenu button.ai, .ddmenu a.ai{color:var(--ai)}
+
+/* ---- IMA status bar ---- */
+#ima-status-bar{display:none;align-items:center;gap:12px;background:var(--accent-soft);border:1px solid var(--border);border-radius:var(--r-sm);padding:9px 14px;margin-bottom:14px;font-size:13px;color:var(--ink-1)}
+#ima-status-bar.show{display:flex}
+#ima-status-bar .x{margin-left:auto;color:var(--ink-3);background:none;border:none;cursor:pointer;font-size:16px;line-height:1}
+
+/* ---- folder row hover ops ---- */
+.frow{position:relative}
+.frow .fops{display:none;align-items:center;gap:2px;margin-left:auto}
+.frow:hover .fops{display:flex}
+.frow:hover .fc{display:none}
+.frow .iconbtn{width:22px;height:22px;border-radius:6px}
+.frow .iconbtn .icon{font-size:12.5px}
+
+/* ---- note expand preview ---- */
+.note-prev{display:none;margin-top:11px;padding-top:11px;border-top:1px solid var(--border)}
+.note-prev.open{display:block}
+.note-prev p{font-size:13px;color:var(--ink-2);line-height:1.7;white-space:pre-wrap}
+.note-prev a{font-size:12px;color:var(--accent);text-decoration:none;margin-top:8px;display:inline-block}
+.note-h{cursor:pointer}
+.note-h .chev{color:var(--ink-3);transition:transform .12s;margin-left:auto}
+.note-h .chev.open{transform:rotate(90deg);color:var(--accent)}
+.note-acts .iconbtn.on{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
+
+/* ---- batch bar ---- */
+.batch-bar{display:none;align-items:center;justify-content:space-between;gap:10px;background:var(--panel-2);border:1px solid var(--accent);border-radius:var(--r-sm);padding:9px 14px;margin-bottom:14px;position:sticky;top:8px;z-index:10}
+.batch-bar.show{display:flex}
+.batch-bar .cnt{font-size:13px;color:var(--ink-1)}
+.batch-bar .cnt b{color:var(--accent)}
+.batch-bar .acts{display:flex;gap:6px;flex-wrap:wrap}
+
+/* ---- filter chips ---- */
+.filt-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:14px;font-size:12.5px;color:var(--ink-3)}
+
+/* ---- tag list toggle ---- */
+.tag-toggle{font-size:11.5px;color:var(--accent);background:none;border:none;cursor:pointer;padding:5px 9px}
+
+/* 移动端侧栏折叠：桌面不显示这个按钮 */
+.kb-side-toggle{ display:none; }
+@media (max-width:900px){
+    .kb-side-toggle{ display:flex; align-items:center; gap:9px; width:100%;
+        background:var(--panel-2); color:var(--ink-1); border:1px solid var(--border);
+        border-radius:var(--r-sm); padding:11px 12px; font-size:14px; font-weight:500;
+        font-family:var(--sans); cursor:pointer; min-height:44px; }
+    .kb-side-toggle .kb-side-arrow{ margin-left:auto; display:inline-flex; transform:rotate(90deg); transition:transform .15s; }
+    .kb-side.collapsed .kb-side-arrow{ transform:rotate(0deg); }
+    .kb-side.collapsed #kb-side-body{ display:none; }
+    .kb-side-toggle + #kb-side-body{ margin-top:12px; }
+}
+@media (max-width:767px){
+  .kb-list{margin-top:14px}
+  .note-body-col{padding-right:0 !important}
+  .note-acts{position:static;opacity:1;justify-content:flex-end;margin-top:10px}
 }
 </style>
 
-<!-- 顶部操作栏 -->
-<div class="flex items-center justify-between mb-4">
-    <h1 class="text-xl font-bold text-gray-800">知识库</h1>
-    <div class="flex items-center gap-2">
-        <!-- 主 CTA -->
-        <a href="/notes/new{% if current_folder %}?folder={{ current_folder }}{% endif %}"
-            class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 transition">+ 新建</a>
+<!-- ===== 顶部操作栏 ===== -->
+<div class="phead" style="margin-bottom:14px">
+    <span class="pname" style="font-size:22px">知识库</span>
+    <span class="sp"></span>
 
-        <!-- 导入 ▾ -->
-        <div class="relative" id="nb-import-wrap">
-            <button onclick="event.stopPropagation();document.getElementById('nb-import-menu').classList.toggle('open')"
-                class="px-4 py-2 border rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition">导入 ▾</button>
-            <div class="nb-ddmenu" id="nb-import-menu">
-                <a href="/notes/import" class="block px-4 py-3 text-sm text-gray-700 hover:bg-gray-50">📄 上传 / 导入文件</a>
-                <div class="border-t border-gray-100"></div>
-                <a href="/notes/ima/browse" class="block px-4 py-3 text-sm text-gray-700 hover:bg-gray-50">🔗 IMA 知识库</a>
-                <div class="border-t border-gray-100"></div>
-                <button onclick="imaSync();document.getElementById('nb-import-menu').classList.remove('open')"
-                    class="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50">↓ IMA 一键同步</button>
-            </div>
+    <!-- + 新建 ▾ -->
+    <div style="position:relative">
+        <button onclick="event.stopPropagation();document.getElementById('nb-new-menu').classList.toggle('open')" class="btn primary">{{ ic.icon('plus') }}新建 {{ ic.icon('chevron') }}</button>
+        <div class="ddmenu" id="nb-new-menu">
+            <a href="/notes/new{% if current_folder %}?folder={{ current_folder }}{% endif %}">{{ ic.icon('file') }}新建笔记</a>
+            <div class="div"></div>
+            <div class="sect">AI</div>
+            <a href="/notes/classify" class="ai">{{ ic.icon('tag') }}AI 分类（粘贴归档）</a>
+            <a href="/notes/organize" class="ai">{{ ic.icon('folder') }}AI 智能整理（归类成文件夹）</a>
+            <a href="/notes/chat" class="ai">{{ ic.icon('robot') }}AI 助手（问答）</a>
+            <form method="POST" action="/notes/summarize">
+                <input type="hidden" name="tag" value="{{ current_tag }}">
+                <button type="submit" class="ai">{{ ic.icon('doc') }}AI 总结当前视图（汇总成一篇）</button>
+            </form>
         </div>
+    </div>
 
-        <!-- AI ▾ -->
-        <div class="relative" id="nb-ai-wrap">
-            <button onclick="event.stopPropagation();document.getElementById('nb-ai-menu').classList.toggle('open')"
-                class="px-4 py-2 border rounded-lg text-sm text-violet-600 hover:bg-violet-50 transition">🤖 AI ▾</button>
-            <div class="nb-ddmenu" id="nb-ai-menu">
-                <a href="/notes/organize" class="block px-4 py-3 text-sm text-violet-700 font-medium hover:bg-violet-50">🗂️ AI 智能整理（归类成文件夹）</a>
-                <div class="border-t border-gray-100"></div>
-                <a href="/notes/chat" class="block px-4 py-3 text-sm text-gray-700 hover:bg-gray-50">💬 AI 助手（问答）</a>
-                <a href="/notes/classify" class="block px-4 py-3 text-sm text-gray-700 hover:bg-gray-50">🏷️ AI 分类（粘贴归档）</a>
-                <div class="border-t border-gray-100"></div>
-                <form method="POST" action="/notes/summarize">
-                    <input type="hidden" name="tag" value="{{ current_tag }}">
-                    <button class="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50">📝 AI 总结当前视图（汇总成一篇）</button>
-                </form>
-                <div class="border-t border-gray-100"></div>
-                <a href="/notes/weekly" class="block px-4 py-3 text-sm text-gray-700 hover:bg-gray-50">📰 生成周报</a>
-            </div>
+    <!-- 导入 ▾ -->
+    <div style="position:relative">
+        <button onclick="event.stopPropagation();document.getElementById('nb-import-menu').classList.toggle('open')" class="btn">{{ ic.icon('arrow-down') }}导入 {{ ic.icon('chevron') }}</button>
+        <div class="ddmenu" id="nb-import-menu">
+            <a href="/notes/import">{{ ic.icon('file') }}上传 / 导入文件</a>
+            <div class="div"></div>
+            <a href="/notes/ima/browse">{{ ic.icon('satellite') }}IMA 知识库</a>
+            <button type="button" onclick="imaSync();document.getElementById('nb-import-menu').classList.remove('open')">{{ ic.icon('arrow-down') }}IMA 一键同步</button>
         </div>
+    </div>
 
-        <!-- 次级链接 -->
-        <a href="/notes/trash" class="text-sm text-gray-400 hover:text-gray-600 transition px-1">回收站</a>
-        <a href="/backups" class="text-sm text-gray-400 hover:text-gray-600 transition px-1">备份</a>
+    <!-- ⋯ 更多 ▾ -->
+    <div style="position:relative">
+        <button onclick="event.stopPropagation();document.getElementById('nb-more-menu').classList.toggle('open')" class="btn ghost">{{ ic.icon('dots') }}更多</button>
+        <div class="ddmenu right" id="nb-more-menu">
+            <a href="/notes/weekly">{{ ic.icon('doc') }}生成周报</a>
+            <a href="/notes/trash">{{ ic.icon('trash') }}回收站</a>
+            <a href="/backups">{{ ic.icon('copy') }}备份</a>
+            <div class="div"></div>
+            <div class="sect">IMA</div>
+            <button type="button" onclick="imaTest();document.getElementById('nb-more-menu').classList.remove('open')">{{ ic.icon('satellite') }}IMA 连接测试</button>
+        </div>
     </div>
 </div>
 <script>
 document.addEventListener('click', function() {
+    document.getElementById('nb-new-menu').classList.remove('open');
     document.getElementById('nb-import-menu').classList.remove('open');
-    document.getElementById('nb-ai-menu').classList.remove('open');
+    document.getElementById('nb-more-menu').classList.remove('open');
 });
 </script>
 
 <!-- IMA 同步状态（折叠，只在同步中/出错时显示） -->
-<div id="ima-status-bar" class="hidden bg-blue-50 border border-blue-200 rounded-lg px-4 py-2 mb-3 flex items-center gap-3">
-    <span id="ima-msg" class="text-sm text-blue-700 flex-1"></span>
-    <button onclick="document.getElementById('ima-status-bar').classList.add('hidden')" class="text-xs text-gray-400 hover:text-gray-600">×</button>
+<div id="ima-status-bar">
+    <span id="ima-msg" style="flex:1"></span>
+    <button onclick="document.getElementById('ima-status-bar').classList.remove('show')" class="x">{{ ic.icon('x') }}</button>
 </div>
 <script>
 function _imaMsg(text, color) {
@@ -84,72 +136,65 @@ function _imaMsg(text, color) {
     var el = document.getElementById('ima-msg');
     el.textContent = text;
     el.style.color = color || '';
-    bar.classList.remove('hidden');
+    bar.classList.add('show');
 }
 async function imaTest() {
-    _imaMsg('正在测试连接…', '#1d4ed8');
+    _imaMsg('正在测试连接…', 'var(--ink-1)');
     try {
         var r = await fetch('/notes/ima/test', {method:'POST', credentials:'same-origin'});
         var d = JSON.parse(await r.text());
-        _imaMsg(d.result || '完成', d.result && d.result.startsWith('✅') ? '#15803d' : '#b91c1c');
-    } catch(e) { _imaMsg('❌ 请求失败：' + e, '#b91c1c'); }
+        _imaMsg(d.result || '完成', d.result && d.result.startsWith('✅') ? 'var(--up)' : 'var(--down)');
+    } catch(e) { _imaMsg('❌ 请求失败：' + e, 'var(--down)'); }
 }
 async function imaSync() {
-    _imaMsg('正在连接 IMA，请稍候…', '#1d4ed8');
+    _imaMsg('正在连接 IMA，请稍候…', 'var(--ink-1)');
     try {
         var r = await fetch('/notes/ima/sync', {method:'POST', credentials:'same-origin'});
         var d = JSON.parse(await r.text());
-        _imaMsg(d.msg || '完成', d.ok ? '#15803d' : '#b91c1c');
+        _imaMsg(d.msg || '完成', d.ok ? 'var(--up)' : 'var(--down)');
         if (d.ok) setTimeout(function(){ location.reload(); }, 2500);
-    } catch(e) { _imaMsg('❌ 请求失败：' + e, '#b91c1c'); }
+    } catch(e) { _imaMsg('❌ 请求失败：' + e, 'var(--down)'); }
 }
 </script>
 
-<div class="notes-layout">
-    <!-- 侧边栏：标签 + 筛选 -->
-    <div class="notes-sidebar">
-        <div class="notes-sidebar-toggle" onclick="var el=document.getElementById('nb-sidebar');el.classList.toggle('open');this.querySelector('.nb-arrow').textContent=el.classList.contains('open')?'▲':'▼'">
-            <span>📁 文件夹 / 搜索</span><span class="nb-arrow">▼</span>
-        </div>
-        <div id="nb-sidebar" class="notes-sidebar-inner">
-        <!-- 搜索 -->
-        <form method="GET" action="/notes" class="mb-4">
-            <input type="text" name="q" value="{{ current_q }}" placeholder="搜索笔记..."
-                class="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500">
+<div class="kb">
+    <!-- ===== 侧栏：搜索 + 文件夹 / 项目 / 标签 三级层级 ===== -->
+    <div class="kb-side" id="kb-side">
+        <!-- 移动端：折叠/展开侧栏（桌面隐藏） -->
+        <button type="button" class="kb-side-toggle" onclick="toggleSide()" aria-expanded="true" aria-controls="kb-side-body">
+            {{ ic.icon('folder') }}<span>文件夹 / 项目 / 标签</span>
+            <span class="kb-side-arrow">{{ ic.icon('chevron') }}</span>
+        </button>
+        <div id="kb-side-body">
+        <form method="GET" action="/notes" class="kb-search">
+            {{ ic.icon('search') }}
+            <input type="text" name="q" value="{{ current_q }}" placeholder="搜索笔记…"
+                style="flex:1;background:transparent;border:none;outline:none;color:var(--ink-1);font-size:12.5px;font-family:var(--sans)">
         </form>
 
         <!-- 文件夹 -->
-        <style>
-        .frow .fops { display: none; }
-        .frow:hover .fops { display: flex; }
-        .frow:hover .fcnt { display: none; }
-        </style>
-        <div class="mb-4">
-            <div class="flex items-center justify-between mb-2">
-                <h3 class="text-xs font-semibold text-gray-500 uppercase">文件夹</h3>
-                <button onclick="createFolder()" class="text-xs text-blue-600 hover:underline">+ 新建</button>
-            </div>
-            <a href="/notes" class="block text-sm py-1.5 px-2 rounded font-semibold {% if not current_folder %}bg-blue-50 text-blue-700{% else %}text-gray-700 hover:bg-gray-100{% endif %}">&#128193; 全部</a>
+        <div class="kb-grp">
+            <div class="gh"><span>文件夹</span><span class="add" onclick="createFolder()" title="新建文件夹">{{ ic.icon('plus') }}</span></div>
+            <a href="/notes" class="frow {% if not current_folder %}on{% endif %}" style="text-decoration:none">
+                {{ ic.icon('folder') }}<span>全部</span>
+            </a>
             {% for f, cnt in folder_counts %}
             {% set depth = f.count('/') %}
-            <div class="frow flex items-center text-sm rounded {% if current_folder == f %}bg-blue-50{% else %}hover:bg-gray-100{% endif %}"
-                 style="margin-left: {{ depth * 16 }}px;{% if depth > 0 %} border-left: 1.5px solid #e5e7eb;{% endif %}">
-                <a href="/notes?folder={{ f }}" title="{{ f }}"
-                   class="flex-1 truncate py-1.5 pl-2 {% if current_folder == f %}text-blue-700 font-semibold{% elif depth == 0 %}font-semibold text-gray-700{% else %}text-xs text-gray-500{% endif %}">
-                    {% if depth == 0 %}<span class="mr-1">&#128193;</span>{% endif %}{{ f.split('/')[-1] }}
+            <div class="frow {{ 'child' if depth > 0 else '' }} {{ 'on' if current_folder == f else '' }}"
+                 {% if depth > 1 %}style="margin-left:{{ 23 + (depth - 1) * 16 }}px"{% endif %} title="{{ f }}">
+                <a href="/notes?folder={{ f }}" style="flex:1;min-width:0;display:flex;align-items:center;gap:9px;color:inherit;text-decoration:none;overflow:hidden">
+                    {% if depth == 0 %}{{ ic.icon('folder') }}{% endif %}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ f.split('/')[-1] }}</span>
                 </a>
-                <span class="fcnt text-xs text-gray-400 px-1.5">{{ cnt }}</span>
-                <span class="fops gap-1 pr-1.5">
-                    <button onclick="renameFolder('{{ f }}')" title="重命名/移动（改路径即可换层级）" class="text-xs text-gray-400 hover:text-blue-600">改</button>
-                    <button onclick="deleteFolder('{{ f }}', {{ cnt }})" title="删除文件夹（笔记移到未分类）" class="text-xs text-gray-400 hover:text-red-600">删</button>
+                <span class="c fc">{{ cnt }}</span>
+                <span class="fops">
+                    <button type="button" class="iconbtn" onclick="renameFolder('{{ f }}')" title="重命名/移动（改路径即可换层级）">{{ ic.icon('edit') }}</button>
+                    <button type="button" class="iconbtn danger" onclick="deleteFolder('{{ f }}', {{ cnt }})" title="删除文件夹（笔记移到未分类）">{{ ic.icon('trash') }}</button>
                 </span>
             </div>
             {% endfor %}
             {% if unfiled_count %}
-            <a href="/notes?folder=__unfiled__"
-               class="flex items-center justify-between text-sm py-1 px-2 rounded mt-1 {% if current_folder == '__unfiled__' %}bg-amber-50 text-amber-700{% else %}text-amber-600 hover:bg-amber-50{% endif %}">
-                <span>📂 未分类</span>
-                <span class="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">{{ unfiled_count }}</span>
+            <a href="/notes?folder=__unfiled__" class="frow {% if current_folder == '__unfiled__' %}on{% endif %}" style="text-decoration:none">
+                {{ ic.icon('folder') }}<span>未分类</span><span class="c">{{ unfiled_count }}</span>
             </a>
             {% endif %}
         </div>
@@ -188,37 +233,53 @@ async function imaSync() {
         }
         </script>
 
-        <!-- 项目筛选 -->
-        <div class="mb-4">
-            <h3 class="text-xs font-semibold text-gray-500 uppercase mb-2">项目</h3>
-            <a href="/notes" class="block text-sm py-1 px-2 rounded {% if not current_project %}bg-blue-50 text-blue-700{% else %}text-gray-600 hover:bg-gray-100{% endif %}">全部</a>
+        <!-- 项目 -->
+        <div class="kb-grp">
+            <div class="gh"><span>项目</span></div>
+            <a href="/notes" class="frow {% if not current_project %}on{% endif %}" style="text-decoration:none"><span>全部</span></a>
             {% for p in projects %}
-            <a href="/notes?project_id={{ p.id }}" class="block text-sm py-1 px-2 rounded truncate {% if current_project == p.id %}bg-blue-50 text-blue-700{% else %}text-gray-600 hover:bg-gray-100{% endif %}">{{ p.name }}</a>
+            <a href="/notes?project_id={{ p.id }}" class="frow {% if current_project == p.id %}on{% endif %}" style="text-decoration:none" title="{{ p.name }}">
+                <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ p.name }}</span>
+            </a>
             {% endfor %}
         </div>
 
         <!-- 标签 -->
-        <div>
-            <h3 class="text-xs font-semibold text-gray-500 uppercase mb-2">标签</h3>
-            <a href="/notes" class="block text-sm py-1 px-2 rounded {% if not current_tag %}bg-blue-50 text-blue-700{% else %}text-gray-600 hover:bg-gray-100{% endif %}">全部</a>
+        <div class="kb-grp">
+            <div class="gh"><span>标签</span></div>
+            <a href="/notes" class="frow {% if not current_tag %}on{% endif %}" style="text-decoration:none"><span>全部</span></a>
             {% set sorted_tags = tag_counts.items()|list|sort(attribute='1',reverse=True) %}
             {% for tag, count in sorted_tags %}
-            <a href="/notes?tag={{ tag }}"
-               class="tag-item flex items-center justify-between text-sm py-1 px-2 rounded {% if current_tag == tag %}bg-blue-50 text-blue-700{% else %}text-gray-600 hover:bg-gray-100{% endif %}"
-               {% if loop.index > 8 %}style="display:none"{% endif %}>
-                <span>#{{ tag }}</span>
-                <span class="text-xs text-gray-400">{{ count }}</span>
+            <a href="/notes?tag={{ tag }}" class="frow tag-item {% if current_tag == tag %}on{% endif %}"
+               style="text-decoration:none{% if loop.index > 8 %};display:none{% endif %}">
+                <span>#{{ tag }}</span><span class="c">{{ count }}</span>
             </a>
             {% endfor %}
             {% if tag_counts|length > 8 %}
-            <button id="tag-toggle" onclick="toggleTags({{ tag_counts|length }})"
-                class="text-xs text-blue-500 hover:underline px-2 mt-1">展开全部 ({{ tag_counts|length }} 个)</button>
+            <button id="tag-toggle" onclick="toggleTags({{ tag_counts|length }})" class="tag-toggle">展开全部 ({{ tag_counts|length }} 个)</button>
             {% endif %}
             {% if not tag_counts %}
-            <p class="text-xs text-gray-400 px-2">暂无标签</p>
+            <p class="empty" style="padding:8px 4px;text-align:left">暂无标签</p>
             {% endif %}
         </div>
         <script>
+        /* 移动端折叠侧栏，选择记忆在 localStorage */
+        function toggleSide() {
+            var el = document.getElementById('kb-side');
+            var collapsed = el.classList.toggle('collapsed');
+            el.querySelector('.kb-side-toggle').setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+            try { localStorage.setItem('kb-side-collapsed', collapsed ? '1' : '0'); } catch (e) {}
+        }
+        (function () {
+            try {
+                if (localStorage.getItem('kb-side-collapsed') === '1') {
+                    var el = document.getElementById('kb-side');
+                    el.classList.add('collapsed');
+                    el.querySelector('.kb-side-toggle').setAttribute('aria-expanded', 'false');
+                }
+            } catch (e) {}
+        })();
+
         function toggleTags(total) {
             var items = document.querySelectorAll('.tag-item');
             var btn = document.getElementById('tag-toggle');
@@ -227,95 +288,93 @@ async function imaSync() {
             btn.textContent = collapsed ? '收起' : '展开全部 (' + total + ' 个)';
         }
         </script>
-        </div><!-- /notes-sidebar-inner -->
-    </div><!-- /notes-sidebar -->
+        </div><!-- /kb-side-body -->
+    </div><!-- /kb-side -->
 
-    <!-- 笔记列表 -->
-    <div class="flex-1">
+    <!-- ===== 笔记列表 ===== -->
+    <div class="kb-list">
         {% if current_q or current_tag or current_project or current_folder %}
-        <div class="mb-4 flex items-center gap-2">
-            <span class="text-sm text-gray-500">筛选：</span>
-            {% if current_q %}<span class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">搜索: {{ current_q }}</span>{% endif %}
-            {% if current_tag %}<span class="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">#{{ current_tag }}</span>{% endif %}
-            {% if current_project %}<span class="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">项目筛选</span>{% endif %}
-            {% if current_folder %}<span class="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded">&#128193; {{ current_folder }}</span>{% endif %}
-            <a href="/notes" class="text-xs text-gray-400 hover:text-gray-600">清除</a>
+        <div class="filt-row">
+            <span>筛选：</span>
+            {% if current_q %}<span class="tag">搜索: {{ current_q }}</span>{% endif %}
+            {% if current_tag %}<span class="tag">#{{ current_tag }}</span>{% endif %}
+            {% if current_project %}<span class="tag">项目筛选</span>{% endif %}
+            {% if current_folder %}<span class="tag">{{ ic.icon('folder') }} {{ current_folder }}</span>{% endif %}
+            <a href="/notes" style="color:var(--ink-3)">清除</a>
         </div>
         {% endif %}
 
         {% if notes %}
         <!-- 批量操作工具条 -->
-        <div id="batch-bar" class="hidden sticky top-2 z-10 mb-3 bg-gray-800 text-white rounded-lg px-4 py-2 flex items-center justify-between shadow-lg">
-            <span class="text-sm">已选 <span id="batch-count">0</span> 条</span>
-            <div class="flex gap-2">
-                <button onclick="selectAll()" class="text-xs px-3 py-1.5 bg-gray-600 rounded hover:bg-gray-500 transition">全选</button>
-                <button onclick="batchMove()" class="text-xs px-3 py-1.5 bg-blue-600 rounded hover:bg-blue-700 transition">移动到文件夹</button>
-                <button onclick="batchDelete()" class="text-xs px-3 py-1.5 bg-red-600 rounded hover:bg-red-700 transition">删除</button>
-                <button onclick="clearSelect()" class="text-xs px-3 py-1.5 bg-gray-600 rounded hover:bg-gray-500 transition">取消</button>
+        <div id="batch-bar" class="batch-bar">
+            <span class="cnt">已选 <b id="batch-count">0</b> 条</span>
+            <div class="acts">
+                <button onclick="selectAll()" class="btn" style="padding:5px 10px;font-size:12px">全选</button>
+                <button onclick="batchMove()" class="btn" style="padding:5px 10px;font-size:12px">{{ ic.icon('move') }}移动到文件夹</button>
+                <button onclick="batchDelete()" class="btn" style="padding:5px 10px;font-size:12px;color:var(--down);border-color:rgba(255,98,87,.35)">{{ ic.icon('trash') }}删除</button>
+                <button onclick="clearSelect()" class="btn ghost" style="padding:5px 10px;font-size:12px">取消</button>
             </div>
         </div>
 
-        <div class="space-y-3">
-            {% for n in notes %}
-            <div class="bg-white rounded-lg shadow-sm p-4 hover:shadow-md transition">
-                <!-- 行1：checkbox + 图标 + 标题 + 展开箭头 -->
-                <div class="flex items-center gap-2 cursor-pointer group" onclick="togglePreview('{{ n.id }}')">
-                    <input type="checkbox" class="note-check flex-shrink-0" value="{{ n.id }}" onchange="updateBatchBar()" onclick="event.stopPropagation()">
-                    {% if n.is_core %}<span class="text-amber-500 text-xs flex-shrink-0" title="项目核心档">⭐</span>{% endif %}
-                    {% if n.is_pinned %}<span class="text-yellow-500 text-xs flex-shrink-0">★</span>{% endif %}
-                    {% if n.image_path %}<span class="text-xs flex-shrink-0">📷</span>{% endif %}
-                    <h3 class="font-medium text-gray-800 group-hover:text-blue-600 transition truncate flex-1">{{ n.title }}</h3>
-                    <span id="arrow-{{ n.id }}" class="text-gray-300 text-xs flex-shrink-0 transition">▶</span>
-                </div>
-                <!-- 行2：标签 -->
-                {% if n.tags %}
-                <div class="flex flex-wrap gap-1 mt-2">
-                    {% for tag in n.tags.split(',')[:4] %}
-                    <span class="text-xs bg-purple-50 text-purple-600 px-2 py-0.5 rounded">#{{ tag.strip() }}</span>
-                    {% endfor %}
-                </div>
-                {% endif %}
-                <!-- 行3：内容摘要 -->
-                {% if n.content %}
-                <p class="text-sm text-gray-500 mt-1 overflow-hidden" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">{{ n.content[:200] }}</p>
-                {% endif %}
-                <!-- 展开预览 -->
-                <div id="preview-{{ n.id }}" class="hidden mt-3 pt-3 border-t border-gray-100">
-                    <p class="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{{ n.content[:800] if n.content else '(空)' }}{% if n.content and n.content|length > 800 %}<span class="text-gray-400">…</span>{% endif %}</p>
-                    <a href="/notes/{{ n.id }}" class="text-xs text-blue-600 hover:underline mt-2 inline-block">查看 / 编辑全文 →</a>
-                </div>
-                <!-- 行4：元信息 + 操作按钮 -->
-                <div class="flex items-center flex-wrap gap-x-2 gap-y-1 mt-2 text-xs text-gray-400">
-                    {% if n.author %}<span>{{ n.author }}</span>{% endif %}
-                    {% if n.folder %}<span class="bg-yellow-50 text-yellow-700 px-1.5 py-0.5 rounded">📁 {{ n.folder }}</span>{% endif %}
-                    {% if n.project_name %}<span class="bg-gray-100 px-1.5 py-0.5 rounded">{{ n.project_name }}</span>{% endif %}
-                    <span>{{ n.updated_at[5:16].replace('T',' ') if n.updated_at else '' }}</span>
-                    <div class="flex gap-1 ml-auto">
-                        <a href="/notes/{{ n.id }}"
-                            class="text-gray-400 hover:text-blue-600 px-1.5 py-0.5 rounded hover:bg-blue-50 transition">打开</a>
-                        <button onclick="renameNote('{{ n.id }}', this)" data-title="{{ n.title }}"
-                            class="text-gray-400 hover:text-blue-600 px-1.5 py-0.5 rounded hover:bg-blue-50 transition">改名</button>
-                        <button onclick="moveNote('{{ n.id }}')"
-                            class="text-gray-400 hover:text-blue-600 px-1.5 py-0.5 rounded hover:bg-blue-50 transition">移动</button>
-                        <button onclick="copyLink('{{ n.id }}', this)" title="复制站内链接（需登录才能打开）"
-                            class="text-gray-400 hover:text-violet-600 px-1.5 py-0.5 rounded hover:bg-violet-50 transition">链接</button>
-                        <button onclick="shareNote('{{ n.id }}', this)" title="生成公开只读分享链接（对方无需登录）"
-                            class="text-gray-400 hover:text-green-600 px-1.5 py-0.5 rounded hover:bg-green-50 transition">分享</button>
-                        <button onclick="deleteNote('{{ n.id }}', this)" data-title="{{ n.title }}"
-                            class="text-gray-400 hover:text-red-600 px-1.5 py-0.5 rounded hover:bg-red-50 transition">删除</button>
+        {% for n in notes %}
+        <div class="note">
+            <div class="note-acts">
+                <a href="/notes/{{ n.id }}" class="iconbtn" title="打开">{{ ic.icon('eye') }}</a>
+                <button type="button" class="iconbtn" onclick="renameNote('{{ n.id }}', this)" data-title="{{ n.title }}" title="改名">{{ ic.icon('edit') }}</button>
+                <button type="button" class="iconbtn" onclick="moveNote('{{ n.id }}')" title="移动">{{ ic.icon('move') }}</button>
+                <button type="button" class="iconbtn" onclick="copyLink('{{ n.id }}', this)" title="复制站内链接（需登录才能打开）">{{ ic.icon('copy') }}</button>
+                <button type="button" class="iconbtn" onclick="shareNote('{{ n.id }}', this)" title="生成公开只读分享链接（对方无需登录）">{{ ic.icon('share') }}</button>
+                <button type="button" class="iconbtn danger" onclick="deleteNote('{{ n.id }}', this)" data-title="{{ n.title }}" title="删除">{{ ic.icon('trash') }}</button>
+            </div>
+
+            <div style="display:flex;align-items:flex-start;gap:9px">
+                <input type="checkbox" class="note-check" value="{{ n.id }}" onchange="updateBatchBar()" style="margin-top:4px;flex-shrink:0">
+                <div class="note-body-col" style="flex:1;min-width:0;padding-right:195px">
+                    <div class="note-h" onclick="togglePreview('{{ n.id }}')">
+                        {% if n.is_core %}<span class="core" title="项目核心档">{{ ic.icon('star') }}</span>{% endif %}
+                        {% if n.is_pinned and not n.is_core %}<span class="core" style="color:var(--ink-3)" title="置顶">{{ ic.icon('star') }}</span>{% endif %}
+                        {% if n.image_path %}<span style="color:var(--ink-3)" title="含图片">{{ ic.icon('file') }}</span>{% endif %}
+                        <span class="nt" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ n.title }}</span>
+                        <span class="chev" id="arrow-{{ n.id }}">{{ ic.icon('chevron') }}</span>
+                    </div>
+
+                    {% if n.content %}
+                    <p class="note-ex">{{ n.content[:200] }}</p>
+                    {% endif %}
+
+                    <div id="preview-{{ n.id }}" class="note-prev">
+                        <p>{{ n.content[:800] if n.content else '(空)' }}{% if n.content and n.content|length > 800 %}…{% endif %}</p>
+                        <a href="/notes/{{ n.id }}">查看 / 编辑全文 →</a>
+                    </div>
+
+                    <div class="note-m" style="flex-wrap:wrap">
+                        {% if n.tags %}
+                        {% for tag in n.tags.split(',')[:4] %}
+                        <span class="tag {% if n.source_type in ('ai_classified','master_ai') %}ai{% endif %}">#{{ tag.strip() }}</span>
+                        {% endfor %}
+                        {% endif %}
+                        {% if n.source_type == 'ai_classified' %}<span class="tag ai">AI分类</span>
+                        {% elif n.source_type == 'master_ai' %}<span class="tag ai">总AI</span>
+                        {% elif n.source_type in ('file_import', 'upload') %}<span class="tag">文件</span>
+                        {% elif n.source_type == 'auto_progress' %}<span class="tag">进度</span>
+                        {% endif %}
+                        {% if n.author %}<span>{{ n.author }}</span>{% endif %}
+                        {% if n.folder %}<span class="note-folder">{{ ic.icon('folder') }} {{ n.folder }}</span>{% endif %}
+                        {% if n.project_name %}<span>{{ n.project_name }}</span>{% endif %}
+                        <span class="note-time">{{ n.updated_at[5:16].replace('T',' ') if n.updated_at else '' }}</span>
                     </div>
                 </div>
             </div>
-            {% endfor %}
         </div>
+        {% endfor %}
+
         <script>
         function togglePreview(id) {
             var el = document.getElementById('preview-' + id);
             var arrow = document.getElementById('arrow-' + id);
-            var opening = el.classList.contains('hidden');
-            el.classList.toggle('hidden', !opening);
-            arrow.textContent = opening ? '▼' : '▶';
-            arrow.style.color = opening ? '#3b82f6' : '';
+            var opening = !el.classList.contains('open');
+            el.classList.toggle('open', opening);
+            arrow.classList.toggle('open', opening);
         }
         </script>
 
@@ -340,7 +399,7 @@ async function imaSync() {
         function updateBatchBar() {
             var n = getChecked().length;
             document.getElementById('batch-count').textContent = n;
-            document.getElementById('batch-bar').classList.toggle('hidden', n === 0);
+            document.getElementById('batch-bar').classList.toggle('show', n > 0);
         }
 
         function selectAll() {
@@ -389,9 +448,8 @@ async function imaSync() {
             var url = location.origin + '/notes/' + id;
             if (navigator.clipboard) {
                 navigator.clipboard.writeText(url).then(function() {
-                    var old = btn.textContent;
-                    btn.textContent = '已复制';
-                    setTimeout(function() { btn.textContent = old; }, 1500);
+                    btn.classList.add('on');
+                    setTimeout(function() { btn.classList.remove('on'); }, 1500);
                 });
             } else {
                 prompt('复制此链接分享：', url);
@@ -399,54 +457,53 @@ async function imaSync() {
         }
 
         function shareNote(id, btn) {
-            var old = btn.textContent;
-            btn.textContent = '生成中…';
+            btn.classList.add('on');
             fetch('/notes/' + id + '/share?ajax=1', { method: 'POST' })
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
                     var url = data.url;
-                    function done() { btn.textContent = '✅ 链接已复制'; setTimeout(function() { btn.textContent = old; }, 2000); }
+                    function done() { setTimeout(function() { btn.classList.remove('on'); }, 2000); }
                     if (navigator.clipboard && navigator.clipboard.writeText) {
-                        navigator.clipboard.writeText(url).then(done, function() { prompt('复制此公开分享链接：', url); btn.textContent = old; });
+                        navigator.clipboard.writeText(url).then(done, function() { prompt('复制此公开分享链接：', url); btn.classList.remove('on'); });
                     } else {
-                        prompt('复制此公开分享链接：', url); btn.textContent = old;
+                        prompt('复制此公开分享链接：', url); btn.classList.remove('on');
                     }
                 })
-                .catch(function() { btn.textContent = old; alert('生成分享链接失败，请重试'); });
+                .catch(function() { btn.classList.remove('on'); alert('生成分享链接失败，请重试'); });
         }
         </script>
         {% else %}
         {% if current_q %}
-        <div class="bg-white rounded-lg shadow-sm p-10 text-center">
-            <div class="text-3xl mb-3">🔍</div>
-            <p class="text-gray-600 font-medium mb-1">没有找到「{{ current_q }}」相关笔记</p>
-            <p class="text-sm text-gray-400 mb-4">试试更短的关键词，或换个搜索方向</p>
-            <a href="/notes" class="text-sm text-blue-600 hover:underline">清除搜索，查看全部</a>
+        <div class="empty" style="padding:48px 12px">
+            {{ ic.icon('search') }}
+            <p style="margin:10px 0 4px;color:var(--ink-2)">没有找到「{{ current_q }}」相关笔记</p>
+            <p style="margin:0 0 12px">试试更短的关键词，或换个搜索方向</p>
+            <a href="/notes" style="color:var(--accent)">清除搜索，查看全部</a>
         </div>
         {% elif current_tag %}
-        <div class="bg-white rounded-lg shadow-sm p-10 text-center">
-            <div class="text-3xl mb-3">🏷️</div>
-            <p class="text-gray-600 font-medium mb-1">标签 #{{ current_tag }} 下还没有笔记</p>
-            <a href="/notes" class="text-sm text-blue-600 hover:underline mt-3 inline-block">查看全部笔记</a>
+        <div class="empty" style="padding:48px 12px">
+            {{ ic.icon('tag') }}
+            <p style="margin:10px 0 12px;color:var(--ink-2)">标签 #{{ current_tag }} 下还没有笔记</p>
+            <a href="/notes" style="color:var(--accent)">查看全部笔记</a>
         </div>
         {% elif current_folder %}
-        <div class="bg-white rounded-lg shadow-sm p-10 text-center">
-            <div class="text-3xl mb-3">📁</div>
-            <p class="text-gray-600 font-medium mb-1">「{{ current_folder }}」文件夹还是空的</p>
-            <a href="/notes/new?folder={{ current_folder }}" class="text-sm text-blue-600 hover:underline mt-3 inline-block">在这里新建笔记</a>
+        <div class="empty" style="padding:48px 12px">
+            {{ ic.icon('folder') }}
+            <p style="margin:10px 0 12px;color:var(--ink-2)">「{{ current_folder }}」文件夹还是空的</p>
+            <a href="/notes/new?folder={{ current_folder }}" style="color:var(--accent)">在这里新建笔记</a>
         </div>
         {% else %}
-        <div class="bg-white rounded-lg shadow-sm p-12 text-center">
-            <div class="text-4xl mb-3">📝</div>
-            <p class="text-gray-600 font-medium mb-1">知识库还没有笔记</p>
-            <p class="text-sm text-gray-400 mb-5">可以手动新建，也可以上传文件或让 AI 自动分类整理</p>
-            <div class="flex justify-center gap-3 flex-wrap">
-                <a href="/notes/new" class="text-sm px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">+ 新建笔记</a>
-                <a href="/notes/import" class="text-sm px-4 py-2 border rounded-lg text-gray-600 hover:bg-gray-50 transition">导入文件</a>
+        <div class="empty" style="padding:56px 12px">
+            {{ ic.icon('doc') }}
+            <p style="margin:10px 0 4px;color:var(--ink-2)">知识库还没有笔记</p>
+            <p style="margin:0 0 16px">可以手动新建，也可以上传文件或让 AI 自动分类整理</p>
+            <div style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap">
+                <a href="/notes/new" class="btn primary">{{ ic.icon('plus') }}新建笔记</a>
+                <a href="/notes/import" class="btn">导入文件</a>
             </div>
         </div>
         {% endif %}
         {% endif %}
-    </div>
-</div>
+    </div><!-- /kb-list -->
+</div><!-- /kb -->
 {% endblock %}

@@ -1,44 +1,59 @@
 {% extends "base.html" %}
+{% import "_icons.html" as ic %}
 {% block title %}IMA 知识库浏览 - AI 项目管理{% endblock %}
+{% block topbar %}
+<span class="crumb"><a href="/notes" style="color:inherit;text-decoration:none">知识库</a> / <b>IMA 共享知识库</b></span>
+{% endblock %}
 {% block content %}
+<style>
+.ima-wrap .frow{ cursor:pointer; }
+.ima-wrap .frow.on{ background:var(--accent-soft); color:var(--accent); font-weight:600; }
+.ima-item{ display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.ima-item .nt{ font-size:14px; font-weight:500; color:var(--ink-1); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; flex:1; }
+.ima-msg{ font-size:12px; margin-top:6px; color:var(--ink-3); }
+.ima-msg.ok{ color:var(--up); }
+.ima-msg.err{ color:var(--down); }
+</style>
 
-<div class="flex items-center gap-3 mb-6">
-    <a href="/notes" class="text-sm text-gray-500 hover:text-gray-700">← 返回知识库</a>
-    <h1 class="text-2xl font-bold text-gray-800">IMA 共享知识库</h1>
-</div>
+<div class="pname" style="font-size:22px;margin-bottom:16px">IMA 共享知识库</div>
 
-<div id="main-layout" style="display:flex; gap:24px; min-height:70vh">
+<div class="kb ima-wrap">
     <!-- 左侧：知识库列表 -->
-    <div style="width:220px; flex-shrink:0">
+    <div class="kb-side">
         <!-- 添加知识库 -->
-        <div class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">添加共享知识库</div>
-        <div style="margin-bottom:14px">
-            <input id="kb-url-input" type="text" placeholder="粘贴数字 KB-ID 或分享链接…"
-                style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:8px;padding:7px 10px;font-size:13px;outline:none;margin-bottom:6px"
-                onkeydown="if(event.key==='Enter')addKB()">
-            <input id="kb-name-input" type="text" placeholder="知识库名称（选填）"
-                style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:8px;padding:7px 10px;font-size:13px;outline:none;margin-bottom:6px">
-            <button onclick="addKB()" id="add-kb-btn"
-                style="width:100%;background:#2563eb;color:white;border:none;padding:7px;border-radius:8px;font-size:13px;cursor:pointer">
-                + 添加</button>
-            <div id="add-kb-msg" style="font-size:12px;margin-top:4px;color:#6b7280"></div>
+        <div class="kb-grp">
+            <div class="gh"><span>添加共享知识库</span></div>
+            <div class="field" style="margin-bottom:8px">
+                <input id="kb-url-input" type="text" placeholder="粘贴数字 KB-ID 或分享链接…" class="input" onkeydown="if(event.key==='Enter')addKB()">
+            </div>
+            <div class="field" style="margin-bottom:8px">
+                <input id="kb-name-input" type="text" placeholder="知识库名称（选填）" class="input">
+            </div>
+            <button onclick="addKB()" id="add-kb-btn" class="btn primary" style="width:100%;justify-content:center">{{ ic.icon('plus') }}添加</button>
+            <div id="add-kb-msg" class="ima-msg"></div>
         </div>
+
         <!-- 已收藏 -->
-        <div class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">已添加的知识库</div>
-        <div id="saved-kb-list"><div class="text-sm text-gray-400 py-1">加载中…</div></div>
+        <div class="kb-grp">
+            <div class="gh"><span>已添加的知识库</span></div>
+            <div id="saved-kb-list"><p class="empty" style="padding:8px 4px;text-align:left">加载中…</p></div>
+        </div>
+
         <!-- 我的（有写权限）-->
-        <div class="text-xs font-semibold text-gray-400 uppercase tracking-wide mt-4 mb-2">我的知识库</div>
-        <div id="kb-list"><div class="text-sm text-gray-400 py-1">加载中…</div></div>
+        <div class="kb-grp">
+            <div class="gh"><span>我的知识库</span></div>
+            <div id="kb-list"><p class="empty" style="padding:8px 4px;text-align:left">加载中…</p></div>
+        </div>
     </div>
 
     <!-- 右侧：条目列表 -->
-    <div style="flex:1; min-width:0">
-        <div class="flex items-center justify-between mb-4">
-            <div id="kb-title" class="text-lg font-semibold text-gray-600">← 选择左侧知识库</div>
-            <div id="kb-count" class="text-sm text-gray-400"></div>
+    <div class="kb-list">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+            <div id="kb-title" class="pname" style="font-size:16px">← 选择左侧知识库</div>
+            <div id="kb-count" style="font-size:12.5px;color:var(--ink-3)"></div>
         </div>
         <div id="items-area"></div>
-        <div id="load-more-area" class="mt-4 text-center"></div>
+        <div id="load-more-area" style="margin-top:14px;text-align:center"></div>
     </div>
 </div>
 
@@ -57,8 +72,8 @@ async function addKB() {
     var btn = document.getElementById('add-kb-btn');
     var msg = document.getElementById('add-kb-msg');
     var raw = urlInput.value.trim();
-    if (!raw) { msg.textContent = '请粘贴分享链接'; msg.style.color='#dc2626'; return; }
-    btn.textContent = '添加中…'; btn.disabled = true; msg.textContent = '';
+    if (!raw) { msg.textContent = '请粘贴分享链接'; msg.className = 'ima-msg err'; return; }
+    btn.textContent = '添加中…'; btn.disabled = true; msg.textContent = ''; msg.className = 'ima-msg';
     try {
         var r = await fetch('/notes/ima/add-kb', {
             method: 'POST',
@@ -67,18 +82,18 @@ async function addKB() {
         });
         var d = await r.json();
         if (d.ok) {
-            msg.textContent = '✅ 已添加：' + d.kb.name;
-            msg.style.color = '#16a34a';
+            msg.textContent = '已添加：' + d.kb.name;
+            msg.className = 'ima-msg ok';
             urlInput.value = ''; nameInput.value = '';
             loadSavedKBs();
         } else {
-            msg.textContent = '❌ ' + d.msg;
-            msg.style.color = '#dc2626';
+            msg.textContent = d.msg;
+            msg.className = 'ima-msg err';
         }
     } catch(e) {
-        msg.textContent = '❌ ' + e; msg.style.color = '#dc2626';
+        msg.textContent = String(e); msg.className = 'ima-msg err';
     }
-    btn.textContent = '+ 添加'; btn.disabled = false;
+    btn.innerHTML = '{{ ic.icon("plus") }}添加'; btn.disabled = false;
 }
 
 async function loadSavedKBs() {
@@ -87,12 +102,12 @@ async function loadSavedKBs() {
         var r = await fetch('/notes/ima/saved-kbs');
         var d = await r.json();
         if (!d.kbs || !d.kbs.length) {
-            el.innerHTML = '<div class="text-sm text-gray-400 py-1">暂无，粘贴链接添加</div>';
+            el.innerHTML = '<p class="empty" style="padding:8px 4px;text-align:left">暂无，粘贴链接添加</p>';
             return;
         }
         renderKBListInto(el, d.kbs);
     } catch(e) {
-        el.innerHTML = '<div class="text-sm text-red-600">' + esc(String(e)) + '</div>';
+        el.innerHTML = '<p class="empty" style="padding:8px 4px;text-align:left;color:var(--down)">' + esc(String(e)) + '</p>';
     }
 }
 
@@ -101,14 +116,14 @@ async function loadKBs() {
     try {
         var r = await fetch('/notes/ima/kbs');
         var d = await r.json();
-        if (!d.ok) { el.innerHTML = '<div class="text-sm text-red-600">' + esc(d.msg) + '</div>'; return; }
+        if (!d.ok) { el.innerHTML = '<p class="empty" style="padding:8px 4px;text-align:left;color:var(--down)">' + esc(d.msg) + '</p>'; return; }
         if (!d.kbs || !d.kbs.length) {
-            el.innerHTML = '<div class="text-sm text-gray-400 py-2">无。可用搜索框查找共享库。</div>';
+            el.innerHTML = '<p class="empty" style="padding:8px 4px;text-align:left">无。可用搜索框查找共享库。</p>';
             return;
         }
         renderKBList(d.kbs);
     } catch(e) {
-        el.innerHTML = '<div class="text-sm text-red-600">加载失败：' + esc(String(e)) + '</div>';
+        el.innerHTML = '<p class="empty" style="padding:8px 4px;text-align:left;color:var(--down)">加载失败：' + esc(String(e)) + '</p>';
     }
 }
 
@@ -116,17 +131,17 @@ function selectKB(kbId, kbName) {
     // 高亮选中
     if (currentKbId) {
         var old = document.getElementById('kb-btn-' + currentKbId);
-        if (old) old.style.background = 'none';
+        if (old) old.classList.remove('on');
     }
     currentKbId = kbId;
     currentKbName = kbName;
     nextCursor = '';
     var btn = document.getElementById('kb-btn-' + kbId);
-    if (btn) btn.style.background = '#dbeafe';
+    if (btn) btn.classList.add('on');
 
     document.getElementById('kb-title').textContent = kbName;
     document.getElementById('kb-count').textContent = '';
-    document.getElementById('items-area').innerHTML = '<div class="text-sm text-gray-400 py-4">加载中…</div>';
+    document.getElementById('items-area').innerHTML = '<p class="empty">加载中…</p>';
     document.getElementById('load-more-area').innerHTML = '';
     loadItems(false);
 }
@@ -141,40 +156,34 @@ async function loadItems(append) {
         var r = await fetch(url);
         var d = await r.json();
         if (!d.ok) {
-            area.innerHTML = '<div class="text-sm text-red-600">' + esc(d.msg) + '</div>';
+            area.innerHTML = '<p class="empty" style="color:var(--down)">' + esc(d.msg) + '</p>';
             return;
         }
         if (!append) area.innerHTML = '';
         if (!d.items || !d.items.length) {
-            if (!append) area.innerHTML = '<div class="text-sm text-gray-400 py-8 text-center">该知识库暂无内容</div>';
+            if (!append) area.innerHTML = '<p class="empty">该知识库暂无内容</p>';
             return;
         }
         var html = d.items.map(function(item) {
-            return '<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:white;border:1px solid #e5e7eb;border-radius:10px;margin-bottom:8px">'
-                + '<div style="min-width:0;flex:1">'
-                + '<div style="font-size:14px;color:#1f2937;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(item.title || '（无标题）') + '</div>'
-                + '</div>'
-                + '<button onclick="createNote(\'' + esc(item.media_id) + '\',\'' + esc(item.title || '无标题') + '\')" '
-                + 'style="flex-shrink:0;margin-left:12px;background:#2563eb;color:white;border:none;padding:6px 14px;border-radius:8px;font-size:13px;cursor:pointer;white-space:nowrap" '
-                + 'onmouseover="this.style.background=\'#1d4ed8\'" onmouseout="this.style.background=\'#2563eb\'">'
-                + '→ 新建笔记</button>'
-                + '</div>';
+            return '<div class="note"><div class="ima-item">'
+                + '<span class="nt">' + esc(item.title || '（无标题）') + '</span>'
+                + '<button type="button" class="btn primary" onclick="createNote(\'' + esc(item.media_id) + '\',\'' + esc(item.title || '无标题') + '\')">'
+                + '{{ ic.icon("file") }}新建笔记</button>'
+                + '</div></div>';
         }).join('');
         area.insertAdjacentHTML('beforeend', html);
         nextCursor = d.next_cursor || '';
         if (!d.is_end && nextCursor) {
-            moreArea.innerHTML = '<button onclick="loadItems(true)" '
-                + 'style="background:none;border:1px solid #d1d5db;padding:8px 24px;border-radius:8px;font-size:14px;color:#6b7280;cursor:pointer">'
-                + '加载更多</button>';
+            moreArea.innerHTML = '<button type="button" onclick="loadItems(true)" class="btn">加载更多</button>';
         }
     } catch(e) {
-        area.innerHTML = '<div class="text-sm text-red-600">加载失败：' + esc(String(e)) + '</div>';
+        area.innerHTML = '<p class="empty" style="color:var(--down)">加载失败：' + esc(String(e)) + '</p>';
     }
 }
 
 async function createNote(mediaId, title) {
-    var btn = event.target;
-    var orig = btn.textContent;
+    var btn = event.target.closest('button');
+    var orig = btn.innerHTML;
     btn.textContent = '创建中…'; btn.disabled = true;
     try {
         var r = await fetch('/notes/ima/create-from-kb', {
@@ -187,11 +196,11 @@ async function createNote(mediaId, title) {
             window.location.href = '/notes/' + d.note_id + '/edit';
         } else {
             alert('创建失败：' + (d.msg || '未知错误'));
-            btn.textContent = orig; btn.disabled = false;
+            btn.innerHTML = orig; btn.disabled = false;
         }
     } catch(e) {
         alert('请求失败：' + e);
-        btn.textContent = orig; btn.disabled = false;
+        btn.innerHTML = orig; btn.disabled = false;
     }
 }
 
@@ -199,27 +208,26 @@ async function searchKBs() {
     var q = document.getElementById('kb-search').value.trim();
     if (!q) { loadKBs(); return; }
     var el = document.getElementById('kb-list');
-    el.innerHTML = '<div class="text-sm text-gray-400 py-2">搜索中…</div>';
+    el.innerHTML = '<p class="empty" style="padding:8px 4px;text-align:left">搜索中…</p>';
     try {
         var r = await fetch('/notes/ima/kbs?q=' + encodeURIComponent(q));
         var d = await r.json();
-        if (!d.ok) { el.innerHTML = '<div class="text-sm text-red-600">' + esc(d.msg) + '</div>'; return; }
+        if (!d.ok) { el.innerHTML = '<p class="empty" style="padding:8px 4px;text-align:left;color:var(--down)">' + esc(d.msg) + '</p>'; return; }
         if (!d.kbs || !d.kbs.length) {
-            el.innerHTML = '<div class="text-sm text-gray-400 py-2">未找到「' + esc(q) + '」</div>';
+            el.innerHTML = '<p class="empty" style="padding:8px 4px;text-align:left">未找到「' + esc(q) + '」</p>';
             return;
         }
         renderKBList(d.kbs);
     } catch(e) {
-        el.innerHTML = '<div class="text-sm text-red-600">搜索失败：' + esc(String(e)) + '</div>';
+        el.innerHTML = '<p class="empty" style="padding:8px 4px;text-align:left;color:var(--down)">搜索失败：' + esc(String(e)) + '</p>';
     }
 }
 
 function renderKBListInto(el, kbs) {
     el.innerHTML = kbs.map(function(kb) {
-        return '<button onclick="selectKB(\'' + esc(kb.id) + '\',\'' + esc(kb.name) + '\')" id="kb-btn-' + esc(kb.id) + '" '
-            + 'style="width:100%;text-align:left;padding:7px 12px;border-radius:8px;font-size:13px;color:#374151;border:none;background:none;cursor:pointer;margin-bottom:2px" '
-            + 'onmouseover="this.style.background=\'#eff6ff\'" onmouseout="this.style.background=(currentKbId===\'' + esc(kb.id) + '\'?\'#dbeafe\':\'none\')">'
-            + esc(kb.name) + '</button>';
+        return '<div class="frow' + (currentKbId === kb.id ? ' on' : '') + '" id="kb-btn-' + esc(kb.id) + '" onclick="selectKB(\'' + esc(kb.id) + '\',\'' + esc(kb.name) + '\')">'
+            + '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(kb.name) + '</span>'
+            + '</div>';
     }).join('');
 }
 function renderKBList(kbs) { renderKBListInto(document.getElementById('kb-list'), kbs); }

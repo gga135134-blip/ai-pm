@@ -32,3 +32,7 @@ Thumbs.db
 # 学习数据源（Phase A JSON，需要入库）
 !data/study_source/
 !data/study_source/*.json
+.agents/
+.claude/skills/
+skills-lock.json
+.superpowers/

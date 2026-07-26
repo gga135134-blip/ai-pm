@@ -1,19 +1,40 @@
 {% extends "base.html" %}
+{% import "_icons.html" as ic %}
 {% block title %}导入文件 - 知识库{% endblock %}
+{% block topbar %}
+<span class="crumb"><a href="/notes" style="color:inherit;text-decoration:none">知识库</a> / <b>导入</b></span>
+{% endblock %}
 {% block content %}
-<div class="mb-4 text-sm text-gray-400">
-    <a href="/notes" class="hover:text-gray-600">知识库</a> / <span class="text-gray-600">导入</span>
-</div>
-<h1 class="text-2xl font-bold text-gray-800 mb-6">导入文件到知识库</h1>
+<style>
+.imp-wrap{ max-width:760px; }
+.imp-wrap h1{ font-family:var(--display); font-size:23px; font-weight:600; margin:0 0 16px; }
+.imp-tabs{ display:flex; flex-wrap:wrap; margin-bottom:16px; border-bottom:1px solid var(--border); }
+.imp-grid4{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+.imp-hint{ font-size:12px; color:var(--ink-3); margin:0 0 14px; line-height:1.6; }
+.dropzone{ border:1.5px dashed var(--border); border-radius:var(--r-sm); padding:16px; }
+.dropzone input[type=file]{ width:100%; font-size:13px; color:var(--ink-2); }
+.warn-box{ background:rgba(240,168,104,.10); border:1px solid rgba(240,168,104,.3); border-radius:var(--r-sm); padding:12px 14px; margin-bottom:16px; font-size:13px; color:var(--ink-2); line-height:1.7; }
+.warn-box code{ background:var(--panel-2); padding:1px 5px; border-radius:4px; font-family:var(--mono); }
+.radio-row{ display:flex; align-items:flex-start; gap:8px; font-size:13px; color:var(--ink-2); cursor:pointer; margin-bottom:8px; }
+.radio-row input{ margin-top:3px; }
+.res-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; font-size:13px; padding:9px 12px; border-radius:var(--r-sm); margin-bottom:8px; }
+.res-row.ok{ background:rgba(63,203,134,.10); color:var(--up); }
+.res-row.err{ background:rgba(255,98,87,.10); color:var(--down); }
+.res-row.skip{ background:rgba(240,168,104,.10); color:var(--warn); }
+.res-row a{ color:var(--accent); text-decoration:none; }
+@media(max-width:767px){ .imp-grid4{ grid-template-columns:1fr 1fr; } }
+</style>
 
-<div class="max-w-3xl grid gap-6">
+<div class="imp-wrap">
+    <h1>导入文件到知识库</h1>
+
     <!-- Tab 切换 -->
-    <div class="flex gap-2">
-        <button onclick="showTab('file')" id="tab-file" class="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium">上传文件</button>
-        <button onclick="showTab('folder')" id="tab-folder" class="px-4 py-2 rounded-lg bg-gray-200 text-gray-600 text-sm font-medium">上传整个文件夹</button>
-        <button onclick="showTab('image')" id="tab-image" class="px-4 py-2 rounded-lg bg-gray-200 text-gray-600 text-sm font-medium">图片</button>
-        <button onclick="showTab('url')" id="tab-url" class="px-4 py-2 rounded-lg bg-gray-200 text-gray-600 text-sm font-medium">网页链接</button>
-        <button onclick="showTab('path')" id="tab-path" class="px-4 py-2 rounded-lg bg-gray-200 text-gray-600 text-sm font-medium">从服务器路径导入</button>
+    <div class="imp-tabs">
+        <button type="button" onclick="showTab('file')" id="tab-file" class="tab on">上传文件</button>
+        <button type="button" onclick="showTab('folder')" id="tab-folder" class="tab">上传整个文件夹</button>
+        <button type="button" onclick="showTab('image')" id="tab-image" class="tab">图片</button>
+        <button type="button" onclick="showTab('url')" id="tab-url" class="tab">网页链接</button>
+        <button type="button" onclick="showTab('path')" id="tab-path" class="tab">从服务器路径导入</button>
     </div>
 
     <!-- 已有文件夹自动补全（所有表单共用） -->
@@ -22,210 +43,202 @@
     </datalist>
 
     <!-- 上传文件 -->
-    <div id="panel-file" class="bg-white rounded-lg shadow-sm p-6">
-        <h2 class="text-lg font-semibold text-gray-700 mb-4">上传文件</h2>
-        <form method="POST" action="/notes/import/upload" enctype="multipart/form-data" class="space-y-4">
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">选择文件（可多选，支持 .md .txt .py .json .csv 等）</label>
-                <input type="file" name="files" multiple accept=".md,.txt,.csv,.json,.py,.js,.html,.css,.yaml,.yml,.toml,.ini,.log,.xml"
-                    class="w-full border rounded-lg px-3 py-2 text-sm">
-            </div>
-            <div class="grid grid-cols-4 gap-3">
-                <div>
-                    <label class="block text-xs text-gray-500 mb-1">存入文件夹</label>
-                    <input type="text" name="folder" list="folder-list" placeholder="如: 资料/竞品" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+    <div id="panel-file" class="card" style="padding:20px">
+        <form method="POST" action="/notes/import/upload" enctype="multipart/form-data">
+            <div class="field">
+                <label class="label">选择文件（可多选，支持 .md .txt .py .json .csv 等）</label>
+                <div class="dropzone">
+                    <input type="file" name="files" multiple accept=".md,.txt,.csv,.json,.py,.js,.html,.css,.yaml,.yml,.toml,.ini,.log,.xml">
                 </div>
-                <div>
-                    <label class="block text-xs text-gray-500 mb-1">关联项目</label>
-                    <select name="project_id" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+            </div>
+            <div class="imp-grid4" style="margin-bottom:16px">
+                <div class="field" style="margin-bottom:0">
+                    <label class="label">存入文件夹</label>
+                    <input type="text" name="folder" list="folder-list" placeholder="如: 资料/竞品" class="input">
+                </div>
+                <div class="field" style="margin-bottom:0">
+                    <label class="label">关联项目</label>
+                    <select name="project_id" class="input">
                         <option value="">不关联</option>
                         {% for p in projects %}
                         <option value="{{ p.id }}">{{ p.name }}</option>
                         {% endfor %}
                     </select>
                 </div>
-                <div>
-                    <label class="block text-xs text-gray-500 mb-1">作者</label>
-                    <input type="text" name="author" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                <div class="field" style="margin-bottom:0">
+                    <label class="label">作者</label>
+                    <input type="text" name="author" class="input">
                 </div>
-                <div>
-                    <label class="block text-xs text-gray-500 mb-1">额外标签</label>
-                    <input type="text" name="tags" placeholder="标签1,标签2" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                <div class="field" style="margin-bottom:0">
+                    <label class="label">额外标签</label>
+                    <input type="text" name="tags" placeholder="标签1,标签2" class="input">
                 </div>
             </div>
-            <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 transition">上传导入</button>
+            <button type="submit" class="btn primary">{{ ic.icon('arrow-down') }}上传导入</button>
         </form>
     </div>
 
     <!-- 上传整个文件夹 -->
-    <div id="panel-folder" class="bg-white rounded-lg shadow-sm p-6" style="display:none">
-        <h2 class="text-lg font-semibold text-gray-700 mb-4">上传整个文件夹</h2>
-        <p class="text-sm text-gray-500 mb-4">浏览器会自动遍历文件夹里所有支持的文件，一次性上传到服务器</p>
-        <form method="POST" action="/notes/import/upload" enctype="multipart/form-data" class="space-y-4">
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">选择文件夹</label>
-                <input type="file" name="files" multiple webkitdirectory directory
-                    class="w-full border rounded-lg px-3 py-2 text-sm">
-                <p class="text-xs text-gray-400 mt-1">提示：仅支持文本文件（.md .txt .py 等），其他类型会自动跳过</p>
-            </div>
-            <div class="grid grid-cols-4 gap-3">
-                <div>
-                    <label class="block text-xs text-gray-500 mb-1">存入文件夹</label>
-                    <input type="text" name="folder" list="folder-list" placeholder="如: 资料/竞品" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+    <div id="panel-folder" class="card" style="padding:20px;display:none">
+        <p class="imp-hint">浏览器会自动遍历文件夹里所有支持的文件，一次性上传到服务器</p>
+        <form method="POST" action="/notes/import/upload" enctype="multipart/form-data">
+            <div class="field">
+                <label class="label">选择文件夹</label>
+                <div class="dropzone">
+                    <input type="file" name="files" multiple webkitdirectory directory>
                 </div>
-                <div>
-                    <label class="block text-xs text-gray-500 mb-1">关联项目</label>
-                    <select name="project_id" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                <p class="imp-hint" style="margin-top:6px">提示：仅支持文本文件（.md .txt .py 等），其他类型会自动跳过</p>
+            </div>
+            <div class="imp-grid4" style="margin-bottom:16px">
+                <div class="field" style="margin-bottom:0">
+                    <label class="label">存入文件夹</label>
+                    <input type="text" name="folder" list="folder-list" placeholder="如: 资料/竞品" class="input">
+                </div>
+                <div class="field" style="margin-bottom:0">
+                    <label class="label">关联项目</label>
+                    <select name="project_id" class="input">
                         <option value="">不关联</option>
                         {% for p in projects %}
                         <option value="{{ p.id }}">{{ p.name }}</option>
                         {% endfor %}
                     </select>
                 </div>
-                <div>
-                    <label class="block text-xs text-gray-500 mb-1">作者</label>
-                    <input type="text" name="author" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                <div class="field" style="margin-bottom:0">
+                    <label class="label">作者</label>
+                    <input type="text" name="author" class="input">
                 </div>
-                <div>
-                    <label class="block text-xs text-gray-500 mb-1">额外标签</label>
-                    <input type="text" name="tags" placeholder="标签1,标签2" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                <div class="field" style="margin-bottom:0">
+                    <label class="label">额外标签</label>
+                    <input type="text" name="tags" placeholder="标签1,标签2" class="input">
                 </div>
             </div>
-            <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 transition">上传整个文件夹</button>
+            <button type="submit" class="btn primary">{{ ic.icon('arrow-down') }}上传整个文件夹</button>
         </form>
     </div>
 
     <!-- 图片导入 -->
-    <div id="panel-image" class="bg-white rounded-lg shadow-sm p-6" style="display:none">
-        <h2 class="text-lg font-semibold text-gray-700 mb-4">上传图片</h2>
-        <p class="text-sm text-gray-500 mb-4">支持 png / jpg / gif / webp，单张最大 8MB，一次最多 10 张。AI 分析需要配置 Claude 或 OpenAI 的 Key（DeepSeek 不支持识图）</p>
-        <form method="POST" action="/notes/import/images" enctype="multipart/form-data" class="space-y-4">
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">选择图片（可多选）</label>
-                <input type="file" name="files" multiple accept=".png,.jpg,.jpeg,.gif,.webp,image/*"
-                    class="w-full border rounded-lg px-3 py-2 text-sm">
-            </div>
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">处理方式</label>
-                <div class="space-y-2">
-                    <label class="flex items-start gap-2 text-sm text-gray-700 cursor-pointer">
-                        <input type="radio" name="mode" value="plain" checked class="mt-0.5">
-                        <span><strong>仅上传</strong> — 每张图存为一条图片笔记，不调 AI（免费）</span>
-                    </label>
-                    <label class="flex items-start gap-2 text-sm text-gray-700 cursor-pointer">
-                        <input type="radio" name="mode" value="analyze" class="mt-0.5">
-                        <span><strong>逐张 AI 分析</strong> — 每张图提取文字 + 内容说明，各存一条笔记</span>
-                    </label>
-                    <label class="flex items-start gap-2 text-sm text-gray-700 cursor-pointer">
-                        <input type="radio" name="mode" value="article" class="mt-0.5">
-                        <span><strong>合并成知识文章</strong> — 所有图片的文字信息整合成一篇结构化文章，存一条笔记</span>
-                    </label>
+    <div id="panel-image" class="card" style="padding:20px;display:none">
+        <p class="imp-hint">支持 png / jpg / gif / webp，单张最大 8MB，一次最多 10 张。AI 分析需要配置 Claude 或 OpenAI 的 Key（DeepSeek 不支持识图）</p>
+        <form method="POST" action="/notes/import/images" enctype="multipart/form-data">
+            <div class="field">
+                <label class="label">选择图片（可多选）</label>
+                <div class="dropzone">
+                    <input type="file" name="files" multiple accept=".png,.jpg,.jpeg,.gif,.webp,image/*">
                 </div>
             </div>
-            <div class="grid grid-cols-4 gap-3">
-                <div>
-                    <label class="block text-xs text-gray-500 mb-1">存入文件夹</label>
-                    <input type="text" name="folder" list="folder-list" placeholder="如: 资料/截图" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+            <div class="field">
+                <label class="label">处理方式</label>
+                <label class="radio-row">
+                    <input type="radio" name="mode" value="plain" checked>
+                    <span><strong>仅上传</strong> — 每张图存为一条图片笔记，不调 AI（免费）</span>
+                </label>
+                <label class="radio-row">
+                    <input type="radio" name="mode" value="analyze">
+                    <span><strong>逐张 AI 分析</strong> — 每张图提取文字 + 内容说明，各存一条笔记</span>
+                </label>
+                <label class="radio-row">
+                    <input type="radio" name="mode" value="article">
+                    <span><strong>合并成知识文章</strong> — 所有图片的文字信息整合成一篇结构化文章，存一条笔记</span>
+                </label>
+            </div>
+            <div class="imp-grid4" style="margin-bottom:16px">
+                <div class="field" style="margin-bottom:0">
+                    <label class="label">存入文件夹</label>
+                    <input type="text" name="folder" list="folder-list" placeholder="如: 资料/截图" class="input">
                 </div>
-                <div>
-                    <label class="block text-xs text-gray-500 mb-1">关联项目</label>
-                    <select name="project_id" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                <div class="field" style="margin-bottom:0">
+                    <label class="label">关联项目</label>
+                    <select name="project_id" class="input">
                         <option value="">不关联</option>
                         {% for p in projects %}
                         <option value="{{ p.id }}">{{ p.name }}</option>
                         {% endfor %}
                     </select>
                 </div>
-                <div>
-                    <label class="block text-xs text-gray-500 mb-1">作者</label>
-                    <input type="text" name="author" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                <div class="field" style="margin-bottom:0">
+                    <label class="label">作者</label>
+                    <input type="text" name="author" class="input">
                 </div>
-                <div>
-                    <label class="block text-xs text-gray-500 mb-1">额外标签</label>
-                    <input type="text" name="tags" placeholder="标签1,标签2" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                <div class="field" style="margin-bottom:0">
+                    <label class="label">额外标签</label>
+                    <input type="text" name="tags" placeholder="标签1,标签2" class="input">
                 </div>
             </div>
-            <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 transition">上传图片</button>
+            <button type="submit" class="btn primary">{{ ic.icon('arrow-down') }}上传图片</button>
         </form>
     </div>
 
     <!-- 网页链接导入 -->
-    <div id="panel-url" class="bg-white rounded-lg shadow-sm p-6" style="display:none">
-        <h2 class="text-lg font-semibold text-gray-700 mb-4">从网页链接导入</h2>
-        <p class="text-sm text-gray-500 mb-4">粘贴网页链接，自动抓取网页正文存入知识库。一次可粘贴多个链接（每行一个，最多 10 个）</p>
-        <form method="POST" action="/notes/import/url" class="space-y-4">
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">网页链接</label>
-                <textarea name="url" required rows="3" placeholder="https://example.com/article&#10;https://another.com/page"
-                    class="w-full border rounded-lg px-3 py-2 text-sm font-mono outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+    <div id="panel-url" class="card" style="padding:20px;display:none">
+        <p class="imp-hint">粘贴网页链接，自动抓取网页正文存入知识库。一次可粘贴多个链接（每行一个，最多 10 个）</p>
+        <form method="POST" action="/notes/import/url">
+            <div class="field">
+                <label class="label">网页链接</label>
+                <textarea name="url" required rows="3" placeholder="https://example.com/article&#10;https://another.com/page" class="input" style="font-family:var(--mono)"></textarea>
             </div>
-            <div class="grid grid-cols-4 gap-3">
-                <div>
-                    <label class="block text-xs text-gray-500 mb-1">存入文件夹</label>
-                    <input type="text" name="folder" list="folder-list" placeholder="如: 资料/竞品" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+            <div class="imp-grid4" style="margin-bottom:16px">
+                <div class="field" style="margin-bottom:0">
+                    <label class="label">存入文件夹</label>
+                    <input type="text" name="folder" list="folder-list" placeholder="如: 资料/竞品" class="input">
                 </div>
-                <div>
-                    <label class="block text-xs text-gray-500 mb-1">关联项目</label>
-                    <select name="project_id" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                <div class="field" style="margin-bottom:0">
+                    <label class="label">关联项目</label>
+                    <select name="project_id" class="input">
                         <option value="">不关联</option>
                         {% for p in projects %}
                         <option value="{{ p.id }}">{{ p.name }}</option>
                         {% endfor %}
                     </select>
                 </div>
-                <div>
-                    <label class="block text-xs text-gray-500 mb-1">作者</label>
-                    <input type="text" name="author" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                <div class="field" style="margin-bottom:0">
+                    <label class="label">作者</label>
+                    <input type="text" name="author" class="input">
                 </div>
-                <div>
-                    <label class="block text-xs text-gray-500 mb-1">额外标签</label>
-                    <input type="text" name="tags" placeholder="标签1,标签2" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                <div class="field" style="margin-bottom:0">
+                    <label class="label">额外标签</label>
+                    <input type="text" name="tags" placeholder="标签1,标签2" class="input">
                 </div>
             </div>
-            <button type="submit" class="bg-violet-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-violet-700 transition">抓取并导入</button>
+            <button type="submit" class="btn ai">{{ ic.icon('robot') }}抓取并导入</button>
         </form>
     </div>
 
     <!-- 从服务器路径导入 -->
-    <div id="panel-path" class="bg-white rounded-lg shadow-sm p-6" style="display:none">
-        <h2 class="text-lg font-semibold text-gray-700 mb-4">从服务器路径导入</h2>
-        <div class="bg-yellow-50 border border-yellow-200 rounded p-3 mb-4">
-            <p class="text-sm text-yellow-800">
-                ⚠️ 注意：服务器跑在 Linux 上，<strong>无法访问你电脑上的 D:\ C:\ 路径</strong>。<br>
-                这里只能导入<strong>服务器上的路径</strong>（例如 <code class="bg-yellow-100 px-1">/www/wwwroot/某文件夹</code>）。<br>
-                如果想导入电脑上的文件夹，请用<strong>"上传整个文件夹"</strong>。
-            </p>
+    <div id="panel-path" class="card" style="padding:20px;display:none">
+        <div class="warn-box">
+            注意：服务器跑在 Linux 上，<strong>无法访问你电脑上的 D:\ C:\ 路径</strong>。<br>
+            这里只能导入<strong>服务器上的路径</strong>（例如 <code>/www/wwwroot/某文件夹</code>）。<br>
+            如果想导入电脑上的文件夹，请用<strong>「上传整个文件夹」</strong>。
         </div>
-        <form method="POST" action="/notes/import/path" class="space-y-4">
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">服务器路径</label>
-                <input type="text" name="path" required placeholder="/www/wwwroot/某文件夹 或 /root/笔记.md"
-                    class="w-full border rounded-lg px-3 py-2 text-sm font-mono outline-none focus:ring-2 focus:ring-blue-500">
+        <form method="POST" action="/notes/import/path">
+            <div class="field">
+                <label class="label">服务器路径</label>
+                <input type="text" name="path" required placeholder="/www/wwwroot/某文件夹 或 /root/笔记.md" class="input" style="font-family:var(--mono)">
             </div>
-            <div class="grid grid-cols-4 gap-3">
-                <div>
-                    <label class="block text-xs text-gray-500 mb-1">存入文件夹</label>
-                    <input type="text" name="folder" list="folder-list" placeholder="如: 资料/竞品" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+            <div class="imp-grid4" style="margin-bottom:16px">
+                <div class="field" style="margin-bottom:0">
+                    <label class="label">存入文件夹</label>
+                    <input type="text" name="folder" list="folder-list" placeholder="如: 资料/竞品" class="input">
                 </div>
-                <div>
-                    <label class="block text-xs text-gray-500 mb-1">关联项目</label>
-                    <select name="project_id" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                <div class="field" style="margin-bottom:0">
+                    <label class="label">关联项目</label>
+                    <select name="project_id" class="input">
                         <option value="">不关联</option>
                         {% for p in projects %}
                         <option value="{{ p.id }}">{{ p.name }}</option>
                         {% endfor %}
                     </select>
                 </div>
-                <div>
-                    <label class="block text-xs text-gray-500 mb-1">作者</label>
-                    <input type="text" name="author" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                <div class="field" style="margin-bottom:0">
+                    <label class="label">作者</label>
+                    <input type="text" name="author" class="input">
                 </div>
-                <div>
-                    <label class="block text-xs text-gray-500 mb-1">额外标签</label>
-                    <input type="text" name="tags" placeholder="标签1,标签2" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                <div class="field" style="margin-bottom:0">
+                    <label class="label">额外标签</label>
+                    <input type="text" name="tags" placeholder="标签1,标签2" class="input">
                 </div>
             </div>
-            <button type="submit" class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700 transition">导入</button>
+            <button type="submit" class="btn primary">{{ ic.icon('arrow-down') }}导入</button>
         </form>
     </div>
 
@@ -233,39 +246,28 @@
     function showTab(name) {
         ['file', 'folder', 'image', 'url', 'path'].forEach(function(n) {
             document.getElementById('panel-' + n).style.display = (n === name) ? 'block' : 'none';
-            var btn = document.getElementById('tab-' + n);
-            if (n === name) {
-                btn.classList.remove('bg-gray-200', 'text-gray-600');
-                btn.classList.add('bg-blue-600', 'text-white');
-            } else {
-                btn.classList.remove('bg-blue-600', 'text-white');
-                btn.classList.add('bg-gray-200', 'text-gray-600');
-            }
+            document.getElementById('tab-' + n).classList.toggle('on', n === name);
         });
     }
     </script>
 
     <!-- 导入结果 -->
     {% if result %}
-    <div class="bg-white rounded-lg shadow-sm p-6">
-        <h2 class="text-lg font-semibold text-gray-700 mb-4">导入结果</h2>
-        <div class="space-y-2">
-            {% for item in result["items"] %}
-                {% if item.get('error') %}
-                <div class="text-sm text-red-600 bg-red-50 rounded p-3">{{ item.error }}</div>
-                {% elif item.get('skipped') %}
-                <div class="text-sm text-yellow-600 bg-yellow-50 rounded p-3">
-                    <strong>跳过 {{ item.skipped|length }} 个文件</strong>（不支持的类型）
-                </div>
-                {% else %}
-                <div class="flex items-center justify-between text-sm bg-green-50 rounded p-3">
-                    <span class="text-green-700">{{ item.title }}</span>
-                    <a href="/notes/{{ item.id }}" class="text-blue-600 hover:underline">查看</a>
-                </div>
-                {% endif %}
-            {% endfor %}
-        </div>
-        <a href="/notes" class="inline-block mt-4 text-sm text-blue-600 hover:underline">返回知识库</a>
+    <div class="card" style="padding:20px;margin-top:16px">
+        <div class="label" style="margin-bottom:10px">导入结果</div>
+        {% for item in result["items"] %}
+            {% if item.get('error') %}
+            <div class="res-row err">{{ item.error }}</div>
+            {% elif item.get('skipped') %}
+            <div class="res-row skip"><strong>跳过 {{ item.skipped|length }} 个文件</strong>（不支持的类型）</div>
+            {% else %}
+            <div class="res-row ok">
+                <span>{{ item.title }}</span>
+                <a href="/notes/{{ item.id }}">查看</a>
+            </div>
+            {% endif %}
+        {% endfor %}
+        <a href="/notes" style="display:inline-block;margin-top:6px;font-size:13px;color:var(--accent);text-decoration:none">返回知识库</a>
     </div>
     {% endif %}
 </div>

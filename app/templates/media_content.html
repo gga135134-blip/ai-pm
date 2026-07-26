@@ -1,163 +1,150 @@
 {% extends "base.html" %}
+{% import "_icons.html" as ic %}
 {% block title %}{{ content.title }}{% endblock %}
+{% block topbar %}
+<span class="crumb"><a href="/media" style="color:inherit;text-decoration:none">自媒体</a> {{ ic.icon('chevron') }} <b>{{ content.title }}</b></span>
+{% endblock %}
 {% block content %}
 <style>
-  .mc-steps { display: flex; gap: 0.25rem; overflow-x: auto; }
-  .mc-step { flex: 0 0 auto; font-size: 0.7rem; padding: 0.25rem 0.5rem;
-             border-radius: 999px; white-space: nowrap; }
-  .pub-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; }
-  @media (max-width: 767px) { .pub-grid { grid-template-columns: 1fr; } }
-</style>
-<div class="max-w-3xl mx-auto px-3 py-4">
+  /* base.html 只定义了 .pill.run，这两个变体本页自带（已发=成功语义，待发=中性） */
+  .pill.done{ color:var(--up); background:rgba(63,203,134,.14); }
+  .pill.off{ color:var(--ink-3); background:var(--panel-2); }
+  /* ---- stage stepper ---- */
+  .mc-steps{ display:flex; gap:6px; overflow-x:auto; margin-bottom:14px; -webkit-overflow-scrolling:touch; }
+  .mc-step{ flex:0 0 auto; font-size:12px; font-weight:500; padding:5px 12px; border-radius:999px; white-space:nowrap; background:var(--panel-2); color:var(--ink-3); border:1px solid var(--border); }
+  .mc-step.on{ background:var(--accent); color:var(--on-accent); border-color:transparent; font-weight:600; }
 
-  <div class="text-xs text-gray-400 mb-1">
-    <a href="/media" class="hover:underline">自媒体</a> / 内容
-  </div>
-  <h1 class="text-xl font-bold mb-1">{{ content.title }}</h1>
+  .pub-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+  @media (max-width:767px){ .pub-grid{ grid-template-columns:1fr; } }
+
+  .pub-card{ background:var(--bg); border:1px solid var(--border); border-radius:var(--r-sm); padding:13px; }
+  .pub-card.done{ border-color:var(--up); background:rgba(63,203,134,.06); }
+  .metric-field{ display:flex; flex-direction:column; gap:4px; margin-bottom:8px; }
+  .metric-field .label{ font-size:11px; color:var(--ink-3); font-weight:500; }
+  .metric-field .input{ padding:6px 9px; font-size:12px; }
+  .ai-status-line{ display:none; font-size:11.5px; color:var(--ai); margin:6px 0; }
+</style>
+
+<div class="max-w-3xl" style="max-width:820px; margin:0 auto">
+
+  <h1 class="pname" style="font-size:22px; margin-bottom:8px">{{ content.title }}</h1>
   {% if content.puzzle %}
-  <div class="text-sm text-violet-700 bg-violet-50 rounded px-3 py-2 mb-2">
+  <div style="font-size:13.5px; color:var(--ai); background:var(--ai-soft); border-radius:var(--r-sm); padding:9px 13px; margin-bottom:8px">
     ❓ {{ content.puzzle }}
   </div>
   {% endif %}
   {% if content.idea_reason %}
-  <div class="text-xs text-gray-500 mb-3">选题理由：{{ content.idea_reason }}</div>
+  <div style="font-size:12px; color:var(--ink-3); margin-bottom:14px">选题理由：{{ content.idea_reason }}</div>
   {% endif %}
 
-  <div class="mc-steps mb-4">
+  <!-- ===== 阶段状态机 ===== -->
+  <div class="mc-steps">
     {% for s in stages %}
-    <span class="mc-step
-      {% if s == content.stage %}bg-blue-600 text-white
-      {% else %}bg-gray-100 text-gray-400{% endif %}">{{ stage_labels[s] }}</span>
+    <span class="mc-step {% if s == content.stage %}on{% endif %}">{{ stage_labels[s] }}</span>
     {% endfor %}
   </div>
 
   {% if next_stage %}
-  <form method="post" action="/media/content/{{ content.id }}/stage" class="mb-4">
+  <form method="post" action="/media/content/{{ content.id }}/stage" style="margin-bottom:18px">
     <input type="hidden" name="to" value="{{ next_stage }}">
-    <button class="bg-blue-600 text-white rounded-lg px-4 py-2 text-sm">
-      推进到「{{ stage_labels[next_stage] }}」→
-    </button>
+    <button class="btn primary">推进到「{{ stage_labels[next_stage] }}」→</button>
   </form>
   {% endif %}
 
-  <!-- 脚本 -->
-  <div class="bg-white rounded-xl shadow-sm p-4 mb-3">
-    <div class="flex items-center justify-between mb-2">
-      <h2 class="font-semibold text-sm">口播脚本</h2>
-      <div class="flex gap-2">
-        <button onclick="aiScript('full')" id="btn-full"
-                class="bg-violet-600 text-white rounded-lg px-3 py-1.5 text-xs">
-          ✨ AI 写脚本
-        </button>
-        <button onclick="aiScript('lean')" id="btn-lean"
-                class="border border-violet-600 text-violet-600 rounded-lg px-3 py-1.5 text-xs"
-                title="只注入人设身份，用于对比注入是否真的有效">
-          精简注入
-        </button>
-      </div>
+  <!-- ===== 脚本 ===== -->
+  <div class="module">
+    <div class="mh">
+      <span class="ttl" style="font-size:14px">口播脚本</span>
+      <span class="sp"></span>
+      <button onclick="aiScript('full')" id="btn-full" class="btn ai" style="padding:6px 12px; font-size:12px">{{ ic.icon('robot') }}AI 写脚本</button>
+      <button onclick="aiScript('lean')" id="btn-lean" class="btn ai" style="padding:6px 12px; font-size:12px"
+              title="只注入人设身份，用于对比注入是否真的有效">精简注入</button>
     </div>
-    <div id="ai-status" class="hidden text-xs text-violet-600 mb-2"></div>
-    <form method="post" action="/media/content/{{ content.id }}/script">
-      <textarea name="script" id="script-box" rows="12"
-                placeholder="点「AI 写脚本」生成，或直接手写"
-                class="w-full border rounded-lg px-3 py-2 text-sm font-mono">{{ content.script }}</textarea>
-      <input name="edit_note" value="{{ content.edit_note }}" placeholder="剪辑要点"
-             class="w-full border rounded-lg px-3 py-2 text-sm mt-2">
-      <input name="cover_idea" value="{{ content.cover_idea }}" placeholder="封面思路"
-             class="w-full border rounded-lg px-3 py-2 text-sm mt-2">
-      <button class="bg-blue-600 text-white rounded-lg px-4 py-2 text-sm mt-2">
-        保存脚本
-      </button>
-    </form>
+    <div class="inner">
+      <div id="ai-status" class="ai-status-line"></div>
+      <form method="post" action="/media/content/{{ content.id }}/script">
+        <textarea name="script" id="script-box" rows="12"
+                  placeholder="点「AI 写脚本」生成，或直接手写"
+                  class="input w-full" style="font-family:var(--mono)">{{ content.script }}</textarea>
+        <div class="field" style="margin-top:10px">
+          <label class="label">剪辑要点</label>
+          <input name="edit_note" value="{{ content.edit_note }}" class="input w-full">
+        </div>
+        <div class="field">
+          <label class="label">封面思路</label>
+          <input name="cover_idea" value="{{ content.cover_idea }}" class="input w-full">
+        </div>
+        <button class="btn primary">保存脚本</button>
+      </form>
+    </div>
   </div>
 
-  <!-- 三平台发布：Task 9 填充 -->
-  <div class="bg-white rounded-xl shadow-sm p-4 mb-3">
-    <h2 class="font-semibold text-sm mb-3">三平台发布</h2>
+  <!-- ===== 三平台发布 ===== -->
+  <div class="module">
+    <div class="mh"><span class="ttl" style="font-size:14px">三平台发布</span></div>
+    <div class="inner">
     {% if not accounts %}
-      <p class="text-sm text-gray-400">
-        还没有平台账号，
-        <a href="/media/persona/{{ persona.id }}" class="text-blue-600">先去人设档案添加</a>。
-      </p>
+      <div class="empty" style="text-align:left; padding:0">
+        还没有平台账号，<a href="/media/persona/{{ persona.id }}" style="color:var(--accent)">先去人设档案添加</a>。
+      </div>
     {% else %}
     <div class="pub-grid">
       {% for a in accounts %}
       {% set p = pubs.get(a.id) %}
-      <div class="border rounded-lg p-3
-        {% if p and p.status == 'published' %}border-green-200 bg-green-50{% endif %}">
+      <div class="pub-card {% if p and p.status == 'published' %}done{% endif %}">
         <div class="flex items-center justify-between mb-2">
-          <span class="text-sm font-medium">
-            {{ platforms.get(a.platform, a.platform) }}
-          </span>
+          <span style="font-size:13.5px; font-weight:600; color:var(--ink-1)">{{ platforms.get(a.platform, a.platform) }}</span>
           {% if p and p.status == 'published' %}
-            <span class="text-xs text-green-600">已发</span>
+            <span class="pill done" style="padding:2px 9px">已发</span>
           {% else %}
-            <span class="text-xs text-gray-400">待发</span>
+            <span class="pill off" style="padding:2px 9px">待发</span>
           {% endif %}
         </div>
-        <button onclick="aiCopy('{{ a.id }}')" id="copy-btn-{{ a.id }}"
-                class="w-full border border-violet-600 text-violet-600 rounded-lg py-1.5 text-xs mb-2">
-          ✨ 生成文案
-        </button>
-        <div id="copy-status-{{ a.id }}" class="hidden text-xs text-violet-600 mb-1"></div>
-        <form method="post"
-              action="/media/content/{{ content.id }}/publish/{{ a.id }}/save">
+        <button onclick="aiCopy('{{ a.id }}')" id="copy-btn-{{ a.id }}" class="btn ai" style="width:100%; justify-content:center; padding:6px 0; font-size:12px; margin-bottom:8px">{{ ic.icon('robot') }}生成文案</button>
+        <div id="copy-status-{{ a.id }}" class="ai-status-line"></div>
+        <form method="post" action="/media/content/{{ content.id }}/publish/{{ a.id }}/save">
           <textarea name="publish_text" id="copy-box-{{ a.id }}" rows="6"
                     placeholder="该平台文案"
-                    class="w-full border rounded-lg px-2 py-1.5 text-xs">{{ p.publish_text if p else '' }}</textarea>
+                    class="input w-full" style="font-size:12px">{{ p.publish_text if p else '' }}</textarea>
           <input name="post_url" value="{{ p.post_url if p else '' }}"
                  placeholder="发布后的链接"
-                 class="w-full border rounded-lg px-2 py-1.5 text-xs mt-1">
-          <div class="flex gap-1 mt-1">
-            <button class="flex-1 bg-gray-100 text-gray-700 rounded-lg py-1.5 text-xs">
-              保存
-            </button>
+                 class="input w-full" style="font-size:12px; margin-top:6px">
+          <div class="flex gap-2" style="margin-top:8px">
+            <button class="btn" style="flex:1; justify-content:center; padding:6px 0; font-size:12px">保存</button>
             {% if not p or p.status != 'published' %}
-            <button name="mark_published" value="1"
-                    class="flex-1 bg-blue-600 text-white rounded-lg py-1.5 text-xs">
-              标记已发
-            </button>
+            <button name="mark_published" value="1" class="btn primary" style="flex:1; justify-content:center; padding:6px 0; font-size:12px">标记已发</button>
             {% endif %}
           </div>
         </form>
 
         {% if p and p.status == 'published' %}
         {% set m = metrics.get(p.id) %}
-        <div class="mt-2 pt-2 border-t border-green-200">
+        <div style="margin-top:10px; padding-top:10px; border-top:1px solid var(--border)">
           {% if m %}
-          <div class="text-xs text-gray-600">
+          <div style="font-size:12px; color:var(--ink-2)">
             播放 {{ m.views }}　赞 {{ m.likes }}<br>
             评 {{ m.comments }}　转 {{ m.shares }}　粉 +{{ m.new_fans }}
           </div>
-          <div class="text-xs text-gray-400 mt-0.5">
-            {{ m.collected_by }}　{{ m.snapshot_at[:16] }}
-          </div>
+          <div style="font-size:11px; color:var(--ink-3); margin-top:3px">{{ m.collected_by }}　{{ m.snapshot_at[:16] }}</div>
           {% else %}
-          <div class="text-xs text-gray-400">还没有数据</div>
+          <div class="empty" style="text-align:left; padding:0; font-size:11.5px">还没有数据</div>
           {% endif %}
-          <div class="mt-2">
-            <label class="block">
-              <span class="text-xs text-violet-600 cursor-pointer">📷 截图识别</span>
-              <input type="file" accept="image/*" class="hidden"
-                     onchange="uploadShot('{{ p.id }}', this)">
+          <div style="margin-top:10px">
+            <label style="display:block; cursor:pointer">
+              <span style="font-size:11.5px; color:var(--ai)">{{ ic.icon('search') }} 截图识别</span>
+              <input type="file" accept="image/*" style="display:none" onchange="uploadShot('{{ p.id }}', this)">
             </label>
-            <div id="shot-status-{{ p.id }}" class="hidden text-xs text-violet-600"></div>
-            <details class="mt-1">
-              <summary class="text-xs text-gray-400 cursor-pointer">✍️ 手动填</summary>
-              <form method="post" action="/media/publish/{{ p.id }}/metrics"
-                    class="mt-1 space-y-1">
+            <div id="shot-status-{{ p.id }}" class="ai-status-line"></div>
+            <details style="margin-top:6px">
+              <summary style="font-size:11.5px; color:var(--ink-3); cursor:pointer">{{ ic.icon('edit') }} 手动填</summary>
+              <form method="post" action="/media/publish/{{ p.id }}/metrics" style="margin-top:8px">
                 <input type="hidden" name="content_id" value="{{ content.id }}">
-                <input name="views" placeholder="播放（可填 1.2万）"
-                       class="w-full border rounded px-2 py-1 text-xs">
-                <input name="likes" placeholder="点赞"
-                       class="w-full border rounded px-2 py-1 text-xs">
-                <input name="comments" placeholder="评论"
-                       class="w-full border rounded px-2 py-1 text-xs">
-                <input name="shares" placeholder="转发"
-                       class="w-full border rounded px-2 py-1 text-xs">
-                <input name="new_fans" placeholder="涨粉"
-                       class="w-full border rounded px-2 py-1 text-xs">
-                <button class="w-full bg-gray-100 rounded py-1 text-xs">保存数据</button>
+                <div class="metric-field"><span class="label">播放（可填 1.2万）</span><input name="views" class="input"></div>
+                <div class="metric-field"><span class="label">点赞</span><input name="likes" class="input"></div>
+                <div class="metric-field"><span class="label">评论</span><input name="comments" class="input"></div>
+                <div class="metric-field"><span class="label">转发</span><input name="shares" class="input"></div>
+                <div class="metric-field"><span class="label">涨粉</span><input name="new_fans" class="input"></div>
+                <button class="btn w-full" style="width:100%; justify-content:center; padding:6px 0; font-size:12px">保存数据</button>
               </form>
             </details>
           </div>
@@ -167,61 +154,58 @@
       {% endfor %}
     </div>
     {% endif %}
+    </div>
   </div>
 
-  <div class="bg-white rounded-xl shadow-sm p-4 mb-3">
-    <div class="flex items-center justify-between mb-2">
-      <h2 class="font-semibold text-sm">复盘</h2>
-      <button onclick="aiReview()" id="review-btn"
-              class="bg-violet-600 text-white rounded-lg px-3 py-1.5 text-xs">
-        ✨ AI 复盘
-      </button>
+  <!-- ===== 复盘 ===== -->
+  <div class="module">
+    <div class="mh">
+      <span class="ttl" style="font-size:14px">复盘</span>
+      <span class="sp"></span>
+      <button onclick="aiReview()" id="review-btn" class="btn ai" style="padding:6px 12px; font-size:12px">{{ ic.icon('robot') }}AI 复盘</button>
     </div>
-    <div id="review-status" class="hidden text-xs text-violet-600 mb-2"></div>
+    <div class="inner">
+    <div id="review-status" class="ai-status-line"></div>
 
     {% if not reviews %}
-      <p class="text-sm text-gray-400">
-        发布并录入数据后，点「AI 复盘」——
-        复盘产出的人设条目要你确认才入库。
-      </p>
+      <div class="empty" style="text-align:left; padding:0">
+        发布并录入数据后，点「AI 复盘」—— 复盘产出的人设条目要你确认才入库。
+      </div>
     {% endif %}
 
     {% for r in reviews %}
-    <div class="border-l-2 {% if r.scope == 'overall' %}border-blue-600{% else %}border-gray-200{% endif %} pl-3 py-2 mb-2">
-      <div class="text-xs font-medium text-gray-500 mb-1">
+    <div style="border-left:3px solid {% if r.scope == 'overall' %}var(--accent){% else %}var(--border){% endif %}; padding-left:14px; padding-top:4px; padding-bottom:4px; margin-bottom:10px">
+      <div style="font-size:11.5px; font-weight:600; color:var(--ink-3); margin-bottom:4px">
         {% if r.scope == 'overall' %}总复盘{% else %}平台复盘{% endif %}
       </div>
       {% if r.what_worked %}
-      <div class="text-sm"><span class="text-green-600">✓</span> {{ r.what_worked }}</div>
+      <div style="font-size:13.5px; color:var(--ink-1)"><span style="color:var(--up)">✓</span> {{ r.what_worked }}</div>
       {% endif %}
       {% if r.what_failed %}
-      <div class="text-sm"><span class="text-amber-600">✗</span> {{ r.what_failed }}</div>
+      <div style="font-size:13.5px; color:var(--ink-1)"><span style="color:var(--warn)">✗</span> {{ r.what_failed }}</div>
       {% endif %}
       {% if r.next_action %}
-      <div class="text-sm text-gray-500 mt-1">→ {{ r.next_action }}</div>
+      <div style="font-size:13px; color:var(--ink-3); margin-top:4px">→ {{ r.next_action }}</div>
       {% endif %}
 
       {% if r.proposed_traits %}
-      <div class="mt-3 bg-violet-50 rounded-lg p-3">
-        <div class="text-xs font-medium text-violet-700 mb-2">
+      <div style="margin-top:12px; background:var(--ai-soft); border-radius:var(--r-sm); padding:12px">
+        <div style="font-size:11.5px; font-weight:600; color:var(--ai); margin-bottom:8px">
           AI 提炼的候选人设条目（确认后才入库）
         </div>
         {% for t in r.proposed_traits %}
-        <div class="bg-white rounded p-2 mb-2">
-          <div class="text-sm">{{ t.content }}</div>
+        <div style="background:var(--bg); border:1px solid var(--border); border-radius:var(--r-sm); padding:9px; margin-bottom:8px">
+          <div style="font-size:13.5px; color:var(--ink-1)">{{ t.content }}</div>
           {% if t.evidence %}
-          <div class="text-xs text-gray-400 mt-0.5">依据：{{ t.evidence }}</div>
+          <div style="font-size:11.5px; color:var(--ink-3); margin-top:3px">依据：{{ t.evidence }}</div>
           {% endif %}
-          <form method="post" action="/media/content/{{ content.id }}/adopt-trait"
-                class="mt-1.5">
+          <form method="post" action="/media/content/{{ content.id }}/adopt-trait" style="margin-top:8px">
             <input type="hidden" name="dimension" value="{{ t.dimension }}">
             <input type="hidden" name="content" value="{{ t.content }}">
             <input type="hidden" name="brief" value="{{ t.brief }}">
             <input type="hidden" name="evidence" value="{{ t.evidence }}">
             <input type="hidden" name="confidence" value="{{ t.confidence }}">
-            <button class="bg-blue-600 text-white rounded px-3 py-1 text-xs">
-              确认加入人设
-            </button>
+            <button class="btn primary" style="padding:5px 12px; font-size:12px">确认加入人设</button>
           </form>
         </div>
         {% endfor %}
@@ -229,6 +213,7 @@
       {% endif %}
     </div>
     {% endfor %}
+    </div>
   </div>
 </div>
 
@@ -239,7 +224,7 @@ async function aiScript(mode) {
   const btns = [document.getElementById('btn-full'), document.getElementById('btn-lean')];
   const status = document.getElementById('ai-status');
   btns.forEach(b => b.disabled = true);
-  status.classList.remove('hidden');
+  status.style.display = 'block';
   status.textContent = mode === 'lean'
     ? 'AI 写作中（精简注入，仅人设身份）…'
     : 'AI 写作中（完整注入人设条目与记忆点）…';
@@ -269,7 +254,7 @@ async function aiCopy(accountId) {
   const box = document.getElementById('copy-box-' + accountId);
   btn.disabled = true;
   btn.textContent = '生成中…';
-  status.classList.remove('hidden');
+  status.style.display = 'block';
   status.textContent = '正在按该平台特性改写…';
   try {
     const r = await fetch('/media/content/{{ content.id }}/publish/'
@@ -286,13 +271,13 @@ async function aiCopy(accountId) {
     status.textContent = '请求失败：' + e;
   }
   btn.disabled = false;
-  btn.textContent = '✨ 生成文案';
+  btn.innerHTML = '{{ ic.icon("robot") }}生成文案';
 }
 
 async function uploadShot(pubId, input) {
   if (!input.files || !input.files[0]) return;
   const status = document.getElementById('shot-status-' + pubId);
-  status.classList.remove('hidden');
+  status.style.display = 'block';
   status.textContent = 'AI 识别中…';
   const fd = new FormData();
   fd.append('file', input.files[0]);
@@ -317,7 +302,7 @@ async function aiReview() {
   const status = document.getElementById('review-status');
   btn.disabled = true;
   btn.textContent = '复盘中…';
-  status.classList.remove('hidden');
+  status.style.display = 'block';
   status.textContent = 'AI 正在对比各平台数据做归因…';
   try {
     const r = await fetch('/media/content/{{ content.id }}/ai-review',
@@ -329,12 +314,12 @@ async function aiReview() {
     } else {
       status.textContent = '失败：' + (d.error || '未知错误');
       btn.disabled = false;
-      btn.textContent = '✨ AI 复盘';
+      btn.innerHTML = '{{ ic.icon("robot") }}AI 复盘';
     }
   } catch (e) {
     status.textContent = '请求失败：' + e;
     btn.disabled = false;
-    btn.textContent = '✨ AI 复盘';
+    btn.innerHTML = '{{ ic.icon("robot") }}AI 复盘';
   }
 }
 </script>

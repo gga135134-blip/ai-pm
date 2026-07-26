@@ -1,35 +1,73 @@
 {% extends "base.html" %}
+{% import "_icons.html" as ic %}
 {% block title %}AI 助手 - 知识库{% endblock %}
+{% block topbar %}
+<span class="crumb"><a href="/notes" style="color:inherit;text-decoration:none">知识库</a> / <b>AI 助手</b></span>
+{% endblock %}
 {% block content %}
-<div class="mb-4 text-sm text-gray-400">
-    <a href="/notes" class="hover:text-gray-600">知识库</a> / <span class="text-gray-600">AI 助手</span>
-</div>
+<style>
+.chat-wrap{ max-width:880px; margin:0 auto; }
+.chat-head{ text-align:center; margin-bottom:22px; }
+.chat-head h1{ font-family:var(--display); font-size:24px; font-weight:600; margin:0; display:flex; align-items:center; justify-content:center; gap:9px; }
+.chat-head h1 .icon{ color:var(--ai); font-size:22px; }
+.chat-head p{ font-size:13px; color:var(--ink-3); margin:6px 0 0; }
 
-<div class="max-w-4xl mx-auto">
-    <div class="text-center mb-6">
-        <h1 class="text-2xl font-bold text-gray-800">知识库 AI 助手</h1>
-        <p class="text-sm text-gray-400 mt-1">提问、整理、分类、总结都可以直接说。先选范围，再下指令，结果可一键存为笔记</p>
+.chat-box{ display:flex; flex-direction:column; gap:14px; margin-bottom:18px; min-height:200px; }
+.msg-row{ display:flex; }
+.msg-row.user{ justify-content:flex-end; }
+.msg-row.ai{ justify-content:flex-start; }
+.bubble{ max-width:82%; border-radius:var(--r); padding:11px 15px; font-size:13.5px; line-height:1.65; white-space:pre-wrap; }
+.bubble.user{ background:var(--accent-soft); color:var(--ink-1); border:1px solid var(--border); }
+.bubble.ai{ background:var(--ai-soft); border:1px solid rgba(155,133,255,.28); box-shadow:var(--shadow); width:100%; color:var(--ink-1); }
+.bubble.ai .sources{ margin-top:10px; padding-top:10px; border-top:1px solid var(--border); display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+.bubble.ai .sources .lbl{ font-size:11px; color:var(--ink-3); }
+.bubble .meta-row{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:10px; padding-top:8px; border-top:1px solid var(--border); font-size:11.5px; color:var(--ink-3); }
+.plan-bubble{ border-left:3px solid var(--ai); }
+.plan-title{ font-size:12px; color:var(--ai); font-weight:600; margin-bottom:6px; display:flex; align-items:center; gap:6px; }
+.plan-item{ font-size:12px; color:var(--ink-2); background:var(--panel-2); border-radius:7px; padding:6px 10px; margin-top:6px; }
+.plan-btns{ display:flex; gap:8px; margin-top:12px; }
+
+.chat-loading{ text-align:center; padding:12px; font-size:13px; color:var(--ink-3); }
+
+.chatbar{ position:sticky; bottom:12px; background:var(--bg); border:1px solid var(--border); border-radius:var(--r); padding:14px 16px; box-shadow:var(--shadow-lg); }
+.chatbar-row{ display:flex; gap:8px; }
+.chatbar .scope-sel{ max-width:180px; }
+.chatbar-foot{ display:flex; align-items:center; justify-content:space-between; margin-top:10px; flex-wrap:wrap; gap:10px; }
+.chatbar-foot .opt{ display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+.chatbar-foot label{ display:flex; align-items:center; gap:6px; font-size:12px; color:var(--ink-2); cursor:pointer; }
+.chatbar-foot .cost{ font-size:11.5px; color:var(--ink-3); font-family:var(--mono); }
+.chatbar-foot .egs{ display:flex; gap:12px; flex-wrap:wrap; }
+.chatbar-foot .eg{ font-size:11.5px; color:var(--ai); background:none; border:none; cursor:pointer; padding:0; }
+.chatbar-foot .eg:hover{ text-decoration:underline; }
+.chatbar-foot .clr{ font-size:11.5px; color:var(--ink-3); background:none; border:none; cursor:pointer; padding:0; }
+.chatbar-foot .clr:hover{ color:var(--ink-1); }
+.save-btn{ font-size:11.5px; color:var(--warn); background:rgba(240,168,104,.14); border:1px solid rgba(240,168,104,.3); padding:4px 10px; border-radius:7px; cursor:pointer; display:inline-flex; align-items:center; gap:5px; }
+.save-btn:hover{ background:rgba(240,168,104,.22); }
+</style>
+
+<div class="chat-wrap">
+    <div class="chat-head">
+        <h1>{{ ic.icon('robot') }}知识库 AI 助手</h1>
+        <p>提问、整理、分类、总结都可以直接说。先选范围，再下指令，结果可一键存为笔记</p>
     </div>
 
     <!-- 对话区 -->
-    <div id="chat-box" class="space-y-4 mb-6 min-h-[200px]"></div>
+    <div id="chat-box" class="chat-box"></div>
 
     <!-- 加载中提示 -->
-    <div id="loading" class="hidden text-center py-4">
-        <span class="text-sm text-gray-400">AI 检索知识库并思考中…</span>
-    </div>
+    <div id="loading" class="hidden chat-loading">AI 检索知识库并思考中…</div>
 
     <!-- 输入区 -->
-    <div class="bg-white rounded-lg shadow-sm p-4 sticky bottom-4">
-        <form id="ask-form" class="space-y-2">
-            <div class="flex gap-2">
-                <select id="scope" class="border rounded-lg px-3 py-3 text-sm outline-none text-gray-600 max-w-[180px]">
+    <div class="chatbar">
+        <form id="ask-form">
+            <div class="chatbar-row">
+                <select id="scope" class="input scope-sel">
                     <option value="auto">智能检索（按指令找）</option>
                     <option value="all">全部笔记（最近80条）</option>
                     {% if folders %}
                     <optgroup label="按文件夹">
                         {% for f in folders %}
-                        <option value="folder:{{ f }}">&#128193; {{ f }}</option>
+                        <option value="folder:{{ f }}">{{ f }}</option>
                         {% endfor %}
                     </optgroup>
                     {% endif %}
@@ -42,22 +80,22 @@
                     {% endif %}
                 </select>
                 <input type="text" id="question" placeholder="如：把这些笔记按主题分类，列出每类的核心要点和待办"
-                    class="flex-1 border rounded-lg px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-violet-500" autocomplete="off">
-                <button type="submit" id="ask-btn" class="bg-violet-600 text-white px-6 py-3 rounded-lg text-sm hover:bg-violet-700 transition">发送</button>
+                    class="input" style="flex:1" autocomplete="off">
+                <button type="submit" id="ask-btn" class="btn primary">发送</button>
             </div>
         </form>
-        <div class="flex items-center justify-between mt-2">
-            <div class="flex items-center gap-3">
-                <label class="flex items-center gap-1 text-xs text-gray-600 cursor-pointer">
+        <div class="chatbar-foot">
+            <div class="opt">
+                <label>
                     <input type="checkbox" id="organize-mode">
                     <span>整理模式（AI 实际移动笔记/打标签，需你确认后生效）</span>
                 </label>
-                <span class="text-xs text-gray-400">累计费用: $<span id="total-cost">0.0000</span></span>
+                <span class="cost">累计费用: $<span id="total-cost">0.0000</span></span>
             </div>
-            <div class="flex gap-3">
-                <button onclick="fillExample('把这些笔记按主题分类整理，每类列出核心要点')" class="text-xs text-violet-600 hover:underline">示例:分类整理</button>
-                <button onclick="fillExample('把这些笔记按内容主题移动到合适的文件夹并打上标签')" class="text-xs text-violet-600 hover:underline">示例:自动归档</button>
-                <button onclick="clearChat()" class="text-xs text-gray-400 hover:text-gray-600">清空对话</button>
+            <div class="egs">
+                <button type="button" onclick="fillExample('把这些笔记按主题分类整理，每类列出核心要点')" class="eg">示例:分类整理</button>
+                <button type="button" onclick="fillExample('把这些笔记按内容主题移动到合适的文件夹并打上标签')" class="eg">示例:自动归档</button>
+                <button type="button" onclick="clearChat()" class="clr">清空对话</button>
             </div>
         </div>
     </div>
@@ -96,7 +134,7 @@ function esc(s) {
 function addUserMsg(text) {
     var box = document.getElementById('chat-box');
     box.insertAdjacentHTML('beforeend',
-        '<div class="flex justify-end"><div class="bg-blue-600 text-white rounded-lg px-4 py-3 text-sm max-w-[80%]" style="white-space:pre-wrap">' + esc(text) + '</div></div>');
+        '<div class="msg-row user"><div class="bubble user">' + esc(text) + '</div></div>');
     box.lastElementChild.scrollIntoView({behavior: 'smooth'});
 }
 
@@ -104,20 +142,20 @@ function addAiMsg(question, data, idx) {
     var box = document.getElementById('chat-box');
     var sourcesHtml = '';
     if (data.sources && data.sources.length) {
-        sourcesHtml = '<div class="mt-3 pt-3 border-t border-gray-100"><span class="text-xs text-gray-400">参考笔记: </span>'
+        sourcesHtml = '<div class="sources"><span class="lbl">参考笔记:</span>'
             + data.sources.map(function(s) {
-                return '<a href="/notes/' + s.id + '" target="_blank" class="text-xs text-blue-600 hover:underline mr-2">' + esc(s.title) + '</a>';
+                return '<a href="/notes/' + s.id + '" target="_blank" class="tag ai" style="text-decoration:none">' + esc(s.title) + '</a>';
             }).join('')
             + '</div>';
     }
     if (idx === undefined) idx = chatHistory.length - 1;
     box.insertAdjacentHTML('beforeend',
-        '<div class="flex justify-start"><div class="bg-white shadow-sm rounded-lg px-4 py-3 text-sm max-w-[85%] w-full">'
-        + '<div class="text-gray-800" style="white-space:pre-wrap">' + esc(data.answer) + '</div>'
+        '<div class="msg-row ai"><div class="bubble ai">'
+        + '<div>' + esc(data.answer) + '</div>'
         + sourcesHtml
-        + '<div class="flex items-center justify-between mt-3 pt-2 border-t border-gray-100">'
-        + '<span class="text-xs text-gray-400">' + esc(data.model || '') + ' / 参考' + (data.note_count || 0) + '条笔记 / $' + (data.cost || 0).toFixed(4) + '</span>'
-        + '<button onclick="saveNote(' + idx + ')" class="text-xs bg-amber-50 text-amber-700 border border-amber-200 px-3 py-1 rounded hover:bg-amber-100 transition">&#128190; 存为笔记</button>'
+        + '<div class="meta-row">'
+        + '<span>' + esc(data.model || '') + ' / 参考' + (data.note_count || 0) + '条笔记 / $' + (data.cost || 0).toFixed(4) + '</span>'
+        + '<button onclick="saveNote(' + idx + ')" class="save-btn">' + '{{ ic.icon("doc") }}' + '存为笔记</button>'
         + '</div></div></div>');
     box.lastElementChild.scrollIntoView({behavior: 'smooth'});
 }
@@ -127,26 +165,26 @@ function addPlanMsg(idx, data) {
     var box = document.getElementById('chat-box');
     var listHtml = '';
     if (data.actions && data.actions.length) {
-        listHtml = '<div class="mt-2 space-y-1">' + data.actions.map(function(a) {
+        listHtml = data.actions.map(function(a) {
             var parts = [];
-            if (a.folder) parts.push('移到 &#128193; ' + esc(a.folder));
+            if (a.folder) parts.push('移到 ' + esc(a.folder));
             if (a.add_tags && a.add_tags.length) parts.push('加标签 ' + a.add_tags.map(function(t){return '#' + esc(t);}).join(' '));
-            return '<div class="text-xs text-gray-600 bg-gray-50 rounded px-2 py-1">【' + esc(a.title) + '】 &rarr; ' + parts.join('，') + '</div>';
-        }).join('') + '</div>';
+            return '<div class="plan-item">【' + esc(a.title) + '】 &rarr; ' + parts.join('，') + '</div>';
+        }).join('');
     }
     var btnHtml = '';
     if (data.actions && data.actions.length) {
-        btnHtml = '<div id="plan-btns-' + idx + '" class="flex gap-2 mt-3">'
-            + '<button onclick="applyPlan(' + idx + ')" class="text-xs bg-violet-600 text-white px-4 py-1.5 rounded hover:bg-violet-700 transition">&#9989; 确认应用 ' + data.actions.length + ' 条更改</button>'
-            + '<button onclick="dismissPlan(' + idx + ')" class="text-xs border text-gray-500 px-4 py-1.5 rounded hover:bg-gray-50 transition">忽略</button>'
+        btnHtml = '<div id="plan-btns-' + idx + '" class="plan-btns">'
+            + '<button onclick="applyPlan(' + idx + ')" class="btn primary">确认应用 ' + data.actions.length + ' 条更改</button>'
+            + '<button onclick="dismissPlan(' + idx + ')" class="btn ghost">忽略</button>'
             + '</div>';
     }
     box.insertAdjacentHTML('beforeend',
-        '<div class="flex justify-start"><div class="bg-white shadow-sm rounded-lg px-4 py-3 text-sm max-w-[85%] w-full border-l-4 border-violet-500">'
-        + '<div class="text-xs text-violet-600 font-medium mb-1">&#128736; 整理方案</div>'
-        + '<div class="text-gray-800" style="white-space:pre-wrap">' + esc(data.summary || '') + '</div>'
+        '<div class="msg-row ai"><div class="bubble ai plan-bubble">'
+        + '<div class="plan-title">' + '{{ ic.icon("move") }}' + '整理方案</div>'
+        + '<div>' + esc(data.summary || '') + '</div>'
         + listHtml + btnHtml
-        + '<div class="text-xs text-gray-400 mt-2">' + esc(data.model || '') + ' / $' + (data.cost || 0).toFixed(4) + '</div>'
+        + '<div class="meta-row"><span>' + esc(data.model || '') + ' / $' + (data.cost || 0).toFixed(4) + '</span></div>'
         + '</div></div>');
     box.lastElementChild.scrollIntoView({behavior: 'smooth'});
 }
@@ -160,7 +198,7 @@ function applyPlan(idx) {
         .then(function(r) { return r.json(); })
         .then(function(data) {
             var btns = document.getElementById('plan-btns-' + idx);
-            if (btns) btns.innerHTML = '<span class="text-xs text-green-600">&#9989; 已应用 ' + (data.updated || 0) + ' 条更改 &middot; <a href="/notes" class="underline">去知识库查看</a></span>';
+            if (btns) btns.innerHTML = '<span style="font-size:12px;color:var(--up)">已应用 ' + (data.updated || 0) + ' 条更改 &middot; <a href="/notes" style="color:var(--up)">去知识库查看</a></span>';
             delete pendingPlans[idx];
             var h = chatHistory[idx];
             if (h) { h.applied = true; persist(); }
@@ -170,7 +208,7 @@ function applyPlan(idx) {
 
 function dismissPlan(idx) {
     var btns = document.getElementById('plan-btns-' + idx);
-    if (btns) btns.innerHTML = '<span class="text-xs text-gray-400">已忽略</span>';
+    if (btns) btns.innerHTML = '<span style="font-size:12px;color:var(--ink-3)">已忽略</span>';
     delete pendingPlans[idx];
 }
 

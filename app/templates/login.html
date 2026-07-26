@@ -4,36 +4,85 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>登录 - AI 项目管理</title>
+    <script>
+      /* 与站内一致：优先用用户在 app 里选的主题，没有再跟随系统。放在样式前避免闪烁 */
+      (function(){
+        try{
+          var t = localStorage.getItem('ui-theme');
+          if(!t){ t = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'; }
+          if(t === 'light'){ document.documentElement.setAttribute('data-theme','light'); }
+        }catch(e){}
+      })();
+    </script>
     <link href="/static/tailwind.min.css" rel="stylesheet">
+    <style>
+        :root{
+          --page:#0d1917; --bg:#132422; --panel-2:#1a2d2a; --border:rgba(255,255,255,.09);
+          --ink-1:#e8f0f1; --ink-2:#a6b3b5; --ink-3:#7e8c8f;
+          --accent:#2FD3C5; --accent-soft:rgba(47,211,197,.14); --on-accent:#06110f;
+          --down:#FF6257;
+          --glow:rgba(47,211,197,.28);
+          --shadow:0 1px 3px rgba(0,0,0,.38); --shadow-lg:0 24px 60px -40px rgba(0,0,0,.8);
+          --r:14px; --r-sm:9px;
+          --sans:system-ui,-apple-system,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
+          --display:"Songti SC",SimSun,serif;
+        }
+        [data-theme="light"]{
+            --page:#eef2f1; --bg:#ffffff; --panel-2:#f2f6f5; --border:rgba(16,44,42,.10);
+            --ink-1:#0f2322; --ink-2:#3a4b4a; --ink-3:#63736f;
+            --accent:#127C77; --accent-soft:rgba(18,124,119,.10); --on-accent:#ffffff;
+            --down:#C0453C;
+            --glow:rgba(18,124,119,.24);
+            --shadow:0 1px 3px rgba(19,61,58,.06); --shadow-lg:0 24px 60px -40px rgba(19,61,58,.30);
+        }
+        *{ box-sizing:border-box; }
+        html, body { background: var(--page); color: var(--ink-1); }
+        body { font-family: var(--sans); margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center; }
+        .login-wrap{ width:100%; max-width:380px; padding:16px; }
+        .login-head{ text-align:center; margin-bottom:24px; }
+        .login-head .mk{ color:var(--accent); display:flex; justify-content:center; margin-bottom:12px; }
+        .login-head .wm{ font-family:var(--display); font-size:32px; font-weight:600; letter-spacing:.06em; color:var(--ink-1); line-height:1.1; }
+        .login-head .wm i{ font-style:normal; color:var(--accent); }
+        .login-head h1{ font-family:var(--sans); font-size:14px; font-weight:500; margin:8px 0 0; color:var(--ink-2); letter-spacing:.02em; }
+        .login-head p{ font-size:13px; color:var(--ink-3); margin:6px 0 0; }
+        .login-card{ background:var(--bg); border:1px solid var(--border); border-radius:var(--r); box-shadow:var(--shadow-lg); padding:26px; }
+        .login-err{ margin-bottom:16px; background:rgba(255,98,87,.12); border:1px solid rgba(255,98,87,.3); color:var(--down); font-size:13px; border-radius:var(--r-sm); padding:11px 14px; }
+        .field{ display:flex; flex-direction:column; gap:6px; margin-bottom:16px; }
+        .label{ font-size:12.5px; color:var(--ink-3); font-weight:600; }
+        .input{ font-family:var(--sans); font-size:15px; color:var(--ink-1); background:var(--panel-2); border:1px solid var(--border); border-radius:var(--r-sm); padding:11px 12px; min-height:44px; }
+        .input:focus{ outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
+        .btn{ font-family:var(--sans); font-size:14px; font-weight:600; padding:12px 14px; min-height:44px; border-radius:var(--r-sm); cursor:pointer; display:inline-flex; align-items:center; justify-content:center; gap:6px; border:1px solid transparent; width:100%; }
+        .btn.primary{ background:var(--accent); color:var(--on-accent); box-shadow:0 6px 20px -8px var(--glow); }
+        .btn.primary:hover{ filter:brightness(1.06); }
+    </style>
 </head>
-<body class="bg-gray-100 min-h-screen flex items-center justify-center">
-    <div class="w-full max-w-sm">
-        <div class="text-center mb-8">
-            <div class="text-4xl mb-3">🤖</div>
-            <h1 class="text-2xl font-bold text-gray-800">AI 项目管理平台</h1>
-            <p class="text-sm text-gray-500 mt-1">请登录后继续</p>
-        </div>
-        <div class="bg-white rounded-xl shadow-sm p-8">
-            {% if error %}
-            <div class="mb-4 bg-red-50 border border-red-200 text-red-600 text-sm rounded-lg px-4 py-3">
-                {{ error }}
+<body>
+    <div class="login-wrap">
+        <div class="login-head">
+            <div class="mk">
+                <svg width="52" height="52" viewBox="0 0 52 52" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+                    <circle cx="26" cy="26" r="18" opacity=".3"/><circle cx="26" cy="26" r="11" opacity=".55"/>
+                    <circle cx="26" cy="26" r="3.5" fill="currentColor" stroke="none"/><path d="M26 26 41 15"/>
+                </svg>
             </div>
+            <div class="wm">AI<i>·</i>PM</div>
+            <h1>项目管理平台</h1>
+            <p>请登录后继续</p>
+        </div>
+        <div class="login-card">
+            {% if error %}
+            <div class="login-err">{{ error }}</div>
             {% endif %}
             <form method="POST" action="/login{% if request.query_params.get('next') %}?next={{ request.query_params.get('next') }}{% endif %}">
-                <div class="mb-4">
-                    <label class="block text-sm font-medium text-gray-700 mb-1">用户名</label>
-                    <input type="text" name="username" autofocus required
-                        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
+                <div class="field">
+                    <label class="label">用户名</label>
+                    <input type="text" name="username" autofocus required class="input">
                 </div>
-                <div class="mb-6">
-                    <label class="block text-sm font-medium text-gray-700 mb-1">密码</label>
-                    <input type="password" name="password" required
-                        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
+                <div class="field" style="margin-bottom:22px">
+                    <label class="label">密码</label>
+                    <input type="password" name="password" required class="input">
                 </div>
-                <button type="submit"
-                    class="w-full bg-blue-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition">
-                    登录
-                </button>
+                <button type="submit" class="btn primary">登录</button>
             </form>
         </div>
     </div>
