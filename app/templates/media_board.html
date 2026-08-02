@@ -39,8 +39,29 @@
     <span class="sp"></span>
     <a href="/media/topics" class="btn" style="padding:6px 12px; font-size:12.5px">{{ ic.icon('tag') }}话题库{% if pool_count %} ({{ pool_count }}){% endif %}</a>
     <a href="/media/persona/{{ persona.id }}" class="btn" style="padding:6px 12px; font-size:12.5px">{{ ic.icon('folder') }}人设档案</a>
+    <button onclick="feishuSync(this)" class="btn primary" style="padding:6px 12px; font-size:12.5px">🔄 从飞书同步</button>
+    <a href="/media/feishu/review" class="btn" style="padding:6px 12px; font-size:12.5px">未对上的数据</a>
+    <span id="feishu-msg" style="font-size:11.5px; color:var(--ink-3)"></span>
   </div>
 </div>
+
+<script>
+async function feishuSync(btn){
+  btn.disabled = true;
+  const msg = document.getElementById('feishu-msg');
+  msg.textContent = '同步中…';
+  try{
+    const r = await fetch('/media/feishu/sync', {method:'POST'});
+    const j = await r.json();
+    msg.textContent = j.ok
+      ? `✅ 同步 ${j.synced} 条（疑似 ${j.suspected}），未对上 ${j.unmatched} 条`
+      : `❌ ${j.error || '失败'}`;
+  }catch(e){
+    msg.textContent = '❌ ' + e;
+  }
+  btn.disabled = false;
+}
+</script>
 
 <!-- ===== 看板 ===== -->
 <div class="module">

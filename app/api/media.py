@@ -5,6 +5,7 @@ from fastapi import APIRouter, Request, Form, UploadFile, File
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from app.database import get_db
 from app.services.media_metrics import recognize_screenshot, save_metrics
+from app.services.media_feishu_sync import sync_from_feishu
 from app.services.media_flow import (
     PLATFORMS, STAGES, STAGE_LABELS, can_transition, next_stage, stage_index,
 )
@@ -605,3 +606,76 @@ async def adopt_trait(cid: str, dimension: str = Form(...), content: str = Form(
     finally:
         await db.close()
     return RedirectResponse(f"/media/content/{cid}", status_code=302)
+
+
+@router.post("/media/feishu/sync")
+async def feishu_sync(request: Request):
+    db = await get_db()
+    try:
+        rep = await sync_from_feishu(db)
+    except Exception as e:
+        log.exception("feishu sync failed")
+        rep = {"ok": False, "error": str(e)}
+    finally:
+        await db.close()
+    return JSONResponse(rep)
+
+
+@router.get("/media/feishu/review")
+async def feishu_review(request: Request):
+    db = await get_db()
+    try:
+        cur = await db.execute(
+            "SELECT * FROM media_feishu_unmatched WHERE status='pending' "
+            "ORDER BY updated_at DESC")
+        rows = [dict(r) for r in await cur.fetchall()]
+        cur = await db.execute(
+            "SELECT c.id,c.title FROM media_content c ORDER BY c.updated_at DESC "
+            "LIMIT 200")
+        contents = [dict(r) for r in await cur.fetchall()]
+    finally:
+        await db.close()
+    return _tpl(request, "media_feishu_review.html",
+                {"rows": rows, "contents": contents})
+
+
+@router.post("/media/feishu/unmatched/{uid}/link")
+async def feishu_link(request: Request, uid: str, content_id: str = Form(...),
+                      account_id: str = Form(...)):
+    db = await get_db()
+    try:
+        cur = await db.execute("SELECT * FROM media_feishu_unmatched WHERE id=?", (uid,))
+        u = await cur.fetchone()
+        if u:
+            import uuid as _uuid, json as _json
+            pubid = str(_uuid.uuid4())
+            await db.execute(
+                "INSERT INTO media_publish (id,content_id,account_id,post_url,status) "
+                "VALUES (?,?,?,?,'published')",
+                (pubid, content_id, account_id, u["post_url"]))
+            metrics = _json.loads(u["raw_metrics"] or "{}")
+            from app.services.media_metrics import normalize_metrics
+            m = normalize_metrics(metrics)
+            await db.execute(
+                "INSERT INTO media_metrics (id,publish_id,views,likes,comments,"
+                "shares,new_fans,collected_by) VALUES (?,?,?,?,?,?,?,'feishu')",
+                (str(_uuid.uuid4()), pubid, m["views"], m["likes"], m["comments"],
+                 m["shares"], m["new_fans"]))
+            await db.execute("UPDATE media_feishu_unmatched SET status='linked',"
+                             "updated_at=CURRENT_TIMESTAMP WHERE id=?", (uid,))
+            await db.commit()
+    finally:
+        await db.close()
+    return RedirectResponse("/media/feishu/review", status_code=302)
+
+
+@router.post("/media/feishu/unmatched/{uid}/ignore")
+async def feishu_ignore(request: Request, uid: str):
+    db = await get_db()
+    try:
+        await db.execute("UPDATE media_feishu_unmatched SET status='ignored',"
+                         "updated_at=CURRENT_TIMESTAMP WHERE id=?", (uid,))
+        await db.commit()
+    finally:
+        await db.close()
+    return RedirectResponse("/media/feishu/review", status_code=302)

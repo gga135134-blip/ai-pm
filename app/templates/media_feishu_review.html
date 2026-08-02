@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}未对上的飞书数据{% endblock %}
+{% block topbar %}
+<span class="crumb"><a href="/media/board" style="color:inherit; text-decoration:none">自媒体</a> / <b>未对上的飞书数据</b></span>
+{% endblock %}
+{% block content %}
+<style>
+  .fu-card{ background:rgba(230,180,20,.10); border:1px solid rgba(230,180,20,.35);
+            border-radius:var(--r-sm); padding:14px 16px; margin-bottom:14px; }
+  .fu-title{ font-size:14px; font-weight:600; color:var(--ink-1); margin-bottom:4px; }
+  .fu-url{ font-size:12px; color:var(--ink-3); word-break:break-all; margin-bottom:8px; }
+  .fu-metrics{ font-family:var(--mono); font-size:11.5px; color:var(--ink-2);
+               background:var(--panel-2); border-radius:6px; padding:6px 9px;
+               margin-bottom:10px; white-space:pre-wrap; word-break:break-all; }
+  .fu-form-row{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  .fu-form-row select, .fu-form-row input{ flex:1; min-width:140px; }
+  .fu-actions{ display:flex; gap:8px; margin-top:8px; }
+  .fu-empty{ text-align:center; padding:40px 0; color:var(--ink-3); font-size:13px; }
+  @media (max-width:767px){
+    .fu-form-row{ flex-direction:column; align-items:stretch; }
+    .fu-form-row select, .fu-form-row input{ min-width:0; width:100%; }
+  }
+</style>
+
+<div style="margin-bottom:16px">
+  <div class="pname">未对上的飞书数据</div>
+  <div style="font-size:12.5px; color:var(--ink-3); margin-top:4px">
+    共 {{ rows|length }} 条待处理 —— 可手动关联到已有内容，或忽略。
+  </div>
+</div>
+
+<div class="module">
+  <div class="inner">
+    {% if not rows %}
+    <div class="fu-empty">暂无未对上的数据 🎉</div>
+    {% endif %}
+    {% for r in rows %}
+    <div class="fu-card">
+      <div class="fu-title">{{ r.title or '（无标题）' }}</div>
+      <div class="fu-url">{{ r.post_url }}</div>
+      <div class="fu-metrics">{{ r.raw_metrics }}</div>
+
+      <form method="post" action="/media/feishu/unmatched/{{ r.id }}/link" class="fu-form-row">
+        <select name="content_id" required class="input">
+          <option value="" disabled selected>关联到内容…</option>
+          {% for c in contents %}
+          <option value="{{ c.id }}">{{ c.title }}</option>
+          {% endfor %}
+        </select>
+        <input name="account_id" placeholder="账号ID" required class="input">
+        <button type="submit" class="btn primary">关联</button>
+      </form>
+
+      <form method="post" action="/media/feishu/unmatched/{{ r.id }}/ignore" class="fu-actions">
+        <button type="submit" class="btn ghost">忽略</button>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}
