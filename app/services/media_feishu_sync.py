@@ -6,7 +6,6 @@
 import json
 import re
 import uuid
-from datetime import date
 
 from app.services.feishu_client import list_bitable_records
 from app.services.media_metrics import normalize_metrics, METRIC_FIELDS
@@ -56,10 +55,9 @@ async def _load_field_map():
 
 async def _write_feishu_snapshot(db, publish_id, metrics, missing_fields):
     """当天已有 feishu 快照则更新，否则插入。带 missing_fields。"""
-    today = date.today().isoformat()
     cur = await db.execute(
         "SELECT id FROM media_metrics WHERE publish_id=? AND collected_by='feishu' "
-        "AND date(snapshot_at)=?", (publish_id, today))
+        "AND date(snapshot_at,'localtime')=date('now','localtime')", (publish_id,))
     existing = await cur.fetchone()
     mf = json.dumps(missing_fields, ensure_ascii=False)
     if existing:
@@ -68,6 +66,7 @@ async def _write_feishu_snapshot(db, publish_id, metrics, missing_fields):
             "new_fans=?,missing_fields=?,snapshot_at=CURRENT_TIMESTAMP WHERE id=?",
             (metrics["views"], metrics["likes"], metrics["comments"],
              metrics["shares"], metrics["new_fans"], mf, existing["id"]))
+        return True
     else:
         await db.execute(
             "INSERT INTO media_metrics (id,publish_id,views,likes,comments,"
@@ -75,10 +74,10 @@ async def _write_feishu_snapshot(db, publish_id, metrics, missing_fields):
             "VALUES (?,?,?,?,?,?,?,'feishu',?)",
             (str(uuid.uuid4()), publish_id, metrics["views"], metrics["likes"],
              metrics["comments"], metrics["shares"], metrics["new_fans"], mf))
+        return False
 
 
 async def _upsert_unmatched(db, post_url, title, metrics):
-    key = post_url or title
     cur = await db.execute(
         "SELECT id FROM media_feishu_unmatched WHERE (post_url=? AND post_url<>'') "
         "OR (post_url='' AND title=?)", (post_url, title))
@@ -120,7 +119,7 @@ async def sync_from_feishu(db, records=None) -> dict:
     for r in await cur.fetchall():
         by_title.setdefault(norm_title(r["title"]), r["pid"])
 
-    synced = suspected = unmatched = 0
+    synced = suspected = unmatched = updated = 0
     for rec in records:
         mapped = map_feishu_row(rec.get("fields") or {}, field_map)
         if not mapped:
@@ -131,13 +130,15 @@ async def sync_from_feishu(db, records=None) -> dict:
             if pubid:
                 suspected += 1  # 靠标题匹配，标疑似
         if pubid:
-            await _write_feishu_snapshot(db, pubid, mapped["metrics"],
-                                         mapped["missing_fields"])
+            was_update = await _write_feishu_snapshot(db, pubid, mapped["metrics"],
+                                                       mapped["missing_fields"])
             synced += 1
+            if was_update:
+                updated += 1
         else:
             await _upsert_unmatched(db, mapped["post_url"], mapped["title"],
                                     mapped["metrics"])
             unmatched += 1
     await db.commit()
-    return {"ok": True, "synced": synced, "updated": 0, "unmatched": unmatched,
+    return {"ok": True, "synced": synced, "updated": updated, "unmatched": unmatched,
             "suspected": suspected, "error": ""}

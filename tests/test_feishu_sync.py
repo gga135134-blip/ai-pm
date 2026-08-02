@@ -71,6 +71,7 @@ def test_sync_matches_by_url_and_writes_metrics():
                                "播放量": "1.5万", "点赞": 200}}]
         # 注入 field_map 到 settings
         import app.api.settings as st
+        orig_map = st.load_settings().get("feishu_media_map")
         cfg = st.load_settings(); cfg["feishu_media_map"] = {
             "fields": {"post_url": "视频链接", "title": "标题",
                        "views": "播放量", "likes": "点赞"}}
@@ -87,7 +88,14 @@ def test_sync_matches_by_url_and_writes_metrics():
         for t in ["media_metrics","media_publish","media_account",
                   "media_content","media_persona","media_feishu_unmatched"]:
             await db.execute(f"DELETE FROM {t}")
-        await db.commit(); await db.close()
+        await db.commit()
+        s = st.load_settings()
+        if orig_map is None:
+            s.pop("feishu_media_map", None)
+        else:
+            s["feishu_media_map"] = orig_map
+        st.save_settings(s)
+        await db.close()
     _run(go())
 
 
@@ -99,6 +107,7 @@ def test_sync_unmatched_goes_to_table():
         records = [{"fields": {"视频链接": "http://orphan", "标题": "野生视频",
                                "播放量": 999}}]
         import app.api.settings as st
+        orig_map = st.load_settings().get("feishu_media_map")
         cfg = st.load_settings(); cfg["feishu_media_map"] = {
             "fields": {"post_url": "视频链接", "title": "标题", "views": "播放量"}}
         st.save_settings(cfg)
@@ -109,5 +118,11 @@ def test_sync_unmatched_goes_to_table():
         )).fetchone())["c"]
         assert n == 1
         await db.execute("DELETE FROM media_feishu_unmatched"); await db.commit()
+        s = st.load_settings()
+        if orig_map is None:
+            s.pop("feishu_media_map", None)
+        else:
+            s["feishu_media_map"] = orig_map
+        st.save_settings(s)
         await db.close()
     _run(go())
