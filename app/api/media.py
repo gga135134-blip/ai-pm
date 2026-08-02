@@ -396,7 +396,12 @@ async def content_detail(request: Request, cid: str):
                 "ORDER BY snapshot_at DESC LIMIT 1", (p["id"],))
             m = await cur.fetchone()
             if m:
-                metrics[p["id"]] = dict(m)
+                md = dict(m)
+                try:
+                    md["missing_list"] = json.loads(md.get("missing_fields") or "[]")
+                except Exception:
+                    md["missing_list"] = []
+                metrics[p["id"]] = md
 
         cur = await db.execute(
             "SELECT * FROM media_review WHERE content_id=? ORDER BY created_at", (cid,))
