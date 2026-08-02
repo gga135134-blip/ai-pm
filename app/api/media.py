@@ -633,10 +633,15 @@ async def feishu_review(request: Request):
             "SELECT c.id,c.title FROM media_content c ORDER BY c.updated_at DESC "
             "LIMIT 200")
         contents = [dict(r) for r in await cur.fetchall()]
+        cur = await db.execute(
+            "SELECT a.id, a.platform, a.account_name, a.persona_id, p.name AS persona_name "
+            "FROM media_account a JOIN media_persona p ON p.id=a.persona_id "
+            "WHERE a.status='active' ORDER BY a.created_at DESC")
+        accounts = [dict(r) for r in await cur.fetchall()]
     finally:
         await db.close()
     return _tpl(request, "media_feishu_review.html",
-                {"rows": rows, "contents": contents})
+                {"rows": rows, "contents": contents, "accounts": accounts})
 
 
 @router.post("/media/feishu/unmatched/{uid}/link")
@@ -644,26 +649,36 @@ async def feishu_link(request: Request, uid: str, content_id: str = Form(...),
                       account_id: str = Form(...)):
     db = await get_db()
     try:
-        cur = await db.execute("SELECT * FROM media_feishu_unmatched WHERE id=?", (uid,))
+        cur = await db.execute(
+            "SELECT * FROM media_feishu_unmatched WHERE id=? AND status='pending'",
+            (uid,))
         u = await cur.fetchone()
         if u:
-            import uuid as _uuid, json as _json
-            pubid = str(_uuid.uuid4())
-            await db.execute(
-                "INSERT INTO media_publish (id,content_id,account_id,post_url,status) "
-                "VALUES (?,?,?,?,'published')",
-                (pubid, content_id, account_id, u["post_url"]))
-            metrics = _json.loads(u["raw_metrics"] or "{}")
-            from app.services.media_metrics import normalize_metrics
-            m = normalize_metrics(metrics)
-            await db.execute(
-                "INSERT INTO media_metrics (id,publish_id,views,likes,comments,"
-                "shares,new_fans,collected_by) VALUES (?,?,?,?,?,?,?,'feishu')",
-                (str(_uuid.uuid4()), pubid, m["views"], m["likes"], m["comments"],
-                 m["shares"], m["new_fans"]))
-            await db.execute("UPDATE media_feishu_unmatched SET status='linked',"
-                             "updated_at=CURRENT_TIMESTAMP WHERE id=?", (uid,))
-            await db.commit()
+            cur = await db.execute(
+                "SELECT persona_id FROM media_content WHERE id=?", (content_id,))
+            content_row = await cur.fetchone()
+            cur = await db.execute(
+                "SELECT persona_id FROM media_account WHERE id=?", (account_id,))
+            account_row = await cur.fetchone()
+            if (content_row and account_row
+                    and account_row["persona_id"] == content_row["persona_id"]):
+                import uuid as _uuid, json as _json
+                pubid = str(_uuid.uuid4())
+                await db.execute(
+                    "INSERT INTO media_publish (id,content_id,account_id,post_url,status) "
+                    "VALUES (?,?,?,?,'published')",
+                    (pubid, content_id, account_id, u["post_url"]))
+                metrics = _json.loads(u["raw_metrics"] or "{}")
+                from app.services.media_metrics import normalize_metrics
+                m = normalize_metrics(metrics)
+                await db.execute(
+                    "INSERT INTO media_metrics (id,publish_id,views,likes,comments,"
+                    "shares,new_fans,collected_by) VALUES (?,?,?,?,?,?,?,'feishu')",
+                    (str(_uuid.uuid4()), pubid, m["views"], m["likes"], m["comments"],
+                     m["shares"], m["new_fans"]))
+                await db.execute("UPDATE media_feishu_unmatched SET status='linked',"
+                                 "updated_at=CURRENT_TIMESTAMP WHERE id=?", (uid,))
+                await db.commit()
     finally:
         await db.close()
     return RedirectResponse("/media/feishu/review", status_code=302)

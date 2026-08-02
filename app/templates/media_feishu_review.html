@@ -47,7 +47,12 @@
           <option value="{{ c.id }}">{{ c.title }}</option>
           {% endfor %}
         </select>
-        <input name="account_id" placeholder="账号ID" required class="input">
+        <select name="account_id" required class="input">
+          <option value="" disabled selected>关联到账号…</option>
+          {% for a in accounts %}
+          <option value="{{ a.id }}">{{ a.platform }} - {{ a.account_name }} ({{ a.persona_name }})</option>
+          {% endfor %}
+        </select>
         <button type="submit" class="btn primary">关联</button>
       </form>
 
