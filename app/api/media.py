@@ -676,11 +676,13 @@ async def feishu_link(request: Request, uid: str, content_id: str = Form(...),
                 metrics = _json.loads(u["raw_metrics"] or "{}")
                 from app.services.media_metrics import normalize_metrics
                 m = normalize_metrics(metrics)
+                missing_fields = u["missing_fields"] or "[]"
                 await db.execute(
                     "INSERT INTO media_metrics (id,publish_id,views,likes,comments,"
-                    "shares,new_fans,collected_by) VALUES (?,?,?,?,?,?,?,'feishu')",
+                    "shares,new_fans,collected_by,missing_fields) "
+                    "VALUES (?,?,?,?,?,?,?,'feishu',?)",
                     (str(_uuid.uuid4()), pubid, m["views"], m["likes"], m["comments"],
-                     m["shares"], m["new_fans"]))
+                     m["shares"], m["new_fans"], missing_fields))
                 await db.execute("UPDATE media_feishu_unmatched SET status='linked',"
                                  "updated_at=CURRENT_TIMESTAMP WHERE id=?", (uid,))
                 await db.commit()

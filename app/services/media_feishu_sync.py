@@ -77,19 +77,21 @@ async def _write_feishu_snapshot(db, publish_id, metrics, missing_fields):
         return False
 
 
-async def _upsert_unmatched(db, post_url, title, metrics):
+async def _upsert_unmatched(db, post_url, title, metrics, missing_fields):
     cur = await db.execute(
         "SELECT id FROM media_feishu_unmatched WHERE (post_url=? AND post_url<>'') "
         "OR (post_url='' AND title=?)", (post_url, title))
     row = await cur.fetchone()
     raw = json.dumps(metrics, ensure_ascii=False)
+    mf = json.dumps(missing_fields, ensure_ascii=False)
     if row:
         await db.execute("UPDATE media_feishu_unmatched SET raw_metrics=?,"
-                         "updated_at=CURRENT_TIMESTAMP WHERE id=?", (raw, row["id"]))
+                         "missing_fields=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                         (raw, mf, row["id"]))
     else:
         await db.execute(
-            "INSERT INTO media_feishu_unmatched (id,post_url,title,raw_metrics) "
-            "VALUES (?,?,?,?)", (str(uuid.uuid4()), post_url, title, raw))
+            "INSERT INTO media_feishu_unmatched (id,post_url,title,raw_metrics,missing_fields) "
+            "VALUES (?,?,?,?,?)", (str(uuid.uuid4()), post_url, title, raw, mf))
 
 
 async def sync_from_feishu(db, records=None) -> dict:
@@ -137,7 +139,7 @@ async def sync_from_feishu(db, records=None) -> dict:
                 updated += 1
         else:
             await _upsert_unmatched(db, mapped["post_url"], mapped["title"],
-                                    mapped["metrics"])
+                                    mapped["metrics"], mapped["missing_fields"])
             unmatched += 1
     await db.commit()
     return {"ok": True, "synced": synced, "updated": updated, "unmatched": unmatched,

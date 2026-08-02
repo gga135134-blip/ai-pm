@@ -374,6 +374,7 @@ MIGRATIONS = [
     "ALTER TABLE study_settings ADD COLUMN reminded_evening DATE DEFAULT NULL",
     "ALTER TABLE study_settings ADD COLUMN reminded_night DATE DEFAULT NULL",
     "ALTER TABLE media_metrics ADD COLUMN missing_fields TEXT DEFAULT '[]'",
+    "ALTER TABLE media_feishu_unmatched ADD COLUMN missing_fields TEXT DEFAULT '[]'",
 ]
 
 
