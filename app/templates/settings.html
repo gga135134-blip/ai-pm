@@ -232,5 +232,89 @@
         <span class="st-save-hint">先保存上方「主设置」里的通知配置，再点这里测试</span>
     </form>
 
+    <!-- ============ 飞书数据源：独立表单，独立提交，与主设置无关 ============ -->
+    <div class="module" style="margin-top:20px">
+        <div class="mh">
+            <span class="ic">{{ ic.icon('settings') }}</span>
+            <span class="ttl">飞书数据源</span>
+            <span class="sub">配置多维表格连接，用于同步媒体数据</span>
+        </div>
+        <div class="inner">
+            <form method="POST" action="/settings/feishu" id="feishu-form">
+                <div class="field">
+                    <label class="label">App Token（多维表格 app_token）</label>
+                    <input type="text" name="app_token" value="{{ config.feishu_media_map.app_token }}" placeholder="bascnxxxxxxxxxxxxxxxx" class="input">
+                </div>
+                <div class="field" style="margin-bottom:14px">
+                    <label class="label">Table ID（表格 table_id）</label>
+                    <input type="text" name="table_id" value="{{ config.feishu_media_map.table_id }}" placeholder="tblxxxxxxxxxxxxxxxx" class="input">
+                    <p class="st-note">app_id/app_secret 已在 .env 中配置（Task 1），此处只填 app_token/table_id，非密钥</p>
+                </div>
+
+                <div class="st-subhead">字段映射（飞书列名对照，填「飞书里这列叫什么」）</div>
+                <div class="st-sub2">
+                    <div class="field">
+                        <label class="label">视频链接</label>
+                        <input type="text" name="f_post_url" value="{{ config.feishu_media_map.fields.post_url }}" placeholder="如：视频链接" class="input">
+                    </div>
+                    <div class="field">
+                        <label class="label">标题</label>
+                        <input type="text" name="f_title" value="{{ config.feishu_media_map.fields.title }}" placeholder="如：标题" class="input">
+                    </div>
+                    <div class="field">
+                        <label class="label">播放量</label>
+                        <input type="text" name="f_views" value="{{ config.feishu_media_map.fields.views }}" placeholder="如：播放量" class="input">
+                    </div>
+                    <div class="field">
+                        <label class="label">点赞数</label>
+                        <input type="text" name="f_likes" value="{{ config.feishu_media_map.fields.likes }}" placeholder="如：点赞数" class="input">
+                    </div>
+                    <div class="field">
+                        <label class="label">评论数</label>
+                        <input type="text" name="f_comments" value="{{ config.feishu_media_map.fields.comments }}" placeholder="如：评论数" class="input">
+                    </div>
+                    <div class="field">
+                        <label class="label">分享数</label>
+                        <input type="text" name="f_shares" value="{{ config.feishu_media_map.fields.shares }}" placeholder="如：分享数" class="input">
+                    </div>
+                    <div class="field">
+                        <label class="label">新增粉丝</label>
+                        <input type="text" name="f_new_fans" value="{{ config.feishu_media_map.fields.new_fans }}" placeholder="如：新增粉丝" class="input">
+                    </div>
+                    <div class="field" style="margin-bottom:14px">
+                        <label class="label">快照时间</label>
+                        <input type="text" name="f_snapshot_at" value="{{ config.feishu_media_map.fields.snapshot_at }}" placeholder="如：更新时间" class="input">
+                    </div>
+                </div>
+
+                <div style="display:flex;align-items:center;gap:10px;padding-top:6px;flex-wrap:wrap">
+                    <button type="submit" class="btn primary">{{ ic.icon('check') }}保存飞书配置</button>
+                    <button type="button" class="btn" id="feishu-test-btn" onclick="testFeishuConn()">{{ ic.icon('bell') }}测试连接</button>
+                    <span class="st-save-hint">先保存上方配置，再点「测试连接」拉一条真实记录，看列名对照填映射</span>
+                </div>
+            </form>
+            <div id="feishu-test-result" style="margin-top:12px"></div>
+        </div>
+    </div>
+
+    <script>
+    async function testFeishuConn() {
+        const box = document.getElementById('feishu-test-result');
+        box.innerHTML = '<div class="st-msg info">测试连接中...</div>';
+        try {
+            const resp = await fetch('/settings/feishu/test', { method: 'POST' });
+            const data = await resp.json();
+            if (data.ok) {
+                const cols = (data.columns || []).map(c => '<code>' + c + '</code>').join('、');
+                box.innerHTML = '<div class="st-msg ok">连接成功，读到 ' + data.count + ' 条记录。飞书列名：' + (cols || '（表格为空）') + '</div>';
+            } else {
+                box.innerHTML = '<div class="st-msg err">' + data.error + '</div>';
+            }
+        } catch (e) {
+            box.innerHTML = '<div class="st-msg err">请求失败: ' + e + '</div>';
+        }
+    }
+    </script>
+
 </div>
 {% endblock %}

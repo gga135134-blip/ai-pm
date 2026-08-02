@@ -1,8 +1,9 @@
 import json
 from fastapi import APIRouter, Request, Form
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from app.config import BASE_DIR
 from app.api.auth import get_users, hash_password, verify_password
+from app.services import feishu_client
 
 router = APIRouter()
 CONFIG_FILE = BASE_DIR / "data" / "settings.json"
@@ -20,6 +21,7 @@ def load_settings() -> dict:
         "pushplus_token": "",
         "feishu_webhook": "",
         "routes": {"code": "auto", "writing": "auto", "analysis": "auto", "review": "auto"},
+        "feishu_media_map": {"app_token": "", "table_id": "", "fields": {}},
     }
     if CONFIG_FILE.exists():
         with open(CONFIG_FILE, "r", encoding="utf-8") as f:
@@ -163,3 +165,43 @@ async def settings_test_notify():
     status = "ok" if result["sent"] else "fail"
     detail = result["channel"] if result["sent"] else result["error"]
     return RedirectResponse(f"/settings?notify_test={status}&detail={detail}", status_code=303)
+
+
+@router.post("/settings/feishu")
+async def save_feishu_config(request: Request,
+                             app_token: str = Form(""),
+                             table_id: str = Form(""),
+                             f_post_url: str = Form(""),
+                             f_title: str = Form(""),
+                             f_views: str = Form(""),
+                             f_likes: str = Form(""),
+                             f_comments: str = Form(""),
+                             f_shares: str = Form(""),
+                             f_new_fans: str = Form(""),
+                             f_snapshot_at: str = Form("")):
+    cfg = load_settings()
+    cfg["feishu_media_map"] = {
+        "app_token": app_token.strip(),
+        "table_id": table_id.strip(),
+        "fields": {k: v.strip() for k, v in {
+            "post_url": f_post_url, "title": f_title, "views": f_views,
+            "likes": f_likes, "comments": f_comments, "shares": f_shares,
+            "new_fans": f_new_fans, "snapshot_at": f_snapshot_at,
+        }.items() if v.strip()},
+    }
+    save_settings(cfg)
+    return RedirectResponse("/settings", status_code=302)
+
+
+@router.post("/settings/feishu/test")
+async def test_feishu(request: Request):
+    cfg = load_settings().get("feishu_media_map") or {}
+    app_token, table_id = cfg.get("app_token"), cfg.get("table_id")
+    if not app_token or not table_id:
+        return JSONResponse({"ok": False, "error": "请先填 app_token 和 table_id 并保存"})
+    try:
+        records = await feishu_client.list_bitable_records(app_token, table_id, page_size=1)
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": f"连接失败: {e}"})
+    columns = list(records[0]["fields"].keys()) if records else []
+    return JSONResponse({"ok": True, "count": len(records), "columns": columns})
