@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     openclaw_base_url: str = "http://127.0.0.1:18791"
     openclaw_token: str = ""
 
+    # Feishu (飞书)
+    feishu_app_id: str = ""
+    feishu_app_secret: str = ""
+
     class Config:
         env_file = str(BASE_DIR / ".env")
         env_file_encoding = "utf-8"

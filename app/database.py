@@ -334,6 +334,16 @@ CREATE TABLE IF NOT EXISTS media_injection_log (
     output_quality REAL DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS media_feishu_unmatched (
+    id TEXT PRIMARY KEY,
+    post_url TEXT DEFAULT '',
+    title TEXT DEFAULT '',
+    raw_metrics TEXT DEFAULT '{}',
+    status TEXT DEFAULT 'pending',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
 """
 
 
@@ -363,6 +373,7 @@ MIGRATIONS = [
     "ALTER TABLE study_settings ADD COLUMN reminded_noon DATE DEFAULT NULL",
     "ALTER TABLE study_settings ADD COLUMN reminded_evening DATE DEFAULT NULL",
     "ALTER TABLE study_settings ADD COLUMN reminded_night DATE DEFAULT NULL",
+    "ALTER TABLE media_metrics ADD COLUMN missing_fields TEXT DEFAULT '[]'",
 ]
 
 
