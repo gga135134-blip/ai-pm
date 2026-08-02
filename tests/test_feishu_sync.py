@@ -33,3 +33,81 @@ def test_map_row_missing_fields_flags_new_fans():
 
 def test_map_row_no_url_no_title_returns_none():
     assert map_feishu_row({"播放量": 100}, FIELD_MAP) is None
+
+
+import asyncio, base64, json as _json, itsdangerous
+import app.api.auth as auth
+import app.database as d
+
+
+def _run(coro):
+    return asyncio.run(coro)  # 每次新事件循环；DB 连接在 coro 内建，安全
+
+
+async def _seed_publish(db, post_url, title):
+    import uuid
+    pid = str(uuid.uuid4())
+    await db.execute("INSERT INTO media_persona (id,name) VALUES (?,?)", (pid, "P"))
+    cid = str(uuid.uuid4())
+    await db.execute("INSERT INTO media_content (id,persona_id,title) VALUES (?,?,?)",
+                     (cid, pid, title))
+    aid = str(uuid.uuid4())
+    await db.execute("INSERT INTO media_account (id,persona_id,platform) VALUES (?,?,?)",
+                     (aid, pid, "douyin"))
+    pubid = str(uuid.uuid4())
+    await db.execute("INSERT INTO media_publish (id,content_id,account_id,post_url) "
+                     "VALUES (?,?,?,?)", (pubid, cid, aid, post_url))
+    await db.commit()
+    return pubid
+
+
+def test_sync_matches_by_url_and_writes_metrics():
+    from app.services.media_feishu_sync import sync_from_feishu
+
+    async def go():
+        db = await d.get_db()
+        pubid = await _seed_publish(db, "http://vid/1", "标题甲")
+        records = [{"fields": {"视频链接": "http://vid/1", "标题": "标题甲",
+                               "播放量": "1.5万", "点赞": 200}}]
+        # 注入 field_map 到 settings
+        import app.api.settings as st
+        cfg = st.load_settings(); cfg["feishu_media_map"] = {
+            "fields": {"post_url": "视频链接", "title": "标题",
+                       "views": "播放量", "likes": "点赞"}}
+        st.save_settings(cfg)
+        rep = await sync_from_feishu(db, records=records)
+        assert rep["ok"] and rep["synced"] == 1
+        row = await (await db.execute(
+            "SELECT views,collected_by,missing_fields FROM media_metrics "
+            "WHERE publish_id=?", (pubid,))).fetchone()
+        assert row["views"] == 15000
+        assert row["collected_by"] == "feishu"
+        assert "new_fans" in _json.loads(row["missing_fields"])
+        # cleanup
+        for t in ["media_metrics","media_publish","media_account",
+                  "media_content","media_persona","media_feishu_unmatched"]:
+            await db.execute(f"DELETE FROM {t}")
+        await db.commit(); await db.close()
+    _run(go())
+
+
+def test_sync_unmatched_goes_to_table():
+    from app.services.media_feishu_sync import sync_from_feishu
+
+    async def go():
+        db = await d.get_db()
+        records = [{"fields": {"视频链接": "http://orphan", "标题": "野生视频",
+                               "播放量": 999}}]
+        import app.api.settings as st
+        cfg = st.load_settings(); cfg["feishu_media_map"] = {
+            "fields": {"post_url": "视频链接", "title": "标题", "views": "播放量"}}
+        st.save_settings(cfg)
+        rep = await sync_from_feishu(db, records=records)
+        assert rep["unmatched"] == 1
+        n = (await (await db.execute(
+            "SELECT COUNT(*) c FROM media_feishu_unmatched WHERE status='pending'"
+        )).fetchone())["c"]
+        assert n == 1
+        await db.execute("DELETE FROM media_feishu_unmatched"); await db.commit()
+        await db.close()
+    _run(go())
