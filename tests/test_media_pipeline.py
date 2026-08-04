@@ -200,3 +200,94 @@ def test_write_script_injects_selected_angle(monkeypatch):
     asyncio.run(go())
     assert "从我踩过的坑切入" in captured["prompt"]  # 角度注入了
     assert "帮鞋厂上客服AI" in captured["prompt"]    # 证据注入了
+
+
+# ---------- 独立审稿 + 定向修订（AI）----------
+
+from app.services.media_ai import critique_draft, revise_draft
+
+
+def test_critique_writes_review_row(monkeypatch):
+    monkeypatch.setattr("app.services.media_ai.ask_ai",
+        fake_ai(json.dumps({
+            "fact_flags": ["'80%企业'这个数字没出处"],
+            "persona_flags": [], "platform_flags": [],
+            "gap_flags": ["缺一个真实客户名"], "risk_flags": [],
+            "score": 3, "verdict": "revise", "notes": "整体可用但要补一个真数字"
+        }, ensure_ascii=False)))
+
+    async def go():
+        db = await make_db()
+        await seed_content(db)
+        await db.execute("UPDATE media_content SET ai_draft='一版草稿' WHERE id='C1'")
+        await db.commit()
+        res = await critique_draft(db, "C1", strategy="layered")
+        cur = await db.execute("SELECT * FROM media_draft_review WHERE content_id='C1'")
+        row = dict(await cur.fetchone())
+        await db.close()
+        return res, row
+
+    res, row = asyncio.run(go())
+    assert res["ok"] is True and res["verdict"] == "revise" and res["score"] == 3
+    assert row["reviewer_strategy"] == "layered"
+    assert json.loads(row["fact_flags"])[0].startswith("'80%")
+    assert row["reviewed_draft"] == "一版草稿"      # 审的哪版有快照
+    assert "补一个真数字" in row["notes"]
+
+
+def test_critique_needs_a_draft(monkeypatch):
+    monkeypatch.setattr("app.services.media_ai.ask_ai", fake_ai("{}"))
+
+    async def go():
+        db = await make_db()
+        await seed_content(db)  # ai_draft 为空
+        res = await critique_draft(db, "C1")
+        await db.close()
+        return res
+
+    res = asyncio.run(go())
+    assert res["ok"] is False and "草稿" in res["error"]
+
+
+def test_revise_updates_draft_and_counts(monkeypatch):
+    monkeypatch.setattr("app.services.media_ai.ask_ai", fake_ai("改好的第二版草稿"))
+
+    async def go():
+        db = await make_db()
+        await seed_content(db)
+        await db.execute("UPDATE media_content SET ai_draft='第一版' WHERE id='C1'")
+        await db.execute(
+            "INSERT INTO media_draft_review (id,content_id,notes,verdict) "
+            "VALUES ('r1','C1','补个真数字','revise')")
+        await db.commit()
+        res = await revise_draft(db, "C1")
+        cur = await db.execute(
+            "SELECT ai_draft,revision_count FROM media_content WHERE id='C1'")
+        c = dict(await cur.fetchone())
+        await db.close()
+        return res, c
+
+    res, c = asyncio.run(go())
+    assert res["ok"] is True
+    assert c["ai_draft"] == "改好的第二版草稿"
+    assert c["revision_count"] == 1
+
+
+def test_revise_refuses_second_time(monkeypatch):
+    monkeypatch.setattr("app.services.media_ai.ask_ai", fake_ai("不该被用到"))
+
+    async def go():
+        db = await make_db()
+        await seed_content(db)
+        await db.execute(
+            "UPDATE media_content SET ai_draft='已改过', revision_count=1 WHERE id='C1'")
+        await db.commit()
+        res = await revise_draft(db, "C1")
+        cur = await db.execute("SELECT ai_draft FROM media_content WHERE id='C1'")
+        keep = (await cur.fetchone())["ai_draft"]
+        await db.close()
+        return res, keep
+
+    res, keep = asyncio.run(go())
+    assert res["ok"] is False and "一次" in res["error"]
+    assert keep == "已改过"  # 没被覆盖

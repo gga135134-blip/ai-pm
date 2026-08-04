@@ -9,7 +9,7 @@ import logging
 import re
 import uuid
 
-from app.services.ai_router import ask_ai
+from app.services.ai_router import ask_ai, get_model_for_task, _load_config
 from app.services.media_context import extract_json, log_injection
 from app.services.media_context import (
     build_script_context, render_evidence_block, render_angle_block,
@@ -750,4 +750,158 @@ async def review_content(db, content_id: str, model: str = "auto") -> dict:
                         result.get("tokens", 0))
 
     return {"ok": True, "review_count": count, "error": "",
+            "cost": result.get("cost", 0), "model": result.get("model", "")}
+
+
+# ─────────────── 二期 🅐：独立审稿 + 定向修订 ───────────────
+
+CRITIQUE_SYSTEM = """你是独立的口播稿审稿人。你没参与写作，只负责挑毛病。
+
+铁律：
+1. 你只【指出】问题，绝不改写、绝不给出修改后的文本。
+2. 逐维度找证据支撑的问题，找不到就留空数组，别硬凑。
+3. 真实性最优先：任何看起来像编造的经历/数字/案例都要标进 fact_flags。
+4. 打分诚实：score 1-5。verdict 只能是 pass(可直接用)/revise(建议改一次)/reject(建议回素材或角度)。
+5. 只输出 JSON：
+{"fact_flags":[],"persona_flags":[],"platform_flags":[],"gap_flags":[],
+ "risk_flags":[],"score":3,"verdict":"pass","notes":"一句话总评"}
+
+维度说明：fact_flags事实/数字存疑；persona_flags不像本人/AI味/卖课味/焦虑词；
+platform_flags平台适配问题；gap_flags缺真料的地方；risk_flags红线/边界风险。"""
+
+REVISE_SYSTEM = """你是原稿作者，现在根据审稿意见做【一次】定向修订。
+
+铁律：
+1. 只针对审稿指出的问题改，别推倒重写。
+2. 仍守真实性红线：缺真料的地方继续用 【缺真料：说明】 标注，绝不编造。
+3. 输出修订后的完整脚本纯文本，不要解释，不要输出 JSON。"""
+
+
+async def critique_draft(db, content_id: str, strategy: str = "layered",
+                         model: str = "auto") -> dict:
+    """独立审稿 ai_draft。写稿器≠审稿器：这是与 write_script 完全独立的调用。
+
+    看不到"这是刚才那个 AI 写的" —— 只给草稿全文，避免自我背书。
+    """
+    cur = await db.execute(
+        "SELECT persona_id, ai_draft FROM media_content WHERE id=?", (content_id,))
+    row = await cur.fetchone()
+    if not row:
+        return {"ok": False, "error": "内容不存在", "review_id": "",
+                "score": 0, "verdict": "", "reviewer_model": "", "cost": 0, "model": ""}
+    draft = (row["ai_draft"] or "").strip()
+    if not draft:
+        return {"ok": False, "error": "还没有草稿可审，先让 AI 出草稿",
+                "review_id": "", "score": 0, "verdict": "",
+                "reviewer_model": "", "cost": 0, "model": ""}
+
+    # 换脑：按策略决定审稿模型（与写稿模型错开）
+    config = _load_config()
+    writer_model = get_model_for_task("media_script", "auto")
+    reviewer_model = resolve_reviewer_model(strategy, writer_model,
+                                            available_providers(config))
+    use_model = model if model != "auto" else reviewer_model
+
+    prompt = f"【待审口播稿】\n{draft[:6000]}\n\n请审这份稿子。"
+    result = await ask_ai(prompt, model=use_model, task_type="media_critique",
+                          system_prompt=CRITIQUE_SYSTEM, json_mode=True)
+    resp = result.get("response", "")
+    if resp.startswith("[错误]") or resp.startswith("[费用保护]"):
+        return {"ok": False, "error": resp, "review_id": "", "score": 0,
+                "verdict": "", "reviewer_model": use_model,
+                "cost": result.get("cost", 0), "model": result.get("model", "")}
+
+    obj = extract_json(resp, expect="object")
+
+    def _flags(key):
+        v = obj.get(key)
+        if not isinstance(v, list):
+            return []
+        return [_txt(x) for x in v if _txt(x)]
+
+    verdict = obj.get("verdict") if obj.get("verdict") in ("pass", "revise", "reject") \
+        else "revise"
+    review_id = str(uuid.uuid4())
+    await db.execute(
+        "INSERT INTO media_draft_review "
+        "(id,content_id,reviewed_draft,reviewer_strategy,reviewer_model,"
+        " fact_flags,persona_flags,platform_flags,gap_flags,risk_flags,"
+        " score,verdict,notes) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        (review_id, content_id, draft, strategy, result.get("model", use_model),
+         json.dumps(_flags("fact_flags"), ensure_ascii=False),
+         json.dumps(_flags("persona_flags"), ensure_ascii=False),
+         json.dumps(_flags("platform_flags"), ensure_ascii=False),
+         json.dumps(_flags("gap_flags"), ensure_ascii=False),
+         json.dumps(_flags("risk_flags"), ensure_ascii=False),
+         _clamp(obj.get("score"), 3), verdict, _txt(obj.get("notes"))))
+    await db.commit()
+    await log_injection(db, content_id, f"critique_draft:{strategy}", [],
+                        result.get("tokens", 0))
+    return {"ok": True, "review_id": review_id, "score": _clamp(obj.get("score"), 3),
+            "verdict": verdict, "reviewer_model": result.get("model", use_model),
+            "error": "", "cost": result.get("cost", 0), "model": result.get("model", "")}
+
+
+async def revise_draft(db, content_id: str, model: str = "auto") -> dict:
+    """按最近一条审稿意见改一次。至多一次：revision_count>=1 直接拒绝。"""
+    cur = await db.execute(
+        "SELECT ai_draft, revision_count FROM media_content WHERE id=?", (content_id,))
+    row = await cur.fetchone()
+    if not row:
+        return {"ok": False, "error": "内容不存在", "script": "",
+                "revision_count": 0, "cost": 0, "model": ""}
+    if (row["revision_count"] or 0) >= 1:
+        return {"ok": False, "error": "已经定向修订过一次了，第二次请回到素材或角度重来",
+                "script": "", "revision_count": row["revision_count"],
+                "cost": 0, "model": ""}
+    draft = (row["ai_draft"] or "").strip()
+    if not draft:
+        return {"ok": False, "error": "还没有草稿", "script": "",
+                "revision_count": 0, "cost": 0, "model": ""}
+
+    cur = await db.execute(
+        "SELECT fact_flags,persona_flags,platform_flags,gap_flags,risk_flags,notes "
+        "FROM media_draft_review WHERE content_id=? ORDER BY created_at DESC LIMIT 1",
+        (content_id,))
+    rev = await cur.fetchone()
+    if not rev:
+        return {"ok": False, "error": "没有审稿意见可依据，先审稿", "script": "",
+                "revision_count": 0, "cost": 0, "model": ""}
+
+    flag_lines = []
+    for key, label in [("fact_flags", "事实存疑"), ("persona_flags", "不像本人"),
+                       ("platform_flags", "平台适配"), ("gap_flags", "缺真料"),
+                       ("risk_flags", "风险")]:
+        try:
+            arr = json.loads(rev[key] or "[]")
+        except (json.JSONDecodeError, TypeError):
+            arr = []
+        for a in arr:
+            flag_lines.append(f"- [{label}] {a}")
+    notes = _txt(rev["notes"])
+
+    parts = [f"【原稿】\n{draft[:6000]}", "【审稿意见】"]
+    if flag_lines:
+        parts.append("\n".join(flag_lines))
+    if notes:
+        parts.append(f"总评：{notes}")
+    parts.append("请据此做一次定向修订，输出完整脚本。")
+
+    result = await ask_ai("\n\n".join(parts), model=model, task_type="media_script",
+                          system_prompt=REVISE_SYSTEM)
+    resp = result.get("response", "")
+    if resp.startswith("[错误]") or resp.startswith("[费用保护]"):
+        return {"ok": False, "error": resp, "script": "",
+                "revision_count": row["revision_count"] or 0,
+                "cost": result.get("cost", 0), "model": result.get("model", "")}
+
+    new_count = (row["revision_count"] or 0) + 1
+    gap_text = "；".join(extract_gap_markers(resp))
+    await db.execute(
+        "UPDATE media_content SET ai_draft=?, evidence_gap=?, revision_count=?, "
+        "updated_at=CURRENT_TIMESTAMP WHERE id=?",
+        (resp, gap_text, new_count, content_id))
+    await db.commit()
+    await log_injection(db, content_id, "revise_draft", [], result.get("tokens", 0))
+    return {"ok": True, "script": resp, "revision_count": new_count, "error": "",
             "cost": result.get("cost", 0), "model": result.get("model", "")}
