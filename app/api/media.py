@@ -11,7 +11,12 @@ from app.services.media_flow import (
 )
 from app.services.media_ai import (
     recommend_topics, write_script, generate_platform_copy, review_content,
+    interview_questions, extract_evidence, propose_angles,
+    critique_draft, revise_draft,
 )
+from app.services.media_flow import finalize_updates
+from app.services.ai_router import _load_config
+from app.config import BASE_DIR
 
 log = logging.getLogger(__name__)
 
@@ -406,6 +411,22 @@ async def content_detail(request: Request, cid: str):
         cur = await db.execute(
             "SELECT * FROM media_review WHERE content_id=? ORDER BY created_at", (cid,))
         reviews = [dict(r) for r in await cur.fetchall()]
+
+        # 二期 🅐：创作区数据 —— 候选角度 / 素材包 / 最近一次独立审稿
+        cur = await db.execute(
+            "SELECT * FROM media_angle WHERE content_id=? ORDER BY is_selected DESC, "
+            "created_at", (cid,))
+        angles = [dict(r) for r in await cur.fetchall()]
+
+        cur = await db.execute(
+            "SELECT * FROM media_evidence WHERE content_id=? ORDER BY created_at", (cid,))
+        evidence = [dict(r) for r in await cur.fetchall()]
+
+        cur = await db.execute(
+            "SELECT * FROM media_draft_review WHERE content_id=? "
+            "ORDER BY created_at DESC LIMIT 1", (cid,))
+        drow = await cur.fetchone()
+        latest_review = dict(drow) if drow else None
     finally:
         await db.close()
 
@@ -415,11 +436,21 @@ async def content_detail(request: Request, cid: str):
         except (json.JSONDecodeError, TypeError):
             r["proposed_traits"] = []
 
+    if latest_review:
+        for k in ("fact_flags", "persona_flags", "platform_flags",
+                  "gap_flags", "risk_flags"):
+            try:
+                latest_review[k] = json.loads(latest_review.get(k) or "[]")
+            except (json.JSONDecodeError, TypeError):
+                latest_review[k] = []
+
     return _tpl(request, "media_content.html",
                 {"content": content, "persona": persona, "accounts": accounts,
                  "pubs": pubs, "metrics": metrics, "reviews": reviews,
                  "platforms": PLATFORMS, "stages": STAGES,
                  "stage_labels": STAGE_LABELS,
+                 "angles": angles, "evidence": evidence,
+                 "latest_review": latest_review,
                  "next_stage": next_stage(content["stage"])})
 
 
@@ -494,6 +525,128 @@ async def content_ai_script(cid: str, mode: str = Form("full")):
     finally:
         await db.close()
     return JSONResponse(result)
+
+
+# ─────────────── 二期 🅐：写稿前认知子流程 ───────────────
+
+@router.post("/media/content/{cid}/interview")
+async def content_interview(cid: str):
+    db = await get_db()
+    try:
+        try:
+            result = await interview_questions(db, cid)
+        except Exception as e:
+            log.exception("AI 采访提问失败")
+            return JSONResponse({"ok": False, "error": str(e), "questions": []})
+    finally:
+        await db.close()
+    return JSONResponse(result)
+
+
+@router.post("/media/content/{cid}/evidence")
+async def content_evidence(cid: str, answers: str = Form("")):
+    db = await get_db()
+    try:
+        try:
+            result = await extract_evidence(db, cid, answers)
+        except Exception as e:
+            log.exception("提炼素材失败")
+            return JSONResponse({"ok": False, "error": str(e), "count": 0})
+    finally:
+        await db.close()
+    return JSONResponse(result)
+
+
+@router.post("/media/content/{cid}/angles")
+async def content_angles(cid: str):
+    db = await get_db()
+    try:
+        try:
+            result = await propose_angles(db, cid)
+        except Exception as e:
+            log.exception("出角度失败")
+            return JSONResponse({"ok": False, "error": str(e), "count": 0})
+    finally:
+        await db.close()
+    return JSONResponse(result)
+
+
+@router.post("/media/content/{cid}/angle/{aid}/select")
+async def content_angle_select(cid: str, aid: str):
+    """把某个备选角度设为选中（前端随后再触发 ai-script 重出草稿）。"""
+    db = await get_db()
+    try:
+        await db.execute("UPDATE media_angle SET is_selected=0 WHERE content_id=?", (cid,))
+        await db.execute(
+            "UPDATE media_angle SET is_selected=1, status='selected' WHERE id=?", (aid,))
+        await db.execute(
+            "UPDATE media_content SET selected_angle_id=? WHERE id=?", (aid, cid))
+        await db.commit()
+    finally:
+        await db.close()
+    return JSONResponse({"ok": True})
+
+
+@router.post("/media/content/{cid}/critique")
+async def content_critique(cid: str):
+    strategy = _load_config().get("media_review_strategy", "layered")
+    db = await get_db()
+    try:
+        try:
+            result = await critique_draft(db, cid, strategy=strategy)
+        except Exception as e:
+            log.exception("独立审稿失败")
+            return JSONResponse({"ok": False, "error": str(e)})
+    finally:
+        await db.close()
+    return JSONResponse(result)
+
+
+@router.post("/media/content/{cid}/revise")
+async def content_revise(cid: str):
+    db = await get_db()
+    try:
+        try:
+            result = await revise_draft(db, cid)
+        except Exception as e:
+            log.exception("定向修订失败")
+            return JSONResponse({"ok": False, "error": str(e)})
+    finally:
+        await db.close()
+    return JSONResponse(result)
+
+
+@router.post("/media/content/{cid}/finalize")
+async def content_finalize(cid: str, script: str = Form("")):
+    """定稿：人编辑后的真实版进 script，stage→scripted，authoring→finalized。
+    ai_draft 不动 —— 保留 AI 草稿供功能 B 对比。"""
+    updates = finalize_updates(script)
+    db = await get_db()
+    try:
+        if updates:
+            await db.execute(
+                "UPDATE media_content SET script=?, stage=?, authoring_stage=?, "
+                "finalized_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                (updates["script"], updates["stage"], updates["authoring_stage"], cid))
+            await db.commit()
+    finally:
+        await db.close()
+    return RedirectResponse(f"/media/content/{cid}", status_code=302)
+
+
+@router.post("/media/settings/review-strategy")
+async def set_review_strategy(strategy: str = Form("layered")):
+    """换脑审稿策略写进 settings.json。合法值 layered/swap_model/same_model。"""
+    if strategy not in ("layered", "swap_model", "same_model"):
+        strategy = "layered"
+    path = BASE_DIR / "data" / "settings.json"
+    try:
+        cfg = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    except Exception:
+        cfg = {}
+    cfg["media_review_strategy"] = strategy
+    path.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+    return RedirectResponse("/media/settings", status_code=302)
 
 
 # ─────────────── 三平台发布 ───────────────
