@@ -181,3 +181,46 @@ def test_clamp_rating_handles_ai_garbage():
     assert _clamp("4", 3) == 4      # AI 给字符串
     assert _clamp(None, 3) == 3     # AI 没给
     assert _clamp("很高", 3) == 3   # AI 给中文
+
+
+# ---------- 二期 🅐：证据/角度/原料注入拼装 ----------
+
+from app.services.media_context import (
+    render_evidence_block, render_angle_block,
+    select_materials, render_material_block,
+)
+
+
+def test_render_evidence_lists_items():
+    ev = [{"item": "我去年帮一家做鞋的落地了客服AI", "item_type": "experience"},
+          {"item": "转化率从2%到5%", "item_type": "data"}]
+    text = render_evidence_block(ev)
+    assert "真实素材" in text
+    assert "做鞋" in text and "2%到5%" in text
+
+
+def test_render_evidence_empty():
+    assert render_evidence_block([]) == ""
+
+
+def test_render_angle_block():
+    text = render_angle_block("从我踩过的坑切入", "第一人称踩坑最可信")
+    assert "从我踩过的坑切入" in text
+    assert "第一人称踩坑最可信" in text
+
+
+def test_render_angle_empty():
+    assert render_angle_block("", "任何理由") == ""
+
+
+def test_select_materials_prefers_unused_and_caps():
+    mats = [{"id": f"m{i}", "brief": f"料{i}", "use_count": i} for i in range(10)]
+    got = select_materials(mats)
+    assert len(got) == 3  # INJECTION_BUDGET['material']
+    assert [m["id"] for m in got] == ["m0", "m1", "m2"]  # use_count 升序
+
+
+def test_render_material_block_uses_brief():
+    mats = [{"id": "m1", "brief": "做鞋厂客服AI案例", "use_count": 0}]
+    text = render_material_block(mats)
+    assert "可复用原料" in text and "做鞋厂" in text

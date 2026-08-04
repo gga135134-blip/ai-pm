@@ -134,3 +134,51 @@ async def log_injection(db, content_id: str, ai_type: str,
          json.dumps(asset_ids, ensure_ascii=False), token_count),
     )
     await db.commit()
+
+
+# ─────────────── 二期 🅐：证据/角度/原料 注入拼装 ───────────────
+
+def render_evidence_block(evidence: list[dict]) -> str:
+    """本条内容的真实素材包。全部注入（本条真料数量少，不走预算截断）。"""
+    items = [e for e in evidence if (e.get("item") or "").strip()]
+    if not items:
+        return ""
+    lines = ["【真实素材（只能用这些真料，缺了就标缺口，绝不编造）】"]
+    for e in items:
+        lines.append(f"- [{e.get('item_type', '')}] {e['item'].strip()}")
+    return "\n".join(lines)
+
+
+def render_angle_block(angle: str, rationale: str) -> str:
+    """选中的切入角度。angle 为空返回空串（还没选角度就不加这块）。"""
+    if not (angle or "").strip():
+        return ""
+    text = f"【本条切入角度（必须按这个角度写）】{angle.strip()}"
+    if (rationale or "").strip():
+        text += f"（理由：{rationale.strip()}）"
+    return text
+
+
+def select_materials(materials: list[dict]) -> list[dict]:
+    """原料库雏形注入：优先未用过的（use_count 升序），取前 INJECTION_BUDGET['material'] 条。
+
+    与 select_by_budget（按分数降序）方向相反 —— 原料越少用越该优先，
+    避免同一个故事被反复调用听腻（spec §5.5 链路1）。
+    """
+    cap = INJECTION_BUDGET.get("material", 0)
+    if not cap:
+        return []
+    ranked = sorted(materials, key=lambda m: m.get("use_count") or 0)
+    return ranked[:cap]
+
+
+def render_material_block(materials: list[dict]) -> str:
+    """可复用原料的 brief 清单（detail 留给 AI 按需，不塞进提示词）。"""
+    if not materials:
+        return ""
+    lines = ["【可复用原料（来自原料库，优先复用避免每条都采访）】"]
+    for m in materials:
+        brief = (m.get("brief") or "").strip() or (m.get("title") or "").strip()
+        if brief:
+            lines.append(f"- {brief}")
+    return "\n".join(lines) if len(lines) > 1 else ""
