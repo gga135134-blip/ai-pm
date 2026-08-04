@@ -82,3 +82,57 @@ def test_extract_evidence_writes_rows(monkeypatch):
     assert res["ok"] is True and res["count"] == 2
     assert all(r["source"] == "interview" for r in rows)
     assert any("鞋厂" in r["item"] for r in rows)
+
+
+# ---------- 角度候选（AI）----------
+
+from app.services.media_ai import propose_angles
+
+
+def test_propose_angles_writes_and_selects_first(monkeypatch):
+    monkeypatch.setattr("app.services.media_ai.ask_ai",
+                        fake_ai(json.dumps({"angles": [
+                            {"angle": "从我踩过的坑切入", "rationale": "第一人称最可信"},
+                            {"angle": "从一个鞋厂案例切入", "rationale": "具体可感"}]},
+                            ensure_ascii=False)))
+
+    async def go():
+        db = await make_db()
+        await seed_content(db)
+        res = await propose_angles(db, "C1")
+        cur = await db.execute(
+            "SELECT id,angle,is_selected FROM media_angle WHERE content_id='C1' "
+            "ORDER BY is_selected DESC")
+        angles = [dict(r) for r in await cur.fetchall()]
+        cur = await db.execute("SELECT selected_angle_id FROM media_content WHERE id='C1'")
+        sel = (await cur.fetchone())["selected_angle_id"]
+        await db.close()
+        return res, angles, sel
+
+    res, angles, sel = asyncio.run(go())
+    assert res["ok"] is True and res["count"] == 2
+    assert angles[0]["is_selected"] == 1 and "踩过的坑" in angles[0]["angle"]
+    assert sum(a["is_selected"] for a in angles) == 1  # 只选一个
+    assert sel == angles[0]["id"] == res["selected_id"]
+
+
+def test_propose_angles_replaces_old(monkeypatch):
+    # 二次调用应清掉旧角度，不堆积
+    monkeypatch.setattr("app.services.media_ai.ask_ai",
+                        fake_ai(json.dumps({"angles": [{"angle": "新角度", "rationale": "r"}]},
+                                           ensure_ascii=False)))
+
+    async def go():
+        db = await make_db()
+        await seed_content(db)
+        await db.execute("INSERT INTO media_angle (id,content_id,angle) VALUES "
+                         "('old','C1','旧角度')")
+        await db.commit()
+        await propose_angles(db, "C1")
+        cur = await db.execute("SELECT angle FROM media_angle WHERE content_id='C1'")
+        rows = [r["angle"] for r in await cur.fetchall()]
+        await db.close()
+        return rows
+
+    rows = asyncio.run(go())
+    assert rows == ["新角度"]  # 旧的被清掉

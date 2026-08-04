@@ -355,6 +355,85 @@ async def write_script(db, content_id: str, mode: str = "full",
             "injected_count": len(injected_ids)}
 
 
+ANGLE_SYSTEM = """你是口播选题的角度策划。基于真实素材，给出 2-3 个不同的切入角度。
+
+铁律：
+1. 每个角度是一个「怎么讲这条」的具体切入点，不是选题的复述。
+2. 角度之间要真不同（换个人称/换个场景/换个冲突点），不是换壳同一套。
+3. 按你认为最好的排最前（第一个会被默认选中）。
+4. 只用给定真实素材能支撑的角度，别设计需要编造的角度。
+5. 只输出 JSON：{"angles":[{"angle":"切入角度","rationale":"为什么这个角度打得中"}]}"""
+
+
+async def propose_angles(db, content_id: str, model: str = "auto") -> dict:
+    """基于证据包 + 人设，出 2-3 个候选角度，默认选中第一个。看不到：数据表、话题池。"""
+    cur = await db.execute("SELECT * FROM media_content WHERE id=?", (content_id,))
+    row = await cur.fetchone()
+    if not row:
+        return {"ok": False, "error": "内容不存在", "count": 0,
+                "selected_id": "", "cost": 0, "model": ""}
+    content = dict(row)
+
+    cur = await db.execute(
+        "SELECT * FROM media_persona WHERE id=?", (content["persona_id"],))
+    persona = dict(await cur.fetchone())
+
+    cur = await db.execute(
+        "SELECT item,item_type FROM media_evidence WHERE content_id=?", (content_id,))
+    evidence = [dict(r) for r in await cur.fetchall()]
+
+    parts = [
+        f"【人设】{persona['name']}｜{persona['one_liner']}",
+        f"【选题】{content['title']}",
+    ]
+    if content["puzzle"]:
+        parts.append(f"【核心谜题】{content['puzzle']}")
+    if evidence:
+        parts.append("【真实素材】\n" + "\n".join(
+            f"- [{e['item_type']}] {e['item']}" for e in evidence))
+    else:
+        parts.append("【真实素材】暂无 —— 只给这条选题现有信息能支撑的角度。")
+    parts.append("请给出 2-3 个切入角度。")
+
+    result = await ask_ai("\n\n".join(parts), model=model, task_type="media_angle",
+                          system_prompt=ANGLE_SYSTEM, json_mode=True)
+    resp = result.get("response", "")
+    if resp.startswith("[错误]") or resp.startswith("[费用保护]"):
+        return {"ok": False, "error": resp, "count": 0, "selected_id": "",
+                "cost": result.get("cost", 0), "model": result.get("model", "")}
+
+    obj = extract_json(resp, expect="object")
+    angles = [a for a in (obj.get("angles") or []) if isinstance(a, dict)
+              and _txt(a.get("angle"))]
+    if not angles:
+        return {"ok": False, "error": "AI 没给出可用角度", "count": 0, "selected_id": "",
+                "cost": result.get("cost", 0), "model": result.get("model", "")}
+
+    # 重出角度时清掉旧的，避免堆积
+    await db.execute("DELETE FROM media_angle WHERE content_id=?", (content_id,))
+    selected_id = ""
+    count = 0
+    for idx, a in enumerate(angles):
+        aid = str(uuid.uuid4())
+        is_sel = 1 if idx == 0 else 0
+        if is_sel:
+            selected_id = aid
+        await db.execute(
+            "INSERT INTO media_angle "
+            "(id,content_id,angle,rationale,is_selected,status) "
+            "VALUES (?,?,?,?,?,?)",
+            (aid, content_id, _txt(a.get("angle")), _txt(a.get("rationale")),
+             is_sel, "selected" if is_sel else "candidate"))
+        count += 1
+    await db.execute(
+        "UPDATE media_content SET selected_angle_id=? WHERE id=?",
+        (selected_id, content_id))
+    await db.commit()
+    await log_injection(db, content_id, "propose_angles", [], result.get("tokens", 0))
+    return {"ok": True, "count": count, "selected_id": selected_id, "error": "",
+            "cost": result.get("cost", 0), "model": result.get("model", "")}
+
+
 PLATFORM_STYLE = {
     "douyin": "抖音：标题要短要炸，前 10 个字决定点开率。3-5 个话题标签。",
     "xhs": "小红书：标题带 emoji，正文分点排版，口语化像跟朋友说话。"
