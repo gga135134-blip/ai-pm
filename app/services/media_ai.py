@@ -151,6 +151,39 @@ def _txt(value) -> str:
     return ""
 
 
+# ─────────────── 二期 🅐：换脑审稿策略（纯函数）───────────────
+_PROVIDER_KEY = {
+    "claude": "anthropic_api_key",
+    "openai": "openai_api_key",
+    "deepseek": "deepseek_api_key",
+    "qwen": "qwen_api_key",
+}
+_PROVIDER_ORDER = ["claude", "openai", "deepseek", "qwen"]
+
+
+def available_providers(config: dict) -> list[str]:
+    """已配置 API Key 的模型 provider，按固定优先级排序。"""
+    return [p for p in _PROVIDER_ORDER if config.get(_PROVIDER_KEY[p])]
+
+
+def resolve_reviewer_model(strategy: str, writer_model: str,
+                           providers: list[str]) -> str:
+    """按换脑策略决定审稿用哪个模型。spec §6.3。
+
+    swap_model：强制换一个与写稿不同的 provider（最独立最贵）。
+    same_model：同模型，仅靠独立 system_prompt 分离角色（最省最弱）。
+    layered（默认）：返回 'auto'，走 task_type=media_critique 路由，角色靠独立调用分离。
+    """
+    if strategy == "swap_model":
+        for p in providers:
+            if p != writer_model:
+                return p
+        return writer_model  # 只有一个 provider，退化
+    if strategy == "same_model":
+        return writer_model
+    return "auto"
+
+
 SCRIPT_SYSTEM = """你是资深口播脚本撰稿人，为真人出镜的短视频写口播稿。
 
 铁律（必须全部满足，不超过 5 条 —— 规则多了每条都做不好）：
