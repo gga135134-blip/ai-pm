@@ -6,11 +6,15 @@
 """
 import json
 import logging
+import re
 import uuid
 
 from app.services.ai_router import ask_ai
 from app.services.media_context import extract_json, log_injection
-from app.services.media_context import build_script_context
+from app.services.media_context import (
+    build_script_context, render_evidence_block, render_angle_block,
+    select_materials, render_material_block,
+)
 
 log = logging.getLogger(__name__)
 
@@ -184,6 +188,14 @@ def resolve_reviewer_model(strategy: str, writer_model: str,
     return "auto"
 
 
+_GAP_RE = re.compile(r"【缺真料：(.+?)】")
+
+
+def extract_gap_markers(text: str) -> list[str]:
+    """抽出草稿里 AI 标注的真料缺口。无缺口返回空列表。"""
+    return [m.strip() for m in _GAP_RE.findall(text or "") if m.strip()]
+
+
 INTERVIEW_SYSTEM = """你是口播内容的采访者。目标：就本条选题，向创作者提出精准问题，
 挖出只有他本人有的真实素材（经历/案例/数字/判断），供后续写稿用真料。
 
@@ -288,12 +300,15 @@ async def extract_evidence(db, content_id: str, answers: str,
 
 SCRIPT_SYSTEM = """你是资深口播脚本撰稿人，为真人出镜的短视频写口播稿。
 
-铁律（必须全部满足，不超过 5 条 —— 规则多了每条都做不好）：
+铁律（前 5 条是手艺，第 6 条是红线，全部必须满足）：
 1. 必须以谜题开场，3 秒内抛出，禁止任何铺垫和自我介绍。
 2. 必须植入给定的记忆点（如果提供了）。
 3. 口语化 —— 写的是说出来的话，不是书面文章。短句，能断则断。
 4. 标注时长节奏，全片控制在 60-90 秒。
 5. 结尾留钩子，引导评论互动。
+6. 【真实性红线】只能用给定的真实素材。若某处需要你没有的真事/数字/案例，
+   用 【缺真料：具体说明缺什么】 原样标注在该处，绝不编造本人经历或数字来填。
+   给了角度就按角度写；缺真料标注不影响其它部分正常写。
 
 输出纯文本脚本，用 Markdown 分段。禁止用 ASCII 字符画（中文等宽会错位），
 需要表格就用 Markdown 表格。不要输出 JSON，不要写解释。"""
@@ -331,7 +346,41 @@ async def write_script(db, content_id: str, mode: str = "full",
         traits = [dict(r) for r in await cur.fetchall()]
         context_text, injected_ids = build_script_context(persona, traits)
 
-    parts = [context_text, f"【本条选题】{content['title']}"]
+    # ── 二期 🅐：加载本条证据包 + 选中角度 + 可复用原料 ──
+    cur = await db.execute(
+        "SELECT item,item_type FROM media_evidence WHERE content_id=?", (content_id,))
+    evidence = [dict(r) for r in await cur.fetchall()]
+
+    angle_text, angle_rationale = "", ""
+    if content.get("selected_angle_id"):
+        cur = await db.execute(
+            "SELECT angle,rationale FROM media_angle WHERE id=?",
+            (content["selected_angle_id"],))
+        arow = await cur.fetchone()
+        if arow:
+            angle_text, angle_rationale = arow["angle"], arow["rationale"]
+
+    material_ids = []
+    material_block = ""
+    if mode != "lean":
+        cur = await db.execute(
+            "SELECT id,brief,title,use_count FROM media_material "
+            "WHERE persona_id=? AND status='active'", (content["persona_id"],))
+        mats = [dict(r) for r in await cur.fetchall()]
+        picked_mats = select_materials(mats)
+        material_ids = [m["id"] for m in picked_mats]
+        material_block = render_material_block(picked_mats)
+
+    parts = [context_text]
+    ev_block = render_evidence_block(evidence)
+    if ev_block:
+        parts.append(ev_block)
+    if material_block:
+        parts.append(material_block)
+    ang_block = render_angle_block(angle_text, angle_rationale)
+    if ang_block:
+        parts.append(ang_block)
+    parts.append(f"【本条选题】{content['title']}")
     if content["puzzle"]:
         parts.append(f"【核心谜题】{content['puzzle']}")
     if content["idea_reason"]:
@@ -347,12 +396,22 @@ async def write_script(db, content_id: str, mode: str = "full",
                 "cost": result.get("cost", 0), "model": result.get("model", ""),
                 "injected_count": 0}
 
-    await log_injection(db, content_id, f"write_script:{mode}",
-                        injected_ids, result.get("tokens", 0))
+    # ── 持久化草稿：进 ai_draft（不碰 script，script 留给人定稿）──
+    gaps = extract_gap_markers(resp)
+    gap_text = "；".join(gaps)
+    await db.execute(
+        "UPDATE media_content SET ai_draft=?, evidence_gap=?, "
+        "authoring_stage='drafted', updated_at=CURRENT_TIMESTAMP WHERE id=?",
+        (resp, gap_text, content_id))
+    await db.commit()
 
-    return {"ok": True, "script": resp, "error": "",
+    all_injected = injected_ids + material_ids
+    await log_injection(db, content_id, f"write_script:{mode}",
+                        all_injected, result.get("tokens", 0))
+
+    return {"ok": True, "script": resp, "error": "", "gap": gap_text,
             "cost": result.get("cost", 0), "model": result.get("model", ""),
-            "injected_count": len(injected_ids)}
+            "injected_count": len(all_injected)}
 
 
 ANGLE_SYSTEM = """你是口播选题的角度策划。基于真实素材，给出 2-3 个不同的切入角度。

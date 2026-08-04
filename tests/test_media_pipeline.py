@@ -136,3 +136,67 @@ def test_propose_angles_replaces_old(monkeypatch):
 
     rows = asyncio.run(go())
     assert rows == ["新角度"]  # 旧的被清掉
+
+
+# ---------- write_script 升级（AI）----------
+
+from app.services.media_ai import extract_gap_markers, write_script
+
+
+def test_extract_gap_markers_pure():
+    text = "开场抛问题。【缺真料：需要一个真实客户名字】中间讲案例。【缺真料：转化数字】"
+    gaps = extract_gap_markers(text)
+    assert gaps == ["需要一个真实客户名字", "转化数字"]
+
+
+def test_extract_gap_markers_none():
+    assert extract_gap_markers("干干净净的稿子") == []
+
+
+def test_write_script_persists_draft_and_gap(monkeypatch):
+    draft = "3秒抛谜题……【缺真料：具体鞋厂转化率】……结尾钩子。"
+    monkeypatch.setattr("app.services.media_ai.ask_ai", fake_ai(draft))
+
+    async def go():
+        db = await make_db()
+        await seed_content(db)
+        res = await write_script(db, "C1", mode="full")
+        cur = await db.execute(
+            "SELECT ai_draft,evidence_gap,authoring_stage,script FROM media_content "
+            "WHERE id='C1'")
+        c = dict(await cur.fetchone())
+        await db.close()
+        return res, c
+
+    res, c = asyncio.run(go())
+    assert res["ok"] is True and res["script"] == draft
+    assert c["ai_draft"] == draft          # 草稿进 ai_draft
+    assert c["script"] == ""               # 定稿字段还没动
+    assert "鞋厂转化率" in c["evidence_gap"]  # 缺口被抽出
+    assert c["authoring_stage"] == "drafted"
+
+
+def test_write_script_injects_selected_angle(monkeypatch):
+    captured = {}
+
+    async def spy(prompt, model="auto", task_type="", system_prompt="", json_mode=False):
+        captured["prompt"] = prompt
+        return {"response": "稿子", "model": "deepseek", "tokens": 5, "cost": 0}
+
+    monkeypatch.setattr("app.services.media_ai.ask_ai", spy)
+
+    async def go():
+        db = await make_db()
+        await seed_content(db)
+        await db.execute("INSERT INTO media_angle (id,content_id,angle,rationale,is_selected)"
+                         " VALUES ('a1','C1','从我踩过的坑切入','最可信',1)")
+        await db.execute("UPDATE media_content SET selected_angle_id='a1' WHERE id='C1'")
+        await db.execute("INSERT INTO media_evidence (id,content_id,persona_id,item,item_type)"
+                         " VALUES ('e1','C1','P1','帮鞋厂上客服AI','experience')")
+        await db.commit()
+        await write_script(db, "C1", mode="full")
+        await db.close()
+
+    asyncio.run(go())
+    assert "从我踩过的坑切入" in captured["prompt"]  # 角度注入了
+    assert "帮鞋厂上客服AI" in captured["prompt"]    # 证据注入了
