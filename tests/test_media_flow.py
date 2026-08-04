@@ -66,3 +66,30 @@ def test_is_published_covers_published_and_reviewed():
     assert is_published("published") is True
     assert is_published("reviewed") is True
     assert is_published("ready") is False
+
+
+# ─────────────── 二期 🅐：写稿前认知子流程 ───────────────
+
+from app.services.media_flow import (
+    AUTHORING_STAGES, AUTHORING_LABELS, finalize_updates,
+)
+
+
+def test_authoring_stages_are_coarse_three():
+    assert AUTHORING_STAGES == ["none", "drafted", "finalized"]
+
+
+def test_authoring_labels_cover_all():
+    assert set(AUTHORING_LABELS) == set(AUTHORING_STAGES)
+
+
+def test_finalize_updates_sets_scripted_and_finalized():
+    up = finalize_updates("这是定稿脚本")
+    assert up["stage"] == "scripted"
+    assert up["authoring_stage"] == "finalized"
+    assert up["script"] == "这是定稿脚本"
+
+
+def test_finalize_updates_rejects_empty_script():
+    # 空脚本不算定稿，返回空 dict 让调用方不推进
+    assert finalize_updates("   ") == {}

@@ -44,3 +44,29 @@ def can_transition(frm: str, to: str) -> bool:
 def is_published(stage: str) -> bool:
     """是否已经发出去了（已发或已复盘）。"""
     return stage_index(stage) >= stage_index("published")
+
+
+# ─────────────── 二期 🅐：写稿前认知子流程 ───────────────
+# 刻意只三档：证据/角度/审稿是详情页可展开的产物，不是用户逐步点的关卡。
+AUTHORING_STAGES = ["none", "drafted", "finalized"]
+
+AUTHORING_LABELS = {
+    "none": "未出稿",
+    "drafted": "AI已出草稿",
+    "finalized": "已定稿",
+}
+
+
+def finalize_updates(script: str) -> dict:
+    """定稿时要写入 media_content 的字段。空脚本返回空 dict（不推进）。
+
+    定稿 = 人编辑后的真实版进 script；同时 stage 翻 scripted、authoring 翻 finalized。
+    ai_draft 由 write_script 单独持有，定稿不动它 —— 保留"AI草稿 vs 定稿"差异供功能B。
+    """
+    if not (script or "").strip():
+        return {}
+    return {
+        "script": script,
+        "stage": "scripted",
+        "authoring_stage": "finalized",
+    }
