@@ -344,6 +344,65 @@ CREATE TABLE IF NOT EXISTS media_feishu_unmatched (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS media_evidence (
+    id TEXT PRIMARY KEY,
+    content_id TEXT NOT NULL,
+    persona_id TEXT NOT NULL,
+    item TEXT DEFAULT '',
+    item_type TEXT DEFAULT 'experience',
+    source TEXT DEFAULT 'interview',
+    from_material_id TEXT DEFAULT '',
+    promoted_to_material_id TEXT DEFAULT '',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (content_id) REFERENCES media_content(id)
+);
+
+CREATE TABLE IF NOT EXISTS media_angle (
+    id TEXT PRIMARY KEY,
+    content_id TEXT NOT NULL,
+    angle TEXT DEFAULT '',
+    rationale TEXT DEFAULT '',
+    is_selected INTEGER DEFAULT 0,
+    status TEXT DEFAULT 'candidate',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (content_id) REFERENCES media_content(id)
+);
+
+CREATE TABLE IF NOT EXISTS media_draft_review (
+    id TEXT PRIMARY KEY,
+    content_id TEXT NOT NULL,
+    reviewed_draft TEXT DEFAULT '',
+    reviewer_strategy TEXT DEFAULT 'layered',
+    reviewer_model TEXT DEFAULT '',
+    fact_flags TEXT DEFAULT '[]',
+    persona_flags TEXT DEFAULT '[]',
+    platform_flags TEXT DEFAULT '[]',
+    gap_flags TEXT DEFAULT '[]',
+    risk_flags TEXT DEFAULT '[]',
+    score INTEGER DEFAULT 3,
+    verdict TEXT DEFAULT 'pass',
+    notes TEXT DEFAULT '',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (content_id) REFERENCES media_content(id)
+);
+
+CREATE TABLE IF NOT EXISTS media_material (
+    id TEXT PRIMARY KEY,
+    persona_id TEXT NOT NULL,
+    type TEXT DEFAULT 'story',
+    title TEXT DEFAULT '',
+    detail TEXT DEFAULT '',
+    brief TEXT DEFAULT '',
+    emotion TEXT DEFAULT '',
+    usable_scene TEXT DEFAULT '',
+    audience_hit TEXT DEFAULT '',
+    used_in TEXT DEFAULT '[]',
+    use_count INTEGER DEFAULT 0,
+    status TEXT DEFAULT 'active',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (persona_id) REFERENCES media_persona(id)
+);
 """
 
 
@@ -375,6 +434,13 @@ MIGRATIONS = [
     "ALTER TABLE study_settings ADD COLUMN reminded_night DATE DEFAULT NULL",
     "ALTER TABLE media_metrics ADD COLUMN missing_fields TEXT DEFAULT '[]'",
     "ALTER TABLE media_feishu_unmatched ADD COLUMN missing_fields TEXT DEFAULT '[]'",
+    "ALTER TABLE media_content ADD COLUMN authoring_stage TEXT DEFAULT 'none'",
+    "ALTER TABLE media_content ADD COLUMN brief TEXT DEFAULT ''",
+    "ALTER TABLE media_content ADD COLUMN evidence_gap TEXT DEFAULT ''",
+    "ALTER TABLE media_content ADD COLUMN selected_angle_id TEXT DEFAULT ''",
+    "ALTER TABLE media_content ADD COLUMN ai_draft TEXT DEFAULT ''",
+    "ALTER TABLE media_content ADD COLUMN revision_count INTEGER DEFAULT 0",
+    "ALTER TABLE media_content ADD COLUMN finalized_at DATETIME",
 ]
 
 
