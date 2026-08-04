@@ -184,6 +184,108 @@ def resolve_reviewer_model(strategy: str, writer_model: str,
     return "auto"
 
 
+INTERVIEW_SYSTEM = """你是口播内容的采访者。目标：就本条选题，向创作者提出精准问题，
+挖出只有他本人有的真实素材（经历/案例/数字/判断），供后续写稿用真料。
+
+铁律：
+1. 只问「本条选题」需要、而系统现有资料里没有的（给你的"已有真料"不要重复问）。
+2. 问具体的真事，不问空泛感受。要能挖出细节/数字/冲突的问题。
+3. 问题控制在 5-8 个，一次性问完（创作者会一次答完）。
+4. 只输出 JSON：{"questions":["问题1","问题2"]}"""
+
+EVIDENCE_SYSTEM = """你是素材整理员。把创作者的口述回答，拆成一条条结构化真实素材。
+
+铁律：
+1. 只整理创作者真说了的，不补充、不发挥、不编造。
+2. 每条标类型：experience经历 / case案例 / data数据 / opinion观点 / judgment判断。
+3. 一句话说不清的可拆成多条；空泛没信息量的丢掉。
+4. 只输出 JSON：{"items":[{"item":"素材内容","item_type":"experience"}]}"""
+
+
+async def interview_questions(db, content_id: str, model: str = "auto") -> dict:
+    """就本条选题生成 5-8 个采访问题。只读不写库；基于已有原料库只问缺口。"""
+    cur = await db.execute("SELECT * FROM media_content WHERE id=?", (content_id,))
+    row = await cur.fetchone()
+    if not row:
+        return {"ok": False, "error": "内容不存在", "questions": [],
+                "cost": 0, "model": ""}
+    content = dict(row)
+
+    # 已有原料库 brief —— 告诉 AI 别重复问
+    cur = await db.execute(
+        "SELECT brief,title FROM media_material WHERE persona_id=? AND status='active' "
+        "LIMIT 30", (content["persona_id"],))
+    mats = [((r["brief"] or r["title"]) or "").strip() for r in await cur.fetchall()]
+    mats = [m for m in mats if m]
+
+    parts = [f"【本条选题】{content['title']}"]
+    if content["puzzle"]:
+        parts.append(f"【核心谜题】{content['puzzle']}")
+    if mats:
+        parts.append("【系统已有真料（不要重复问）】\n" + "\n".join(f"- {m}" for m in mats))
+    parts.append("请就这条选题提出采访问题。")
+
+    result = await ask_ai("\n\n".join(parts), model=model, task_type="media_interview",
+                          system_prompt=INTERVIEW_SYSTEM, json_mode=True)
+    resp = result.get("response", "")
+    if resp.startswith("[错误]") or resp.startswith("[费用保护]"):
+        return {"ok": False, "error": resp, "questions": [],
+                "cost": result.get("cost", 0), "model": result.get("model", "")}
+
+    obj = extract_json(resp, expect="object")
+    questions = [_txt(q) for q in (obj.get("questions") or []) if _txt(q)]
+    await log_injection(db, content_id, "interview_questions", [],
+                        result.get("tokens", 0))
+    return {"ok": True, "questions": questions, "error": "",
+            "cost": result.get("cost", 0), "model": result.get("model", "")}
+
+
+async def extract_evidence(db, content_id: str, answers: str,
+                           model: str = "auto") -> dict:
+    """把创作者的一次性回答提炼成 media_evidence 行（source='interview'）。"""
+    cur = await db.execute(
+        "SELECT persona_id, title, puzzle FROM media_content WHERE id=?", (content_id,))
+    row = await cur.fetchone()
+    if not row:
+        return {"ok": False, "error": "内容不存在", "count": 0, "cost": 0, "model": ""}
+    content = dict(row)
+    if not (answers or "").strip():
+        return {"ok": False, "error": "回答是空的", "count": 0, "cost": 0, "model": ""}
+
+    parts = [f"【选题】{content['title']}"]
+    if content["puzzle"]:
+        parts.append(f"【核心谜题】{content['puzzle']}")
+    parts.append(f"【创作者的回答】\n{answers[:8000]}")
+    parts.append("请整理成结构化真实素材。")
+
+    result = await ask_ai("\n\n".join(parts), model=model, task_type="media_evidence",
+                          system_prompt=EVIDENCE_SYSTEM, json_mode=True)
+    resp = result.get("response", "")
+    if resp.startswith("[错误]") or resp.startswith("[费用保护]"):
+        return {"ok": False, "error": resp, "count": 0,
+                "cost": result.get("cost", 0), "model": result.get("model", "")}
+
+    obj = extract_json(resp, expect="object")
+    items = [it for it in (obj.get("items") or []) if isinstance(it, dict)]
+    valid_types = {"experience", "case", "data", "opinion", "judgment"}
+    count = 0
+    for it in items:
+        item_text = _txt(it.get("item"))
+        if not item_text:
+            continue
+        itype = it.get("item_type") if it.get("item_type") in valid_types else "experience"
+        await db.execute(
+            "INSERT INTO media_evidence "
+            "(id,content_id,persona_id,item,item_type,source) "
+            "VALUES (?,?,?,?,?, 'interview')",
+            (str(uuid.uuid4()), content_id, content["persona_id"], item_text, itype))
+        count += 1
+    await db.commit()
+    await log_injection(db, content_id, "extract_evidence", [], result.get("tokens", 0))
+    return {"ok": True, "count": count, "error": "",
+            "cost": result.get("cost", 0), "model": result.get("model", "")}
+
+
 SCRIPT_SYSTEM = """你是资深口播脚本撰稿人，为真人出镜的短视频写口播稿。
 
 铁律（必须全部满足，不超过 5 条 —— 规则多了每条都做不好）：
