@@ -297,6 +297,27 @@
         </div>
     </div>
 
+    <!-- ============ 自媒体 · 换脑审稿策略：独立表单 ============ -->
+    <div class="st-card">
+        <div class="mh">
+            <span class="ttl">自媒体 · 审稿独立性</span>
+        </div>
+        <div class="inner">
+            <form method="POST" action="/media/settings/review-strategy">
+                <div class="field">
+                    <label class="label">写脚本时，谁来独立审稿</label>
+                    <select name="strategy" class="input">
+                        <option value="layered" {% if (config.media_review_strategy or 'layered')=='layered' %}selected{% endif %}>分层（默认 · 省）—— 审稿独立调用，角色分离</option>
+                        <option value="swap_model" {% if config.media_review_strategy=='swap_model' %}selected{% endif %}>换模型（最独立 · 贵）—— 强制换个模型来审</option>
+                        <option value="same_model" {% if config.media_review_strategy=='same_model' %}selected{% endif %}>同模型分身（最省）—— 同模型仅靠独立提示词</option>
+                    </select>
+                    <p class="st-note">创作器 ≠ 审稿器：写稿和审稿永远是两次独立调用。前期建议「分层/换模型」抓问题，体系沉淀后可切「同模型分身」省成本。</p>
+                </div>
+                <button type="submit" class="btn primary">{{ ic.icon('check') }}保存审稿策略</button>
+            </form>
+        </div>
+    </div>
+
     <script>
     async function testFeishuConn() {
         const box = document.getElementById('feishu-test-result');

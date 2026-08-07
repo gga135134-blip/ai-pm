@@ -463,12 +463,16 @@ async def content_save_script(cid: str, script: str = Form(""),
             "UPDATE media_content SET script=?, edit_note=?, cover_idea=?, "
             "updated_at=CURRENT_TIMESTAMP WHERE id=?",
             (script, edit_note, cover_idea, cid))
-        # 脚本从空变有 → 自动推进到 scripted，省一次手动点击
+        # 脚本从空变有 → 自动推进到 scripted + 标记定稿（省一次手动点击）
+        # 存的 script = 人定稿的真实版；ai_draft 由 write_script 单独持有不动，
+        # 二者差异保留供功能 B（AI 学改稿）。
         cur = await db.execute("SELECT stage FROM media_content WHERE id=?", (cid,))
         row = await cur.fetchone()
         if script.strip() and row and row["stage"] == "idea":
             await db.execute(
-                "UPDATE media_content SET stage='scripted' WHERE id=?", (cid,))
+                "UPDATE media_content SET stage='scripted', "
+                "authoring_stage='finalized', finalized_at=CURRENT_TIMESTAMP "
+                "WHERE id=?", (cid,))
         await db.commit()
     finally:
         await db.close()
@@ -646,7 +650,7 @@ async def set_review_strategy(strategy: str = Form("layered")):
         cfg = {}
     cfg["media_review_strategy"] = strategy
     path.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
-    return RedirectResponse("/media/settings", status_code=302)
+    return RedirectResponse("/settings?msg=换脑审稿策略已保存", status_code=302)
 
 
 # ─────────────── 三平台发布 ───────────────

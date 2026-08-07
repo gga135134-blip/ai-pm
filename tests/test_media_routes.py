@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.api.auth import get_or_create_session_secret
 from app.database import get_db, init_db
+import app.database as _db_mod
 from tests.media_helpers import seed_content
 
 
@@ -27,8 +28,14 @@ def _client():
 
 
 @pytest.fixture(scope="module", autouse=True)
-def _db_ready():
+def _db_ready(tmp_path_factory):
+    """路由测试隔离到临时 DB：不污染用户真实 aipm.db，也不与其它测试抢 WAL 锁。"""
+    tmp = tmp_path_factory.mktemp("media_routes_db") / "test.db"
+    orig = _db_mod.DB_PATH
+    _db_mod.DB_PATH = tmp
     asyncio.run(init_db())
+    yield
+    _db_mod.DB_PATH = orig
 
 
 def _seed_real():
@@ -92,3 +99,47 @@ def test_critique_endpoint(monkeypatch):
     _seed_real()
     r = _client().post("/media/content/RT1/critique")
     assert r.json()["verdict"] == "pass"
+
+
+def test_content_detail_renders_authoring_area():
+    """真实渲染详情页创作区：验证新模板 Jinja2 语法（元组解包 for / dict.get /
+    latest_review[key]）不炸，且草稿/角度/审稿/素材都出现。"""
+    _seed_real()
+
+    async def seed_authoring():
+        db = await get_db()
+        try:
+            await db.execute(
+                "UPDATE media_content SET stage='idea', authoring_stage='drafted', "
+                "ai_draft='3秒抛谜题的草稿', evidence_gap='缺一个真实转化率' WHERE id='RT1'")
+            await db.execute("DELETE FROM media_angle WHERE content_id='RT1'")
+            await db.execute("INSERT INTO media_angle "
+                "(id,content_id,angle,rationale,is_selected) "
+                "VALUES ('ag1','RT1','从我踩过的坑切入','第一人称最可信',1)")
+            await db.execute("DELETE FROM media_evidence WHERE content_id='RT1'")
+            await db.execute("INSERT INTO media_evidence "
+                "(id,content_id,persona_id,item,item_type) "
+                "VALUES ('ev1','RT1','RTP','帮鞋厂上客服AI','experience')")
+            await db.execute("DELETE FROM media_draft_review WHERE content_id='RT1'")
+            await db.execute("INSERT INTO media_draft_review "
+                "(id,content_id,fact_flags,gap_flags,score,verdict,notes) "
+                "VALUES ('dr1','RT1','[\"80%这个数字没出处\"]','[]',3,'revise','要补真数字')")
+            await db.commit()
+        finally:
+            await db.close()
+    asyncio.run(seed_authoring())
+
+    r = _client().get("/media/content/RT1")
+    assert r.status_code == 200
+    html = r.text
+    assert "创作辅助" in html
+    assert "从我踩过的坑切入" in html      # 角度渲染
+    assert "缺一个真实转化率" in html        # 缺口警告
+    assert "审稿意见" in html and "要补真数字" in html  # 审稿渲染(元组解包for)
+    assert "帮鞋厂上客服AI" in html          # 素材包渲染
+
+
+def test_settings_page_shows_review_strategy():
+    r = _client().get("/settings")
+    assert r.status_code == 200
+    assert "审稿独立性" in r.text

@@ -51,6 +51,80 @@
   </form>
   {% endif %}
 
+  <!-- ===== 二期 🅐：创作辅助（写稿前认知子流程，只在选题阶段展开）===== -->
+  {% if content.stage == 'idea' %}
+  <div class="module">
+    <div class="mh">
+      <span class="ttl" style="font-size:14px">创作辅助</span>
+      <span class="sp"></span>
+      <span style="font-size:11.5px; color:var(--ink-3)">{{ {'none':'未出稿','drafted':'AI已出草稿','finalized':'已定稿'}.get(content.authoring_stage or 'none') }}</span>
+    </div>
+    <div class="inner">
+      {% if content.evidence_gap %}
+      <div style="font-size:12.5px; color:var(--warn); background:rgba(240,180,60,.10); border:1px solid rgba(240,180,60,.35); border-radius:var(--r-sm); padding:9px 12px; margin-bottom:10px">
+        ⚠️ AI 标了缺真料：{{ content.evidence_gap }}<br>
+        <span style="color:var(--ink-3)">点「采访我补料」补上，别让它编。</span>
+      </div>
+      {% endif %}
+
+      <div class="flex gap-2" style="flex-wrap:wrap">
+        <button onclick="interview()" class="btn ai" style="padding:6px 12px; font-size:12px">{{ ic.icon('robot') }}采访我补料</button>
+        <button onclick="genAngles()" class="btn" style="padding:6px 12px; font-size:12px">换角度</button>
+        <button onclick="critique()" class="btn" style="padding:6px 12px; font-size:12px">独立审稿</button>
+        {% if content.ai_draft %}
+        <button onclick="fillFromDraft()" class="btn" style="padding:6px 12px; font-size:12px">把 AI 草稿填进脚本框 ↓</button>
+        {% endif %}
+      </div>
+      <div id="authoring-status" class="ai-status-line"></div>
+      <textarea id="ai-draft-cache" style="display:none">{{ content.ai_draft }}</textarea>
+
+      {% if angles %}
+      <details style="margin-top:10px">
+        <summary style="font-size:12px; color:var(--ink-3); cursor:pointer">候选角度（{{ angles|length }}）</summary>
+        <div style="margin-top:8px">
+          {% for a in angles %}
+          <div style="display:flex; gap:8px; align-items:flex-start; margin-bottom:6px; font-size:13px">
+            <button onclick="selectAngle('{{ a.id }}')" class="btn {% if a.is_selected %}primary{% endif %}" style="padding:3px 10px; font-size:11.5px; flex:0 0 auto">{% if a.is_selected %}已选{% else %}选它{% endif %}</button>
+            <span>{{ a.angle }}<span style="color:var(--ink-3)"> —— {{ a.rationale }}</span></span>
+          </div>
+          {% endfor %}
+        </div>
+      </details>
+      {% endif %}
+
+      {% if latest_review %}
+      <details style="margin-top:10px">
+        <summary style="font-size:12px; color:var(--ink-3); cursor:pointer">审稿意见 · {{ latest_review.score }}/5 · {{ {'pass':'可用','revise':'建议改一次','reject':'建议回素材/角度'}.get(latest_review.verdict) }}</summary>
+        <div style="margin-top:8px; font-size:13px">
+          {% for label, key in [('事实存疑','fact_flags'),('不像本人','persona_flags'),('平台适配','platform_flags'),('缺真料','gap_flags'),('风险','risk_flags')] %}
+            {% for f in latest_review[key] %}<div style="margin-bottom:3px">· <span style="color:var(--warn)">[{{ label }}]</span> {{ f }}</div>{% endfor %}
+          {% endfor %}
+          {% if latest_review.notes %}<div style="color:var(--ink-3); margin-top:4px">总评：{{ latest_review.notes }}</div>{% endif %}
+          {% if content.revision_count == 0 %}
+          <button onclick="revise()" class="btn ai" style="padding:5px 12px; font-size:12px; margin-top:8px">照审稿改一次</button>
+          {% else %}
+          <div style="color:var(--ink-3); font-size:11.5px; margin-top:8px">已定向修订过一次；再不满意请回到素材或角度。</div>
+          {% endif %}
+        </div>
+      </details>
+      {% endif %}
+
+      {% if evidence %}
+      <details style="margin-top:10px">
+        <summary style="font-size:12px; color:var(--ink-3); cursor:pointer">素材包（{{ evidence|length }} 条真料）</summary>
+        <div style="margin-top:8px; font-size:13px">
+          {% for e in evidence %}<div style="margin-bottom:3px">· <span style="color:var(--ink-3)">[{{ e.item_type }}]</span> {{ e.item }}</div>{% endfor %}
+        </div>
+      </details>
+      {% endif %}
+
+      <div style="font-size:11.5px; color:var(--ink-3); margin-top:10px">
+        默认两步：点下面「AI 写脚本」出草稿 → 改成你要念的话 → 保存即定稿。缺料或不满意时才用上面的工具。
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
   <!-- ===== 脚本 ===== -->
   <div class="module">
     <div class="mh">
@@ -240,8 +314,9 @@ async function aiScript(mode) {
     if (d.ok) {
       box.value = d.script;
       status.textContent = '完成（' + d.model + '，注入 ' + d.injected_count
-                         + ' 条资产，费用 $' + (d.cost || 0).toFixed(4)
-                         + '）。记得点「保存脚本」。';
+                         + ' 条资产，费用 $' + (d.cost || 0).toFixed(4) + '）。'
+                         + (d.gap ? ' ⚠️AI 标了缺真料：' + d.gap + '（可点上面「采访我补料」）。' : '')
+                         + ' 改成你要念的话后点「保存脚本」即定稿。';
     } else {
       status.textContent = '失败：' + (d.error || '未知错误');
     }
@@ -324,6 +399,54 @@ async function aiReview() {
     btn.disabled = false;
     btn.innerHTML = '{{ ic.icon("robot") }}AI 复盘';
   }
+}
+
+// ===== 二期 🅐：创作辅助（采访/角度/审稿/修订）=====
+const CID = "{{ content.id }}";
+function _auth(msg){ const s=document.getElementById('authoring-status'); if(s){ s.style.display='block'; s.textContent=msg; } }
+async function _postJSON(url, body){ const r=await fetch(url,{method:'POST',body:body||null}); return await r.json(); }
+
+async function interview(){
+  _auth('AI 正在想问题…');
+  const j = await _postJSON(`/media/content/${CID}/interview`);
+  if(!j.ok){ _auth('采访失败：'+(j.error||'')); return; }
+  const ans = prompt('AI 想问你（一次答完，尽量给真事和数字）：\n\n'+j.questions.map((q,i)=>`${i+1}. ${q}`).join('\n'));
+  if(ans && ans.trim()){
+    _auth('AI 正在整理你的素材…');
+    const fd=new FormData(); fd.append('answers', ans);
+    const e=await _postJSON(`/media/content/${CID}/evidence`, fd);
+    if(e.ok){ _auth(`已补 ${e.count} 条真料，刷新中…`); location.reload(); }
+    else { _auth('提炼失败：'+(e.error||'')); }
+  } else { _auth(''); }
+}
+async function genAngles(){
+  _auth('AI 正在想切入角度…');
+  const j=await _postJSON(`/media/content/${CID}/angles`);
+  if(j.ok){ location.reload(); } else { _auth('出角度失败：'+(j.error||'')); }
+}
+async function selectAngle(aid){
+  _auth('已选角度，按新角度重出草稿…');
+  await _postJSON(`/media/content/${CID}/angle/${aid}/select`);
+  const fd=new FormData(); fd.append('mode','full');
+  const j=await _postJSON(`/media/content/${CID}/ai-script`, fd);
+  if(j.ok){ location.reload(); } else { _auth('重出草稿失败：'+(j.error||'')); }
+}
+async function critique(){
+  const cache=document.getElementById('ai-draft-cache');
+  if(!cache || !cache.value.trim()){ _auth('还没有草稿，先点下面「AI 写脚本」'); return; }
+  _auth('独立审稿中（换个脑子挑毛病）…');
+  const j=await _postJSON(`/media/content/${CID}/critique`);
+  if(j.ok){ location.reload(); } else { _auth('审稿失败：'+(j.error||'')); }
+}
+async function revise(){
+  _auth('按审稿意见改一次…');
+  const j=await _postJSON(`/media/content/${CID}/revise`);
+  if(j.ok){ location.reload(); } else { _auth('修订失败：'+(j.error||'')); }
+}
+function fillFromDraft(){
+  const cache=document.getElementById('ai-draft-cache');
+  const box=document.getElementById('script-box');
+  if(cache && box){ box.value=cache.value; box.scrollIntoView({behavior:'smooth'}); _auth('已把 AI 草稿填进脚本框，改成你要念的话，保存即定稿。'); }
 }
 </script>
 {% endblock %}

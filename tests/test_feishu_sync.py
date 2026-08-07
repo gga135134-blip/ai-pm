@@ -36,8 +36,20 @@ def test_map_row_no_url_no_title_returns_none():
 
 
 import asyncio, base64, json as _json, itsdangerous
+import pytest
 import app.api.auth as auth
 import app.database as d
+
+
+@pytest.fixture(autouse=True)
+def _isolated_db(tmp_path):
+    """把 DB 隔离到临时文件：不写用户真实 aipm.db，也避免真库 WAL 锁/脏数据导致 flaky。"""
+    tmp = tmp_path / "feishu_test.db"
+    orig = d.DB_PATH
+    d.DB_PATH = tmp
+    asyncio.run(d.init_db())
+    yield
+    d.DB_PATH = orig
 
 
 def _run(coro):
