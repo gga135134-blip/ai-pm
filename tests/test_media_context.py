@@ -224,3 +224,20 @@ def test_render_material_block_uses_brief():
     mats = [{"id": "m1", "brief": "做鞋厂客服AI案例", "use_count": 0}]
     text = render_material_block(mats)
     assert "可复用原料" in text and "做鞋厂" in text
+
+
+def test_build_script_context_injects_current_phase_and_permanent_only():
+    persona = {"name": "嘉姐", "one_liner": "务实落地AI", "current_phase": "AI落地期"}
+    traits = [
+        {"id": "a", "dimension": "positioning", "brief": "帮中小企业落地AI",
+         "status": "active", "phase_tag": "AI落地期", "confidence": 5},
+        {"id": "b", "dimension": "taboo", "brief": "不编造本人经历",
+         "status": "active", "phase_tag": "", "confidence": 5},           # 永久
+        {"id": "c", "dimension": "positioning", "brief": "教你月入十万",
+         "status": "active", "phase_tag": "旧带货期", "confidence": 5},   # 别的阶段
+    ]
+    text, ids = build_script_context(persona, traits)
+    assert "帮中小企业落地AI" in text      # 当前阶段
+    assert "不编造本人经历" in text        # 永久
+    assert "教你月入十万" not in text      # 别的阶段被挡
+    assert "a" in ids and "b" in ids and "c" not in ids

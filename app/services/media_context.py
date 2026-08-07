@@ -9,6 +9,8 @@ import logging
 import re
 import uuid
 
+from app.services.media_flow import is_injectable
+
 log = logging.getLogger(__name__)
 
 # 各注入槽位的硬上限。改动这里需同步更新 spec §6。
@@ -59,7 +61,8 @@ def build_script_context(persona: dict, traits: list[dict]) -> tuple[str, list[s
     signature（记忆点）单独占预算槽，不与普通条目竞争 ——
     记忆点是 IP 资产的核心，绝不能被高置信度的普通条目挤掉。
     """
-    active = [t for t in traits if (t.get("status") or "active") == "active"]
+    phase = persona.get("current_phase", "")
+    active = [t for t in traits if is_injectable(t, phase)]
     signatures = [t for t in active if t.get("dimension") == "signature"]
     others = [t for t in active if t.get("dimension") != "signature"]
 
