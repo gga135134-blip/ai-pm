@@ -143,3 +143,41 @@ def test_settings_page_shows_review_strategy():
     r = _client().get("/settings")
     assert r.status_code == 200
     assert "审稿独立性" in r.text
+
+
+def _seed_persona_real(pid="RTP2", phase="AI落地期"):
+    async def go():
+        db = await get_db()
+        try:
+            await db.execute("DELETE FROM media_persona_trait WHERE persona_id=?", (pid,))
+            await db.execute("DELETE FROM media_persona WHERE id=?", (pid,))
+            await db.execute(
+                "INSERT INTO media_persona (id,name,one_liner,current_phase,status) "
+                "VALUES (?,?,?,?, 'active')", (pid, "嘉姐", "务实落地AI", phase))
+            await db.commit()
+        finally:
+            await db.close()
+    asyncio.run(go())
+
+
+def test_persona_interview_questions_route(monkeypatch):
+    async def fake(db, persona_id, module, model="auto"):
+        return {"ok": True, "questions": ["Q1", "Q2"], "error": "", "cost": 0, "model": "x"}
+    monkeypatch.setattr("app.api.media.persona_interview_questions", fake)
+    _seed_persona_real()
+    r = _client().post("/media/persona/RTP2/interview/positioning/questions")
+    assert r.status_code == 200
+    assert r.json()["questions"] == ["Q1", "Q2"]
+
+
+def test_persona_interview_extract_route(monkeypatch):
+    async def fake(db, persona_id, module, answers, model="auto"):
+        return {"ok": True, "traits": [{"dimension": "positioning", "content": "帮中小企业",
+                "brief": "帮中小企业", "evidence": "原话", "confidence": 4,
+                "phase_tag": "AI落地期"}], "error": "", "cost": 0, "model": "x"}
+    monkeypatch.setattr("app.api.media.persona_interview_extract", fake)
+    _seed_persona_real()
+    r = _client().post("/media/persona/RTP2/interview/positioning/extract",
+                       data={"answers": "我帮中小企业落地AI"})
+    assert r.status_code == 200
+    assert r.json()["traits"][0]["phase_tag"] == "AI落地期"

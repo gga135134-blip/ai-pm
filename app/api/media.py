@@ -13,6 +13,7 @@ from app.services.media_ai import (
     recommend_topics, write_script, generate_platform_copy, review_content,
     interview_questions, extract_evidence, propose_angles,
     critique_draft, revise_draft,
+    persona_interview_questions, persona_interview_extract,
 )
 from app.services.media_flow import finalize_updates
 from app.services.ai_router import _load_config
@@ -152,6 +153,28 @@ async def trait_archive(tid: str):
     finally:
         await db.close()
     return RedirectResponse(f"/media/persona/{pid}", status_code=302)
+
+
+@router.post("/media/persona/{pid}/interview/{module}/questions")
+async def persona_interview_q(pid: str, module: str):
+    """出题：AJAX，透传 AI 结果给前端。"""
+    db = await get_db()
+    try:
+        res = await persona_interview_questions(db, pid, module)
+    finally:
+        await db.close()
+    return JSONResponse(res)
+
+
+@router.post("/media/persona/{pid}/interview/{module}/extract")
+async def persona_interview_ex(pid: str, module: str, answers: str = Form(...)):
+    """提炼候选条目：AJAX，返回 traits 待前端逐条拍板。不写库。"""
+    db = await get_db()
+    try:
+        res = await persona_interview_extract(db, pid, module, answers)
+    finally:
+        await db.close()
+    return JSONResponse(res)
 
 
 @router.post("/media/persona/{pid}/account")
