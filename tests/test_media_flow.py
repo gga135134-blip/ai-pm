@@ -2,6 +2,11 @@ from app.services.media_flow import (
     STAGES, STAGE_LABELS, PLATFORMS,
     stage_index, next_stage, can_transition, is_published,
 )
+from app.services.media_flow import (
+    PERSONA_MODULES, PERSONA_MODULE_ORDER,
+    module_dims, default_phase_tag, is_injectable,
+    archive_targets, completed_modules,
+)
 
 
 def test_stages_order_is_the_content_lifecycle():
@@ -93,3 +98,64 @@ def test_finalize_updates_sets_scripted_and_finalized():
 def test_finalize_updates_rejects_empty_script():
     # 空脚本不算定稿，返回空 dict 让调用方不推进
     assert finalize_updates("   ") == {}
+
+
+def test_seven_modules_in_order():
+    assert PERSONA_MODULE_ORDER == [
+        "positioning", "audience", "topics",
+        "tone", "signature", "taboo", "anchor",
+    ]
+    assert set(PERSONA_MODULES) == set(PERSONA_MODULE_ORDER)
+
+
+def test_positioning_module_covers_two_dims_and_is_phase_bound():
+    m = PERSONA_MODULES["positioning"]
+    assert m["dims"] == ["positioning", "differentiator"]
+    assert m["phase_bound"] is True
+
+
+def test_permanent_modules_are_not_phase_bound():
+    for key in ("tone", "signature", "taboo"):
+        assert PERSONA_MODULES[key]["phase_bound"] is False
+
+
+def test_module_dims_returns_dims():
+    assert module_dims("anchor") == ["anchor"]
+    assert module_dims("nonsense") == []
+
+
+def test_default_phase_tag_phase_bound_vs_permanent():
+    assert default_phase_tag("positioning", "AI落地期") == "AI落地期"
+    assert default_phase_tag("tone", "AI落地期") == ""       # 永久
+    assert default_phase_tag("anchor", "AI落地期") == "AI落地期"
+
+
+def test_is_injectable_current_phase_and_permanent_pass():
+    cur = "AI落地期"
+    assert is_injectable({"status": "active", "phase_tag": "AI落地期"}, cur) is True
+    assert is_injectable({"status": "active", "phase_tag": ""}, cur) is True     # 永久
+    assert is_injectable({"phase_tag": ""}, cur) is True                          # status 默认 active
+
+
+def test_is_injectable_other_phase_and_archived_fail():
+    cur = "AI落地期"
+    assert is_injectable({"status": "active", "phase_tag": "旧带货期"}, cur) is False
+    assert is_injectable({"status": "archived", "phase_tag": "AI落地期"}, cur) is False
+
+
+def test_archive_targets_only_hits_old_phase_actives():
+    traits = [
+        {"id": "t1", "status": "active", "phase_tag": "旧带货期"},   # 命中
+        {"id": "t2", "status": "active", "phase_tag": ""},           # 永久，不动
+        {"id": "t3", "status": "active", "phase_tag": "AI落地期"},   # 别的阶段，不动
+        {"id": "t4", "status": "archived", "phase_tag": "旧带货期"}, # 已归档，不动
+    ]
+    assert archive_targets(traits, "旧带货期") == ["t1"]
+    assert archive_targets(traits, "") == []                         # 空阶段名不误伤永久条目
+
+
+def test_completed_modules_maps_dims_back_to_modules():
+    assert completed_modules(["positioning"]) == {"positioning"}
+    assert completed_modules(["differentiator"]) == {"positioning"}  # 同属定位模块
+    assert completed_modules(["tone", "anchor"]) == {"tone", "anchor"}
+    assert completed_modules([]) == set()

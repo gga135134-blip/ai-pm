@@ -607,7 +607,7 @@ REVIEW_SYSTEM = """你是自媒体数据复盘专家。基于真实数据分析�
     "conclusion":"一句话结论"
   },
   "proposed_traits": [
-    {"dimension":"positioning|audience|tone|topics|taboo|signature|differentiator",
+    {"dimension":"positioning|audience|tone|topics|taboo|signature|differentiator|anchor",
      "content":"条目内容","brief":"≤30字精简版","evidence":"证据","confidence":3}
   ],
   "topic_fingerprint": "3-6个核心语义标签，逗号分隔，用于以后查重"

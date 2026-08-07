@@ -30,6 +30,7 @@ TRAIT_DIMENSIONS = {
     "taboo": "内容禁区",
     "signature": "记忆点",
     "differentiator": "差异化",
+    "anchor": "生意锚点",
 }
 
 

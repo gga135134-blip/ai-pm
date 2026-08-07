@@ -70,3 +70,59 @@ def finalize_updates(script: str) -> dict:
         "stage": "scripted",
         "authoring_stage": "finalized",
     }
+
+
+# ─────────────── 二期 · 人设框架地基 ───────────────
+# 7 个访谈模块 → 8 个 dimension。phase_bound=True 的模块打当前阶段标签，
+# False 的（声音/记忆点/红线）是跨阶段永久条目，phase_tag 留空、换阶段不归档。
+PERSONA_MODULES = {
+    "positioning": {"label": "你是谁·定位", "dims": ["positioning", "differentiator"], "phase_bound": True},
+    "audience":    {"label": "说给谁听·受众", "dims": ["audience"], "phase_bound": True},
+    "topics":      {"label": "讲什么·选题域", "dims": ["topics"], "phase_bound": True},
+    "tone":        {"label": "怎么说·声音", "dims": ["tone"], "phase_bound": False},
+    "signature":   {"label": "招牌·记忆点", "dims": ["signature"], "phase_bound": False},
+    "taboo":       {"label": "红线·禁忌", "dims": ["taboo"], "phase_bound": False},
+    "anchor":      {"label": "生意锚点", "dims": ["anchor"], "phase_bound": True},
+}
+PERSONA_MODULE_ORDER = [
+    "positioning", "audience", "topics", "tone", "signature", "taboo", "anchor",
+]
+
+
+def module_dims(module: str) -> list[str]:
+    """模块允许写入的维度。未知模块返回空列表。"""
+    m = PERSONA_MODULES.get(module)
+    return list(m["dims"]) if m else []
+
+
+def default_phase_tag(module: str, current_phase: str) -> str:
+    """模块提炼出的条目默认打什么阶段标签。永久模块返回空串。"""
+    m = PERSONA_MODULES.get(module)
+    if m and m["phase_bound"]:
+        return current_phase or ""
+    return ""
+
+
+def is_injectable(trait: dict, current_phase: str) -> bool:
+    """写稿注入时这条 trait 该不该喂：active 且（永久 或 属当前阶段）。"""
+    if (trait.get("status") or "active") != "active":
+        return False
+    ptag = trait.get("phase_tag") or ""
+    return ptag == "" or ptag == current_phase
+
+
+def archive_targets(traits: list[dict], old_phase: str) -> list[str]:
+    """换阶段时要归档的 trait id：仅 active 且 phase_tag==old_phase 的。
+    永久条目 phase_tag 为空，old_phase 非空时永不命中 —— 天然不误伤。"""
+    if not old_phase:
+        return []
+    return [t["id"] for t in traits
+            if (t.get("status") or "active") == "active"
+            and (t.get("phase_tag") or "") == old_phase]
+
+
+def completed_modules(active_dims: list[str]) -> set[str]:
+    """哪些模块已至少采纳过一条 active 条目（详情页 N/7 进度）。"""
+    dims = set(active_dims)
+    return {mod for mod, m in PERSONA_MODULES.items()
+            if dims & set(m["dims"])}
