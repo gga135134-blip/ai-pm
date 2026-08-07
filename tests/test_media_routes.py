@@ -241,3 +241,11 @@ def test_new_phase_archives_old_phase_actives_keeps_permanent():
             await db.close()
         return row["current_phase"]
     assert asyncio.run(phase()) == "AI落地期"
+
+
+def test_persona_interview_page_renders_seven_modules():
+    _seed_persona_real()
+    r = _client().get("/media/persona/RTP2/interview")
+    assert r.status_code == 200
+    assert "你是谁·定位" in r.text
+    assert "生意锚点" in r.text        # 第 7 模块 anchor 在页面上

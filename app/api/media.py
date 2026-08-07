@@ -8,6 +8,7 @@ from app.services.media_metrics import recognize_screenshot, save_metrics
 from app.services.media_feishu_sync import sync_from_feishu
 from app.services.media_flow import (
     PLATFORMS, STAGES, STAGE_LABELS, can_transition, next_stage, stage_index,
+    PERSONA_MODULES, PERSONA_MODULE_ORDER, completed_modules,
 )
 from app.services.media_ai import (
     recommend_topics, write_script, generate_platform_copy, review_content,
@@ -111,10 +112,13 @@ async def persona_detail(request: Request, pid: str):
         if hit:
             traits_by_dim[dim] = hit
 
+    done_modules = completed_modules([t["dimension"] for t in traits])
+
     return _tpl(request, "media_persona.html",
                 {"persona": persona, "traits_by_dim": traits_by_dim,
                  "accounts": accounts, "dimensions": TRAIT_DIMENSIONS,
-                 "platforms": PLATFORMS, "archived": archived})
+                 "platforms": PLATFORMS, "archived": archived,
+                 "done_count": len(done_modules), "module_total": len(PERSONA_MODULE_ORDER)})
 
 
 @router.post("/media/persona/{pid}/trait")
@@ -216,6 +220,25 @@ async def persona_new_phase(pid: str, new_phase: str = Form(...)):
     finally:
         await db.close()
     return RedirectResponse(f"/media/persona/{pid}", status_code=302)
+
+
+@router.get("/media/persona/{pid}/interview", response_class=HTMLResponse)
+async def persona_interview_page(request: Request, pid: str):
+    db = await get_db()
+    try:
+        cur = await db.execute("SELECT * FROM media_persona WHERE id=?", (pid,))
+        row = await cur.fetchone()
+        persona = dict(row) if row else None
+        cur = await db.execute(
+            "SELECT dimension FROM media_persona_trait "
+            "WHERE persona_id=? AND status='active'", (pid,))
+        active_dims = [r["dimension"] for r in await cur.fetchall()]
+    finally:
+        await db.close()
+    done = completed_modules(active_dims)
+    return _tpl(request, "media_persona_interview.html",
+                {"persona": persona, "modules": PERSONA_MODULES,
+                 "module_order": PERSONA_MODULE_ORDER, "done": done})
 
 
 @router.post("/media/persona/{pid}/account")
