@@ -367,6 +367,7 @@ async def persona_interview_questions(db, persona_id: str, module: str,
                 "cost": result.get("cost", 0), "model": result.get("model", "")}
     obj = extract_json(resp, expect="object")
     questions = [_txt(q) for q in (obj.get("questions") or []) if _txt(q)]
+    await log_injection(db, "", "persona_interview_questions", [], result.get("tokens", 0))
     return {"ok": True, "questions": questions, "error": "",
             "cost": result.get("cost", 0), "model": result.get("model", "")}
 
@@ -427,6 +428,7 @@ async def persona_interview_extract(db, persona_id: str, module: str,
             "confidence": conf,
             "phase_tag": phase_tag,
         })
+    await log_injection(db, "", "persona_interview_extract", [], result.get("tokens", 0))
     return {"ok": True, "traits": traits, "error": "",
             "cost": result.get("cost", 0), "model": result.get("model", "")}
 
