@@ -181,3 +181,63 @@ def test_persona_interview_extract_route(monkeypatch):
                        data={"answers": "我帮中小企业落地AI"})
     assert r.status_code == 200
     assert r.json()["traits"][0]["phase_tag"] == "AI落地期"
+
+
+def _count_traits(pid, **where):
+    async def go():
+        db = await get_db()
+        try:
+            sql = "SELECT * FROM media_persona_trait WHERE persona_id=?"
+            args = [pid]
+            for k, v in where.items():
+                sql += f" AND {k}=?"
+                args.append(v)
+            cur = await db.execute(sql, args)
+            rows = [dict(r) for r in await cur.fetchall()]
+        finally:
+            await db.close()
+        return rows
+    return asyncio.run(go())
+
+
+def test_persona_interview_adopt_writes_interview_source():
+    _seed_persona_real()
+    r = _client().post("/media/persona/RTP2/interview/adopt", data={
+        "dimension": "positioning", "content": "帮中小企业务实落地AI",
+        "brief": "帮中小企业落地AI", "confidence": "4",
+        "evidence": "我自己就是做这个的", "phase_tag": "AI落地期"})
+    assert r.status_code == 200 and r.json()["ok"] is True
+    rows = _count_traits("RTP2", dimension="positioning")
+    assert len(rows) == 1
+    assert rows[0]["source"] == "interview"
+    assert rows[0]["phase_tag"] == "AI落地期"
+    assert rows[0]["status"] == "active"
+
+
+def test_new_phase_archives_old_phase_actives_keeps_permanent():
+    _seed_persona_real(phase="旧带货期")
+    c = _client()
+    # 一条旧阶段定位（会归档）+ 一条永久红线（phase_tag 空，保留）
+    c.post("/media/persona/RTP2/interview/adopt", data={
+        "dimension": "positioning", "content": "教你月入十万",
+        "brief": "月入十万", "confidence": "3", "evidence": "", "phase_tag": "旧带货期"})
+    c.post("/media/persona/RTP2/interview/adopt", data={
+        "dimension": "taboo", "content": "不编造本人经历",
+        "brief": "不编造", "confidence": "5", "evidence": "", "phase_tag": ""})
+    r = c.post("/media/persona/RTP2/new-phase", data={"new_phase": "AI落地期"},
+               follow_redirects=False)
+    assert r.status_code == 302
+    actives = _count_traits("RTP2", status="active")
+    archived = _count_traits("RTP2", status="archived")
+    assert {a["dimension"] for a in actives} == {"taboo"}       # 永久红线还在
+    assert {a["dimension"] for a in archived} == {"positioning"}  # 旧阶段定位归档
+    # current_phase 已更新
+    async def phase():
+        db = await get_db()
+        try:
+            row = await (await db.execute(
+                "SELECT current_phase FROM media_persona WHERE id='RTP2'")).fetchone()
+        finally:
+            await db.close()
+        return row["current_phase"]
+    assert asyncio.run(phase()) == "AI落地期"

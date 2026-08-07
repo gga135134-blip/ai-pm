@@ -177,6 +177,47 @@ async def persona_interview_ex(pid: str, module: str, answers: str = Form(...)):
     return JSONResponse(res)
 
 
+@router.post("/media/persona/{pid}/interview/adopt")
+async def persona_interview_adopt(pid: str, dimension: str = Form(...),
+                                  content: str = Form(...), brief: str = Form(""),
+                                  confidence: int = Form(3), evidence: str = Form(""),
+                                  phase_tag: str = Form("")):
+    """人拍板：把一条候选条目写进注册表，source='interview'。"""
+    db = await get_db()
+    try:
+        await db.execute(
+            "INSERT INTO media_persona_trait "
+            "(id,persona_id,dimension,content,brief,source,evidence,confidence,phase_tag) "
+            "VALUES (?,?,?,?,?, 'interview', ?,?,?)",
+            (str(uuid.uuid4()), pid, dimension, content.strip(),
+             brief.strip()[:30], evidence.strip(), confidence, phase_tag.strip()))
+        await db.commit()
+    finally:
+        await db.close()
+    return JSONResponse({"ok": True})
+
+
+@router.post("/media/persona/{pid}/new-phase")
+async def persona_new_phase(pid: str, new_phase: str = Form(...)):
+    """换阶段：归档旧阶段的 active 条目（永久条目 phase_tag 空、不受影响），更新当前阶段。"""
+    db = await get_db()
+    try:
+        cur = await db.execute("SELECT current_phase FROM media_persona WHERE id=?", (pid,))
+        row = await cur.fetchone()
+        old = row["current_phase"] if row else ""
+        if old:
+            await db.execute(
+                "UPDATE media_persona_trait SET status='archived' "
+                "WHERE persona_id=? AND status='active' AND phase_tag=?", (pid, old))
+        await db.execute(
+            "UPDATE media_persona SET current_phase=?, updated_at=CURRENT_TIMESTAMP "
+            "WHERE id=?", (new_phase.strip(), pid))
+        await db.commit()
+    finally:
+        await db.close()
+    return RedirectResponse(f"/media/persona/{pid}", status_code=302)
+
+
 @router.post("/media/persona/{pid}/account")
 async def account_create(pid: str, platform: str = Form(...),
                          account_name: str = Form(""), account_url: str = Form(""),
