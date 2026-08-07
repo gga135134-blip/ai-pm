@@ -15,6 +15,9 @@ from app.services.media_context import (
     build_script_context, render_evidence_block, render_angle_block,
     select_materials, render_material_block,
 )
+from app.services.media_flow import (
+    PERSONA_MODULES, module_dims, default_phase_tag,
+)
 
 log = logging.getLogger(__name__)
 
@@ -312,6 +315,60 @@ SCRIPT_SYSTEM = """你是资深口播脚本撰稿人，为真人出镜的短视�
 
 输出纯文本脚本，用 Markdown 分段。禁止用 ASCII 字符画（中文等宽会错位），
 需要表格就用 Markdown 表格。不要输出 JSON，不要写解释。"""
+
+
+# ─────────────── 二期 · 人设访谈（冷启动播种人设登记表）───────────────
+# 把 ip-strategist 的判断标准翻译进提示词（走法C，不运行时读外部skill）。
+PERSONA_MODULE_GUIDE = {
+    "positioning": "一句话定位（帮谁解决什么）、跟同类账号最大的不同、现在处在什么阶段。",
+    "audience": "目标人群是谁、他们最痛的问题分几层。提醒创作者：画像只是待验证假设，别当既定事实。",
+    "topics": "能持续讲的内容主场、哪些话题方向是你的、哪些方向坚决不碰。",
+    "tone": "人称视角、是自嘲还是端着、平视还是高高在上、有没有口头禅、真实说话的腔调。",
+    "signature": "标志性观点/口号/固定桥段。少而硬，是别人记住你的钩子，不要贪多。",
+    "taboo": "内容红线：不编造本人经历、警惕AI味/卖课味/焦虑营销、身份错位禁忌。",
+    "anchor": "这个号最终为什么做、怎么变现、生意目标是什么。",
+}
+
+PERSONA_INTERVIEW_SYSTEM = """你是资深 IP 人设访谈者。就给定的人设模块，向创作者提出精准的引导问题，
+帮他把脑子里的东西挖出来、说清楚。
+
+铁律：
+1. 问题要具体、可回答，避免"你的定位是什么"这种大而空的问法。
+2. 一次提 5-8 个问题，围绕本模块的挖掘目标，别跑题到别的模块。
+3. 只输出 JSON：{"questions":["...","..."]}，不要解释。"""
+
+
+async def persona_interview_questions(db, persona_id: str, module: str,
+                                      model: str = "auto") -> dict:
+    """就某个人设模块生成 5-8 个引导问题。只读不写库。"""
+    cur = await db.execute("SELECT * FROM media_persona WHERE id=?", (persona_id,))
+    row = await cur.fetchone()
+    if not row:
+        return {"ok": False, "error": "人设不存在", "questions": [],
+                "cost": 0, "model": ""}
+    if module not in PERSONA_MODULES:
+        return {"ok": False, "error": "未知模块", "questions": [],
+                "cost": 0, "model": ""}
+    persona = dict(row)
+    mod = PERSONA_MODULES[module]
+    parts = [
+        f"【人设】{persona['name']}｜{persona.get('one_liner', '')}"
+        f"｜当前阶段：{persona.get('current_phase', '')}",
+        f"【本模块】{mod['label']}",
+        f"【挖掘目标】{PERSONA_MODULE_GUIDE.get(module, '')}",
+        "请就本模块向创作者提出引导问题。",
+    ]
+    result = await ask_ai("\n\n".join(parts), model=model,
+                          task_type="media_persona_interview",
+                          system_prompt=PERSONA_INTERVIEW_SYSTEM, json_mode=True)
+    resp = result.get("response", "")
+    if resp.startswith("[错误]") or resp.startswith("[费用保护]"):
+        return {"ok": False, "error": resp, "questions": [],
+                "cost": result.get("cost", 0), "model": result.get("model", "")}
+    obj = extract_json(resp, expect="object")
+    questions = [_txt(q) for q in (obj.get("questions") or []) if _txt(q)]
+    return {"ok": True, "questions": questions, "error": "",
+            "cost": result.get("cost", 0), "model": result.get("model", "")}
 
 
 async def write_script(db, content_id: str, mode: str = "full",

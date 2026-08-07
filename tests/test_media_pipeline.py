@@ -4,6 +4,7 @@ import json
 
 from tests.media_helpers import make_db, fake_ai, seed_content
 from app.services.media_ai import available_providers, resolve_reviewer_model
+from app.services import media_ai
 
 
 # ---------- 换脑策略（纯函数）----------
@@ -291,3 +292,39 @@ def test_revise_refuses_second_time(monkeypatch):
     res, keep = asyncio.run(go())
     assert res["ok"] is False and "一次" in res["error"]
     assert keep == "已改过"  # 没被覆盖
+
+
+# ---------- 人设访谈（persona_interview_questions）----------
+
+async def _seed_persona(db, pid="P1", phase="AI落地期"):
+    await db.execute(
+        "INSERT INTO media_persona (id,name,one_liner,current_phase,status) "
+        "VALUES (?,?,?,?, 'active')", (pid, "嘉姐", "务实落地AI", phase))
+    await db.commit()
+
+
+def test_persona_interview_questions_returns_list(monkeypatch):
+    async def go():
+        db = await make_db()
+        await _seed_persona(db)
+        monkeypatch.setattr(media_ai, "ask_ai",
+                            fake_ai('{"questions":["你帮谁？","你跟同类不同在哪？"]}'))
+        res = await media_ai.persona_interview_questions(db, "P1", "positioning")
+        await db.close()
+        return res
+    res = asyncio.run(go())
+    assert res["ok"] is True
+    assert res["questions"] == ["你帮谁？", "你跟同类不同在哪？"]
+
+
+def test_persona_interview_questions_unknown_module(monkeypatch):
+    async def go():
+        db = await make_db()
+        await _seed_persona(db)
+        monkeypatch.setattr(media_ai, "ask_ai", fake_ai('{"questions":[]}'))
+        res = await media_ai.persona_interview_questions(db, "P1", "nonsense")
+        await db.close()
+        return res
+    res = asyncio.run(go())
+    assert res["ok"] is False
+    assert "模块" in res["error"]
