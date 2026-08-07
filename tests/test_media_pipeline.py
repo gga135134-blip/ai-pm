@@ -328,3 +328,67 @@ def test_persona_interview_questions_unknown_module(monkeypatch):
     res = asyncio.run(go())
     assert res["ok"] is False
     assert "模块" in res["error"]
+
+
+# ---------- 人设访谈提炼（persona_interview_extract）----------
+
+def test_persona_interview_extract_returns_candidates_and_does_not_write(monkeypatch):
+    payload = ('{"traits":[{"dimension":"positioning","content":"帮中小企业务实落地AI",'
+               '"brief":"帮中小企业落地AI","evidence":"我自己就是做这个的","confidence":4}]}')
+    async def go():
+        db = await make_db()
+        await _seed_persona(db, phase="AI落地期")
+        monkeypatch.setattr(media_ai, "ask_ai", fake_ai(payload))
+        res = await media_ai.persona_interview_extract(
+            db, "P1", "positioning", "我帮中小企业落地AI，自己就是做这个的")
+        cur = await db.execute("SELECT COUNT(*) c FROM media_persona_trait")
+        n = (await cur.fetchone())["c"]
+        await db.close()
+        return res, n
+    res, n = asyncio.run(go())
+    assert res["ok"] is True
+    assert n == 0                                   # 绝不写库
+    t = res["traits"][0]
+    assert t["dimension"] == "positioning"
+    assert t["phase_tag"] == "AI落地期"             # phase_bound 模块打当前阶段
+    assert t["confidence"] == 4
+
+
+def test_persona_interview_extract_permanent_module_empty_phase(monkeypatch):
+    payload = '{"traits":[{"dimension":"taboo","content":"不编造本人经历","confidence":5}]}'
+    async def go():
+        db = await make_db()
+        await _seed_persona(db, phase="AI落地期")
+        monkeypatch.setattr(media_ai, "ask_ai", fake_ai(payload))
+        res = await media_ai.persona_interview_extract(db, "P1", "taboo", "绝不编造经历")
+        await db.close()
+        return res
+    res = asyncio.run(go())
+    assert res["traits"][0]["phase_tag"] == ""      # 永久模块 phase_tag 留空
+
+
+def test_persona_interview_extract_empty_answers(monkeypatch):
+    async def go():
+        db = await make_db()
+        await _seed_persona(db)
+        monkeypatch.setattr(media_ai, "ask_ai", fake_ai('{"traits":[]}'))
+        res = await media_ai.persona_interview_extract(db, "P1", "positioning", "   ")
+        await db.close()
+        return res
+    res = asyncio.run(go())
+    assert res["ok"] is False
+    assert "空" in res["error"]
+
+
+def test_persona_interview_extract_clamps_dimension_to_module(monkeypatch):
+    # AI 乱给一个不属于本模块的维度，应被夹回本模块首维
+    payload = '{"traits":[{"dimension":"taboo","content":"帮中小企业","confidence":3}]}'
+    async def go():
+        db = await make_db()
+        await _seed_persona(db)
+        monkeypatch.setattr(media_ai, "ask_ai", fake_ai(payload))
+        res = await media_ai.persona_interview_extract(db, "P1", "positioning", "答案")
+        await db.close()
+        return res
+    res = asyncio.run(go())
+    assert res["traits"][0]["dimension"] == "positioning"   # 夹回 module_dims 首维

@@ -371,6 +371,66 @@ async def persona_interview_questions(db, persona_id: str, module: str,
             "cost": result.get("cost", 0), "model": result.get("model", "")}
 
 
+PERSONA_EXTRACT_SYSTEM = """你把创作者对某个人设模块的回答，提炼成结构化人设条目。
+
+铁律：
+1. 只提炼回答里真实说过的，绝不替他编造或脑补人设。回答里没有就少提甚至不提。
+2. 每条给：dimension（限本模块允许的维度）、content（完整表述）、
+   brief（≤30字精简版）、evidence（引用他的原话）、confidence（1-5，他说得越笃定越高）。
+3. 只输出 JSON：{"traits":[{...}]}，不要解释。"""
+
+
+async def persona_interview_extract(db, persona_id: str, module: str,
+                                    answers: str, model: str = "auto") -> dict:
+    """把创作者的一次性回答提炼成 candidate 人设条目。绝不写库 —— 人拍板才入库。"""
+    cur = await db.execute("SELECT * FROM media_persona WHERE id=?", (persona_id,))
+    row = await cur.fetchone()
+    if not row:
+        return {"ok": False, "error": "人设不存在", "traits": [], "cost": 0, "model": ""}
+    if module not in PERSONA_MODULES:
+        return {"ok": False, "error": "未知模块", "traits": [], "cost": 0, "model": ""}
+    if not (answers or "").strip():
+        return {"ok": False, "error": "回答是空的", "traits": [], "cost": 0, "model": ""}
+    persona = dict(row)
+    dims = module_dims(module)
+    phase_tag = default_phase_tag(module, persona.get("current_phase", ""))
+
+    parts = [
+        f"【本模块】{PERSONA_MODULES[module]['label']}",
+        f"【允许的维度】{'/'.join(dims)}",
+        f"【创作者的回答】\n{answers[:8000]}",
+        "请把回答提炼成结构化人设条目。",
+    ]
+    result = await ask_ai("\n\n".join(parts), model=model,
+                          task_type="media_persona_extract",
+                          system_prompt=PERSONA_EXTRACT_SYSTEM, json_mode=True)
+    resp = result.get("response", "")
+    if resp.startswith("[错误]") or resp.startswith("[费用保护]"):
+        return {"ok": False, "error": resp, "traits": [],
+                "cost": result.get("cost", 0), "model": result.get("model", "")}
+
+    obj = extract_json(resp, expect="object")
+    raw = [it for it in (obj.get("traits") or []) if isinstance(it, dict)]
+    traits = []
+    for it in raw:
+        content = _txt(it.get("content"))
+        if not content:
+            continue
+        dim = it.get("dimension") if it.get("dimension") in dims else dims[0]
+        conf = it.get("confidence")
+        conf = conf if isinstance(conf, int) and 1 <= conf <= 5 else 3
+        traits.append({
+            "dimension": dim,
+            "content": content,
+            "brief": (_txt(it.get("brief")) or content)[:30],
+            "evidence": _txt(it.get("evidence")),
+            "confidence": conf,
+            "phase_tag": phase_tag,
+        })
+    return {"ok": True, "traits": traits, "error": "",
+            "cost": result.get("cost", 0), "model": result.get("model", "")}
+
+
 async def write_script(db, content_id: str, mode: str = "full",
                        model: str = "auto") -> dict:
     """AI 写口播脚本。
