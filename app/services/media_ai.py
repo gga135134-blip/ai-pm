@@ -514,6 +514,11 @@ async def write_script(db, content_id: str, mode: str = "full",
         return {"ok": False, "error": resp, "script": "",
                 "cost": result.get("cost", 0), "model": result.get("model", ""),
                 "injected_count": 0}
+    if not resp.strip():
+        # 模型偶尔返回空（花了钱没吐字）。别装作"完成"骗前端，直接让用户重试。
+        return {"ok": False, "error": "AI 返回了空内容，请重试（模型偶尔抽风）",
+                "script": "", "cost": result.get("cost", 0),
+                "model": result.get("model", ""), "injected_count": 0}
 
     # ── 持久化草稿：进 ai_draft（不碰 script，script 留给人定稿）──
     gaps = extract_gap_markers(resp)
@@ -1012,6 +1017,10 @@ async def revise_draft(db, content_id: str, model: str = "auto") -> dict:
     if resp.startswith("[错误]") or resp.startswith("[费用保护]"):
         return {"ok": False, "error": resp, "script": "",
                 "revision_count": row["revision_count"] or 0,
+                "cost": result.get("cost", 0), "model": result.get("model", "")}
+    if not resp.strip():
+        return {"ok": False, "error": "AI 返回了空内容，请重试",
+                "script": "", "revision_count": row["revision_count"] or 0,
                 "cost": result.get("cost", 0), "model": result.get("model", "")}
 
     new_count = (row["revision_count"] or 0) + 1
