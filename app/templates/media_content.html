@@ -131,7 +131,11 @@
       <span class="ttl" style="font-size:14px">口播脚本</span>
       <span class="sp"></span>
       <button onclick="aiScript('full')" id="btn-full" class="btn ai" style="padding:6px 12px; font-size:12px">{{ ic.icon('robot') }}AI 写脚本</button>
-      <button onclick="aiScript('lean')" id="btn-lean" class="btn ai" style="padding:6px 12px; font-size:12px"
+      <button onclick="rewrite()" id="btn-rewrite" class="btn ai" style="padding:6px 12px; font-size:12px"
+              title="带要求重写：可要它加点/减点/换开头等">🔄 重写</button>
+      <button onclick="copyScript()" id="btn-copy" class="btn" style="padding:6px 12px; font-size:12px"
+              title="复制口播正文（自动去掉时长标注和缺料说明）">📋 复制</button>
+      <button onclick="aiScript('lean')" id="btn-lean" class="btn" style="padding:6px 12px; font-size:12px"
               title="只注入人设身份，用于对比注入是否真的有效">精简注入</button>
     </div>
     <div class="inner">
@@ -447,6 +451,63 @@ function fillFromDraft(){
   const cache=document.getElementById('ai-draft-cache');
   const box=document.getElementById('script-box');
   if(cache && box){ box.value=cache.value; box.scrollIntoView({behavior:'smooth'}); _auth('已把 AI 草稿填进脚本框，改成你要念的话，保存即定稿。'); }
+}
+
+// ===== 带要求重写 / 复制正文（跟后端 clean_body 保持一致）=====
+async function rewrite(){
+  const box = document.getElementById('script-box');
+  const hint = prompt('想怎么改？例：\n· 开头别铺垫，更狠一点\n· 加一个真实案例\n· 短一点，控制在45秒\n\n（留空 = 直接重写）');
+  if(hint === null) return;              // 点了取消
+  const status = document.getElementById('ai-status');
+  const btn = document.getElementById('btn-rewrite');
+  btn.disabled = true; status.style.display='block';
+  status.textContent = hint.trim() ? ('AI 按要求重写中…（'+hint.trim()+'）') : 'AI 重写中…';
+  try{
+    const fd = new FormData(); fd.append('mode','full'); fd.append('hint', hint);
+    const r = await fetch('/media/content/{{ content.id }}/ai-script', {method:'POST', body:fd});
+    const d = await r.json();
+    if(d.ok){
+      box.value = d.script;
+      status.textContent = '重写完成（'+d.model+'，注入 '+d.injected_count+' 条）。'
+        + (d.gap ? ' ⚠️缺真料：'+d.gap : '') + ' 满意就点「保存脚本」，或「复制」拿走正文。';
+    } else { status.textContent = '失败：'+(d.error||'未知错误'); }
+  }catch(e){ status.textContent = '请求失败：'+e; }
+  btn.disabled = false;
+}
+
+function cleanBody(text){
+  return (text||'')
+    .replace(/^\s*\*\*[^\n]*?秒\s*[｜|][^\n]*?\*\*\s*$/gm, '')  // 时长标注行
+    .replace(/【缺真料：[^】]*】/g, '')                          // 缺料说明
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function _doCopy(text){
+  // 服务器是 http（非安全上下文），navigator.clipboard 可能不可用，用 execCommand 兜底
+  if(navigator.clipboard && window.isSecureContext){
+    return navigator.clipboard.writeText(text);
+  }
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.style.position='fixed'; ta.style.top='-1000px';
+  document.body.appendChild(ta); ta.focus(); ta.select();
+  let ok=false; try{ ok = document.execCommand('copy'); } catch(e){}
+  document.body.removeChild(ta);
+  return ok ? Promise.resolve() : Promise.reject('execCommand失败');
+}
+
+async function copyScript(){
+  const box = document.getElementById('script-box');
+  const status = document.getElementById('ai-status');
+  const clean = cleanBody(box.value);
+  status.style.display='block';
+  if(!clean){ status.textContent='脚本框是空的，没东西可复制。'; return; }
+  try{
+    await _doCopy(clean);
+    status.textContent = '已复制正文 ✓（'+clean.length+' 字，已去掉时长标注和缺料说明，可直接贴进提词器）';
+  }catch(e){
+    status.textContent = '复制失败，请手动选中脚本框复制。';
+  }
 }
 </script>
 {% endblock %}

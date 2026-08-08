@@ -1,4 +1,5 @@
 """自媒体模块的常量与状态机。全部为纯函数，无 DB / AI 依赖。"""
+import re
 
 STAGES = ["idea", "scripted", "recording", "editing", "ready", "published", "reviewed"]
 
@@ -55,6 +56,24 @@ AUTHORING_LABELS = {
     "drafted": "AI已出草稿",
     "finalized": "已定稿",
 }
+
+
+# 时长节奏标注行（**0-5秒｜开场谜题** 这种）+ 缺真料标记。保存/复制时剥掉，只留正文。
+_TIMING_LINE = re.compile(r'^\s*\*\*[^\n]*?秒\s*[｜|][^\n]*?\*\*\s*$', re.M)
+_GAP_MARK = re.compile(r'【缺真料：[^】]*】')
+
+
+def clean_body(text: str) -> str:
+    """剥掉时长节奏标注和缺真料说明，只留口播正文（人实际要念的话）。
+
+    编辑时保留标注帮看节奏/知道缺啥；复制和保存(定稿)时走这个只留正文。
+    """
+    if not text:
+        return ""
+    t = _TIMING_LINE.sub('', text)
+    t = _GAP_MARK.sub('', t)
+    t = re.sub(r'\n{3,}', '\n\n', t)   # 去掉剥完留下的多余空行
+    return t.strip()
 
 
 def finalize_updates(script: str) -> dict:

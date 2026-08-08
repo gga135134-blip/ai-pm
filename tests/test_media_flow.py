@@ -76,8 +76,43 @@ def test_is_published_covers_published_and_reviewed():
 # ─────────────── 二期 🅐：写稿前认知子流程 ───────────────
 
 from app.services.media_flow import (
-    AUTHORING_STAGES, AUTHORING_LABELS, finalize_updates,
+    AUTHORING_STAGES, AUTHORING_LABELS, finalize_updates, clean_body,
 )
+
+
+def test_clean_body_strips_timing_headers():
+    raw = ("**0-5秒｜开场谜题（直接抛）**\n\n你有没有花几十万买过AI？\n\n"
+           "**5-20秒｜戳幻想**\n\n以为AI是打印机。")
+    out = clean_body(raw)
+    assert "秒｜" not in out
+    assert "开场谜题" not in out
+    assert "你有没有花几十万买过AI？" in out
+    assert "以为AI是打印机。" in out
+
+
+def test_clean_body_strips_gap_markers():
+    raw = "我们踩过的坑就是这个。【缺真料：具体哪家客户】所以记住这话。"
+    out = clean_body(raw)
+    assert "缺真料" not in out
+    assert "我们踩过的坑就是这个。" in out
+    assert "所以记住这话。" in out
+
+
+def test_clean_body_collapses_blank_lines():
+    out = clean_body("**0-5秒｜开场**\n\n\n\n正文一\n\n\n正文二")
+    assert "\n\n\n" not in out
+    assert "正文一" in out and "正文二" in out
+
+
+def test_clean_body_keeps_bold_that_is_not_timing():
+    # 正文里的加粗强调（不含"秒｜"）不能被误删
+    out = clean_body("所以记住：**AI不是装出来的，是养出来的。**")
+    assert "AI不是装出来的" in out
+
+
+def test_clean_body_empty():
+    assert clean_body("") == ""
+    assert clean_body(None) == ""
 
 
 def test_authoring_stages_are_coarse_three():

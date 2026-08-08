@@ -16,7 +16,7 @@ from app.services.media_ai import (
     critique_draft, revise_draft,
     persona_interview_questions, persona_interview_extract,
 )
-from app.services.media_flow import finalize_updates
+from app.services.media_flow import finalize_updates, clean_body
 from app.services.ai_router import _load_config
 from app.config import BASE_DIR
 
@@ -545,6 +545,8 @@ async def content_detail(request: Request, cid: str):
 @router.post("/media/content/{cid}/script")
 async def content_save_script(cid: str, script: str = Form(""),
                               edit_note: str = Form(""), cover_idea: str = Form("")):
+    # 保存即定稿：只存口播正文，剥掉时长标注和缺料说明（用户要求 #3）
+    script = clean_body(script)
     db = await get_db()
     try:
         await db.execute(
@@ -606,11 +608,12 @@ async def metrics_screenshot(pubid: str, file: UploadFile = File(...)):
 
 
 @router.post("/media/content/{cid}/ai-script")
-async def content_ai_script(cid: str, mode: str = Form("full")):
+async def content_ai_script(cid: str, mode: str = Form("full"),
+                            hint: str = Form("")):
     db = await get_db()
     try:
         try:
-            result = await write_script(db, cid, mode=mode)
+            result = await write_script(db, cid, mode=mode, hint=hint)
         except Exception as e:
             log.exception("AI 写脚本失败")
             return JSONResponse({"ok": False, "error": str(e)})

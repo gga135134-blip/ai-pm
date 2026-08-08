@@ -434,8 +434,8 @@ async def persona_interview_extract(db, persona_id: str, module: str,
 
 
 async def write_script(db, content_id: str, mode: str = "full",
-                       model: str = "auto") -> dict:
-    """AI 写口播脚本。
+                       model: str = "auto", hint: str = "") -> dict:
+    """AI 写口播脚本。hint 非空=带要求重写（如"开头别铺垫，更狠"/"加个案例"）。
 
     mode="full"：注入完整预算内的人设资产（默认）
     mode="lean"：只注入人设身份行 —— 用于与 full 对比，判断注入是否真的有效
@@ -504,6 +504,8 @@ async def write_script(db, content_id: str, mode: str = "full",
         parts.append(f"【核心谜题】{content['puzzle']}")
     if content["idea_reason"]:
         parts.append(f"【为什么做这条】{content['idea_reason']}")
+    if hint and hint.strip():
+        parts.append(f"【本次重写要求（务必满足）】{hint.strip()}")
     parts.append("请写出这条内容的口播脚本。")
 
     prompt = "\n\n".join(parts)
