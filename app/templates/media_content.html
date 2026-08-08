@@ -349,7 +349,7 @@ async function aiCopy(accountId) {
     status.textContent = '请求失败：' + e;
   }
   btn.disabled = false;
-  btn.innerHTML = '{{ ic.icon("robot") }}生成文案';
+  btn.textContent = '生成文案';
 }
 
 async function uploadShot(pubId, input) {
@@ -392,12 +392,12 @@ async function aiReview() {
     } else {
       status.textContent = '失败：' + (d.error || '未知错误');
       btn.disabled = false;
-      btn.innerHTML = '{{ ic.icon("robot") }}AI 复盘';
+      btn.textContent = 'AI 复盘';
     }
   } catch (e) {
     status.textContent = '请求失败：' + e;
     btn.disabled = false;
-    btn.innerHTML = '{{ ic.icon("robot") }}AI 复盘';
+    btn.textContent = 'AI 复盘';
   }
 }
 
