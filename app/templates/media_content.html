@@ -144,9 +144,10 @@
       <div id="ai-status" class="ai-status-line"></div>
       <div id="supply-result" style="display:none; margin-top:8px"></div>
       <form method="post" action="/media/content/{{ content.id }}/script">
-        <textarea name="script" id="script-box" rows="12"
+        <textarea name="script" id="script-box" rows="22"
                   placeholder="点「AI 写脚本」生成，或直接手写"
-                  class="input w-full" style="font-family:var(--mono)">{{ content.script }}</textarea>
+                  class="input w-full"
+                  style="font-family:var(--mono); min-height:420px; line-height:1.7; resize:vertical">{{ content.script }}</textarea>
         <div class="field" style="margin-top:10px">
           <label class="label">剪辑要点</label>
           <input name="edit_note" value="{{ content.edit_note }}" class="input w-full">
