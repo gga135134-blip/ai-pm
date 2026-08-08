@@ -104,10 +104,31 @@ def test_clean_body_collapses_blank_lines():
     assert "正文一" in out and "正文二" in out
 
 
+def test_clean_body_strips_paren_and_bare_timing_forms():
+    # AI 有时用括号 （15-30秒｜…） 或裸行，不只加粗 —— 都要清
+    raw = ("真相是，AI这套东西。\n\n"
+           "（15-30秒｜拆解原因一：用不起来）\n\n"
+           "第一个坑，叫接口恐惧。\n\n"
+           "45-60秒｜记忆点+结论\n\n"
+           "所以记住这话。")
+    out = clean_body(raw)
+    assert "秒｜" not in out
+    assert "拆解原因" not in out and "记忆点+结论" not in out
+    assert "真相是，AI这套东西。" in out
+    assert "第一个坑，叫接口恐惧。" in out
+    assert "所以记住这话。" in out
+
+
 def test_clean_body_keeps_bold_that_is_not_timing():
     # 正文里的加粗强调（不含"秒｜"）不能被误删
     out = clean_body("所以记住：**AI不是装出来的，是养出来的。**")
     assert "AI不是装出来的" in out
+
+
+def test_clean_body_keeps_body_line_starting_with_number():
+    # 正文里以数字开头但不是时长标注的行不能被误删
+    out = clean_body("3个坑，我一个个说。")
+    assert "3个坑，我一个个说。" in out
 
 
 def test_clean_body_empty():

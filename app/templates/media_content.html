@@ -477,7 +477,8 @@ async function rewrite(){
 
 function cleanBody(text){
   return (text||'')
-    .replace(/^\s*\*\*[^\n]*?秒\s*[｜|][^\n]*?\*\*\s*$/gm, '')  // 时长标注行
+    // 时长标注行：加粗 **0-5秒｜…** / 括号 （15-30秒｜…） / 裸行，三种都清
+    .replace(/^\s*[（(]?\*{0,2}\s*[\d０-９][\d０-９\-–—~～到至.\s]*秒\s*[｜|][^\n]*$/gm, '')
     .replace(/【缺真料：[^】]*】/g, '')                          // 缺料说明
     .replace(/\n{3,}/g, '\n\n')
     .trim();
