@@ -652,6 +652,34 @@ async def content_evidence(cid: str, answers: str = Form("")):
     return JSONResponse(result)
 
 
+@router.post("/media/content/{cid}/evidence/{eid}/promote")
+async def evidence_promote(cid: str, eid: str, item: str = Form(...),
+                           material_type: str = Form("story"), brief: str = Form("")):
+    """把本条补的一条真料，人拍板存进原料库（media_material），供以后写别的稿复用。
+    回填 evidence.promoted_to_material_id，避免重复入库。spec §5.5 链路2 / 补料闭环 B。"""
+    valid = {"story", "pit", "judgment", "opinion", "data", "quote"}
+    mtype = material_type if material_type in valid else "story"
+    db = await get_db()
+    try:
+        cur = await db.execute("SELECT persona_id FROM media_content WHERE id=?", (cid,))
+        row = await cur.fetchone()
+        if not row:
+            return JSONResponse({"ok": False, "error": "内容不存在"})
+        pid = row["persona_id"]
+        mid = str(uuid.uuid4())
+        await db.execute(
+            "INSERT INTO media_material (id,persona_id,type,title,detail,brief) "
+            "VALUES (?,?,?,?,?,?)",
+            (mid, pid, mtype, item.strip()[:40], item.strip(),
+             (brief.strip() or item.strip())[:30]))
+        await db.execute(
+            "UPDATE media_evidence SET promoted_to_material_id=? WHERE id=?", (mid, eid))
+        await db.commit()
+    finally:
+        await db.close()
+    return JSONResponse({"ok": True, "material_id": mid})
+
+
 @router.post("/media/content/{cid}/angles")
 async def content_angles(cid: str):
     db = await get_db()

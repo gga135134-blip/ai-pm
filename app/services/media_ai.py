@@ -214,7 +214,13 @@ EVIDENCE_SYSTEM = """你是素材整理员。把创作者的口述回答，拆�
 1. 只整理创作者真说了的，不补充、不发挥、不编造。
 2. 每条标类型：experience经历 / case案例 / data数据 / opinion观点 / judgment判断。
 3. 一句话说不清的可拆成多条；空泛没信息量的丢掉。
-4. 只输出 JSON：{"items":[{"item":"素材内容","item_type":"experience"}]}"""
+4. 判断每条是否「可长期复用」：好故事/坑/判断/金句/硬数据 = 值得存进原料库、
+   以后写别的稿也能调用 → reusable=true；只对这条选题有意义的一次性琐碎细节
+   → reusable=false。宁缺毋滥，别把琐碎的标成可复用。
+5. reusable=true 的，给 material_type（story故事/pit坑/judgment判断/opinion观点/
+   data数据/quote金句）和 brief（≤20字复用摘要，当原料库索引用）。
+6. 只输出 JSON：{"items":[{"item":"素材内容","item_type":"experience",
+   "reusable":true,"material_type":"pit","brief":"≤20字摘要"}]}"""
 
 
 async def interview_questions(db, content_id: str, model: str = "auto") -> dict:
@@ -283,21 +289,28 @@ async def extract_evidence(db, content_id: str, answers: str,
     obj = extract_json(resp, expect="object")
     items = [it for it in (obj.get("items") or []) if isinstance(it, dict)]
     valid_types = {"experience", "case", "data", "opinion", "judgment"}
-    count = 0
+    valid_mtypes = {"story", "pit", "judgment", "opinion", "data", "quote"}
+    written = []
     for it in items:
         item_text = _txt(it.get("item"))
         if not item_text:
             continue
         itype = it.get("item_type") if it.get("item_type") in valid_types else "experience"
+        eid = str(uuid.uuid4())
         await db.execute(
             "INSERT INTO media_evidence "
             "(id,content_id,persona_id,item,item_type,source) "
             "VALUES (?,?,?,?,?, 'interview')",
-            (str(uuid.uuid4()), content_id, content["persona_id"], item_text, itype))
-        count += 1
+            (eid, content_id, content["persona_id"], item_text, itype))
+        mtype = it.get("material_type") if it.get("material_type") in valid_mtypes else "story"
+        # 前端据 reusable 显示「存入原料库」候选，人拍板才真入库（不自动）
+        written.append({"id": eid, "item": item_text, "item_type": itype,
+                        "reusable": bool(it.get("reusable")),
+                        "material_type": mtype, "brief": _txt(it.get("brief"))})
+    count = len(written)
     await db.commit()
     await log_injection(db, content_id, "extract_evidence", [], result.get("tokens", 0))
-    return {"ok": True, "count": count, "error": "",
+    return {"ok": True, "count": count, "items": written, "error": "",
             "cost": result.get("cost", 0), "model": result.get("model", "")}
 
 

@@ -127,12 +127,14 @@
 
   <!-- ===== 脚本 ===== -->
   <div class="module">
-    <div class="mh">
+    <div class="mh" style="flex-wrap:wrap; gap:6px">
       <span class="ttl" style="font-size:14px">口播脚本</span>
       <span class="sp"></span>
       <button onclick="aiScript('full')" id="btn-full" class="btn ai" style="padding:6px 12px; font-size:12px">{{ ic.icon('robot') }}AI 写脚本</button>
       <button onclick="rewrite()" id="btn-rewrite" class="btn ai" style="padding:6px 12px; font-size:12px"
               title="带要求重写：可要它加点/减点/换开头等">🔄 重写</button>
+      <button onclick="supplyMaterial()" id="btn-supply" class="btn ai" style="padding:6px 12px; font-size:12px"
+              title="AI 说缺真料时，点这个补：答几句真事，AI 用上，好料还能存进原料库">🎤 补料</button>
       <button onclick="copyScript()" id="btn-copy" class="btn" style="padding:6px 12px; font-size:12px"
               title="复制口播正文（自动去掉时长标注和缺料说明）">📋 复制</button>
       <button onclick="aiScript('lean')" id="btn-lean" class="btn" style="padding:6px 12px; font-size:12px"
@@ -140,6 +142,7 @@
     </div>
     <div class="inner">
       <div id="ai-status" class="ai-status-line"></div>
+      <div id="supply-result" style="display:none; margin-top:8px"></div>
       <form method="post" action="/media/content/{{ content.id }}/script">
         <textarea name="script" id="script-box" rows="12"
                   placeholder="点「AI 写脚本」生成，或直接手写"
@@ -509,6 +512,62 @@ async function copyScript(){
   }catch(e){
     status.textContent = '复制失败，请手动选中脚本框复制。';
   }
+}
+
+// ===== 补料闭环：AI说缺真料 → 你答 → 进本条素材 + 好料入原料库(人拍板) =====
+async function supplyMaterial(){
+  const status = document.getElementById('ai-status');
+  const btn = document.getElementById('btn-supply');
+  status.style.display='block'; status.textContent='AI 想想要问你啥…';
+  btn.disabled = true;
+  try{
+    const q = await _postJSON(`/media/content/${CID}/interview`);
+    if(!q.ok){ status.textContent='出题失败：'+(q.error||''); return; }
+    const ans = prompt('AI 想问你（把真事、数字一次答完；不知道的跳过）：\n\n'
+      + (q.questions||[]).map((x,i)=>`${i+1}. ${x}`).join('\n'));
+    if(ans===null || !ans.trim()){ status.textContent=''; return; }
+    status.textContent='AI 正在整理你补的料…';
+    const fd=new FormData(); fd.append('answers', ans);
+    const e=await _postJSON(`/media/content/${CID}/evidence`, fd);
+    if(!e.ok){ status.textContent='提炼失败：'+(e.error||''); return; }
+    renderSupply(e);
+  } finally { btn.disabled = false; }
+}
+
+function renderSupply(e){
+  const box=document.getElementById('supply-result');
+  const status=document.getElementById('ai-status');
+  status.textContent=`已补 ${e.count} 条真料。点上面「🔄 重写」让 AI 用上它们。`;
+  box.innerHTML=''; box.style.display='none';
+  const reusable=(e.items||[]).filter(x=>x.reusable);
+  if(!reusable.length) return;
+  box.style.display='block';
+  const hd=document.createElement('div');
+  hd.style.cssText='font-size:12.5px;color:var(--ai);margin-bottom:6px';
+  hd.textContent='💎 这些 AI 觉得值得长期存进原料库（以后写别的稿也能调用），你拍板：';
+  box.appendChild(hd);
+  reusable.forEach(x=>{
+    const row=document.createElement('div');
+    row.style.cssText='display:flex;gap:8px;align-items:flex-start;margin-bottom:6px;font-size:13px';
+    const b=document.createElement('button');
+    b.className='btn'; b.style.cssText='padding:3px 10px;font-size:11.5px;flex:0 0 auto';
+    b.textContent='存入原料库';
+    b.onclick=async ()=>{
+      b.disabled=true; b.textContent='存入中…';
+      const fd=new FormData();
+      fd.append('item', x.item);
+      fd.append('material_type', x.material_type||'story');
+      fd.append('brief', x.brief||'');
+      try{
+        const r=await fetch(`/media/content/${CID}/evidence/${x.id}/promote`,{method:'POST',body:fd});
+        if((await r.json()).ok){ b.textContent='已入库 ✓'; }
+        else { b.textContent='失败,重试'; b.disabled=false; }
+      }catch(err){ b.textContent='失败,重试'; b.disabled=false; }
+    };
+    const sp=document.createElement('span');
+    sp.textContent=`[${x.material_type||''}] ${x.item}`;
+    row.appendChild(b); row.appendChild(sp); box.appendChild(row);
+  });
 }
 </script>
 {% endblock %}

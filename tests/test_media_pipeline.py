@@ -85,6 +85,33 @@ def test_extract_evidence_writes_rows(monkeypatch):
     assert any("鞋厂" in r["item"] for r in rows)
 
 
+def test_extract_evidence_returns_reusable_candidates(monkeypatch):
+    # 补料闭环B：AI 标可复用的料，返回给前端当"存入原料库"候选（带 id/material_type/brief）
+    monkeypatch.setattr("app.services.media_ai.ask_ai",
+                        fake_ai(json.dumps({"items": [
+                            {"item": "帮鞋厂上客服AI三周上线", "item_type": "experience",
+                             "reusable": True, "material_type": "pit", "brief": "鞋厂客服AI三周上线"},
+                            {"item": "那天天气很热", "item_type": "experience",
+                             "reusable": False}]}, ensure_ascii=False)))
+
+    async def go():
+        db = await make_db()
+        await seed_content(db)
+        res = await extract_evidence(db, "C1", "答复")
+        await db.close()
+        return res
+
+    res = asyncio.run(go())
+    assert res["count"] == 2
+    items = res["items"]
+    assert len(items) == 2
+    reusable = [i for i in items if i["reusable"]]
+    assert len(reusable) == 1
+    assert reusable[0]["material_type"] == "pit"
+    assert reusable[0]["brief"] == "鞋厂客服AI三周上线"
+    assert reusable[0]["id"]  # 带 id，供前端 promote 回填
+
+
 # ---------- 角度候选（AI）----------
 
 from app.services.media_ai import propose_angles

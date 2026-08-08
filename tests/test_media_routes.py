@@ -42,6 +42,10 @@ def _seed_real():
     async def go():
         db = await get_db()
         try:
+            # 先清依赖行，避免外键约束挡住删除（测试间不互相污染）
+            for t in ("media_evidence", "media_angle", "media_draft_review"):
+                await db.execute(f"DELETE FROM {t} WHERE content_id='RT1'")
+            await db.execute("DELETE FROM media_material WHERE persona_id='RTP'")
             await db.execute("DELETE FROM media_content WHERE id='RT1'")
             await db.execute("DELETE FROM media_persona WHERE id='RTP'")
             await seed_content(db, persona_id="RTP", content_id="RT1")
@@ -99,6 +103,50 @@ def test_critique_endpoint(monkeypatch):
     _seed_real()
     r = _client().post("/media/content/RT1/critique")
     assert r.json()["verdict"] == "pass"
+
+
+def test_evidence_promote_writes_material_and_backfills():
+    """补料闭环B：人拍板把一条evidence存进原料库→写media_material+回填promoted_to_material_id。"""
+    _seed_real()
+
+    async def seed_ev():
+        db = await get_db()
+        try:
+            await db.execute("DELETE FROM media_evidence WHERE id='EVP1'")
+            await db.execute("INSERT INTO media_evidence "
+                "(id,content_id,persona_id,item,item_type) "
+                "VALUES ('EVP1','RT1','RTP','帮鞋厂上客服AI三周上线','experience')")
+            await db.commit()
+        finally:
+            await db.close()
+    asyncio.run(seed_ev())
+
+    client = TestClient(app)
+    signer = TimestampSigner(get_or_create_session_secret())
+    client.cookies.set("session", signer.sign(
+        base64.b64encode(json.dumps({"user": "test"}).encode())).decode())
+    r = client.post("/media/content/RT1/evidence/EVP1/promote",
+                    data={"item": "帮鞋厂上客服AI三周上线", "material_type": "pit",
+                          "brief": "鞋厂客服AI三周上线"})
+    assert r.status_code == 200 and r.json()["ok"] is True
+    mid = r.json()["material_id"]
+
+    async def check():
+        db = await get_db()
+        try:
+            cur = await db.execute(
+                "SELECT type,detail,brief FROM media_material WHERE id=?", (mid,))
+            mat = dict(await cur.fetchone())
+            cur = await db.execute(
+                "SELECT promoted_to_material_id FROM media_evidence WHERE id='EVP1'")
+            promoted = (await cur.fetchone())["promoted_to_material_id"]
+            return mat, promoted
+        finally:
+            await db.close()
+    mat, promoted = asyncio.run(check())
+    assert mat["type"] == "pit" and "鞋厂" in mat["detail"]
+    assert mat["brief"] == "鞋厂客服AI三周上线"
+    assert promoted == mid  # 回填了，避免重复入库
 
 
 def test_content_detail_renders_authoring_area():
