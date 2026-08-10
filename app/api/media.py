@@ -116,6 +116,12 @@ async def persona_detail(request: Request, pid: str):
         cur = await db.execute(
             "SELECT * FROM media_account WHERE persona_id=? ORDER BY created_at", (pid,))
         accounts = [dict(r) for r in await cur.fetchall()]
+
+        cur = await db.execute(
+            "SELECT COUNT(*) AS n FROM media_content WHERE persona_id=? "
+            "AND authoring_stage='finalized' AND ai_draft != '' "
+            "AND script != '' AND script != ai_draft", (pid,))
+        learnable_count = (await cur.fetchone())["n"]
     finally:
         await db.close()
 
@@ -131,7 +137,8 @@ async def persona_detail(request: Request, pid: str):
                 {"persona": persona, "traits_by_dim": traits_by_dim,
                  "accounts": accounts, "dimensions": TRAIT_DIMENSIONS,
                  "platforms": PLATFORMS, "archived": archived,
-                 "done_count": len(done_modules), "module_total": len(PERSONA_MODULE_ORDER)})
+                 "done_count": len(done_modules), "module_total": len(PERSONA_MODULE_ORDER),
+                 "learnable_count": learnable_count})
 
 
 @router.post("/media/persona/{pid}/trait")

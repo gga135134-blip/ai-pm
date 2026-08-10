@@ -455,3 +455,29 @@ def test_learn_edits_route_returns_candidates(monkeypatch):
     body = r.json()
     assert body["ok"] is True and body["pair_count"] == 3
     assert body["traits"][0]["dimension"] == "tone"
+
+
+def test_persona_page_shows_learn_edit_block_with_count():
+    """人设页渲染学改稿块，显示可学定稿数。"""
+    _seed_persona_real()
+
+    async def seed_finalized():
+        db = await get_db()
+        try:
+            await db.execute("DELETE FROM media_content WHERE persona_id='RTP2'")
+            # 2 条有改动的定稿 + 1 条无改动（不计入）
+            await db.execute(
+                "INSERT INTO media_content (id,persona_id,title,authoring_stage,"
+                "ai_draft,script,finalized_at) VALUES "
+                "('LC1','RTP2','t1','finalized','AI草稿一','定稿一',CURRENT_TIMESTAMP),"
+                "('LC2','RTP2','t2','finalized','AI草稿二','定稿二',CURRENT_TIMESTAMP),"
+                "('LC3','RTP2','t3','finalized','一样的','一样的',CURRENT_TIMESTAMP)")
+            await db.commit()
+        finally:
+            await db.close()
+    asyncio.run(seed_finalized())
+
+    r = _client().get("/media/persona/RTP2")
+    assert r.status_code == 200
+    assert "AI 学我改稿" in r.text
+    assert "2 条" in r.text          # learnable_count=2（LC3 无改动排除）
