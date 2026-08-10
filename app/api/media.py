@@ -15,7 +15,7 @@ from app.services.media_ai import (
     interview_questions, extract_evidence, propose_angles,
     critique_draft, revise_draft,
     persona_interview_questions, persona_interview_extract,
-    learn_edit_style,
+    learn_edit_style, draft_audience_segments, draft_anchors,
 )
 from app.services.media_flow import finalize_updates, clean_body
 from app.services.ai_router import _load_config
@@ -370,6 +370,110 @@ async def material_archive(mid: str):
     finally:
         await db.close()
     return RedirectResponse("/media/materials", status_code=302)
+
+
+# ─────────────── 受众画像（资产层🅑 media_audience）───────────────
+
+@router.get("/media/audience", response_class=HTMLResponse)
+async def audience_home(request: Request):
+    """受众画像查看页：segment 卡片，按付费意愿降序（值钱的靠前）。"""
+    db = await get_db()
+    try:
+        pid = await _first_persona_id(db)
+        persona = None
+        segments = []
+        if pid:
+            cur = await db.execute("SELECT * FROM media_persona WHERE id=?", (pid,))
+            row = await cur.fetchone()
+            persona = dict(row) if row else None
+            cur = await db.execute(
+                "SELECT * FROM media_audience WHERE persona_id=? AND status='active' "
+                "ORDER BY pay_willingness DESC, confidence DESC, created_at DESC", (pid,))
+            segments = [dict(r) for r in await cur.fetchall()]
+    finally:
+        await db.close()
+    return _tpl(request, "media_audience.html",
+                {"persona": persona, "segments": segments, "total": len(segments)})
+
+
+@router.post("/media/audience")
+async def audience_create(persona_id: str = Form(...), segment: str = Form(...),
+                          who: str = Form(""), anxiety: str = Form(""),
+                          desire: str = Form(""), objection: str = Form(""),
+                          language: str = Form(""), pay_willingness: int = Form(3),
+                          pay_scene: str = Form(""), pay_ceiling: str = Form(""),
+                          evidence: str = Form("")):
+    """手动新增一条 segment（source='manual'）。"""
+    if not segment.strip():
+        return RedirectResponse("/media/audience", status_code=302)
+    pw = pay_willingness if 1 <= pay_willingness <= 5 else 3
+    db = await get_db()
+    try:
+        await db.execute(
+            "INSERT INTO media_audience (id,persona_id,segment,who,anxiety,desire,"
+            "objection,language,pay_willingness,pay_scene,pay_ceiling,evidence,source) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?, 'manual')",
+            (str(uuid.uuid4()), persona_id, segment.strip(), who.strip(), anxiety.strip(),
+             desire.strip(), objection.strip(), language.strip(), pw,
+             pay_scene.strip(), pay_ceiling.strip(), evidence.strip()))
+        await db.commit()
+    finally:
+        await db.close()
+    return RedirectResponse("/media/audience", status_code=302)
+
+
+@router.post("/media/audience/draft")
+async def audience_draft(answers: str = Form("")):
+    """AI 起草受众画像候选（不写库）。"""
+    db = await get_db()
+    try:
+        pid = await _first_persona_id(db)
+        if not pid:
+            return JSONResponse({"ok": False, "error": "先建人设", "segments": []})
+        try:
+            result = await draft_audience_segments(db, pid, answers)
+        except Exception as e:
+            log.exception("受众起草失败")
+            return JSONResponse({"ok": False, "error": str(e), "segments": []})
+    finally:
+        await db.close()
+    return JSONResponse(result)
+
+
+@router.post("/media/audience/adopt")
+async def audience_adopt(persona_id: str = Form(...), segment: str = Form(...),
+                         who: str = Form(""), anxiety: str = Form(""),
+                         desire: str = Form(""), objection: str = Form(""),
+                         language: str = Form(""), pay_willingness: int = Form(3),
+                         pay_scene: str = Form(""), pay_ceiling: str = Form(""),
+                         evidence: str = Form(""), confidence: int = Form(3)):
+    """人拍板：把一条候选 segment 写库（source='interview'）。"""
+    pw = pay_willingness if 1 <= pay_willingness <= 5 else 3
+    cf = confidence if 1 <= confidence <= 5 else 3
+    db = await get_db()
+    try:
+        await db.execute(
+            "INSERT INTO media_audience (id,persona_id,segment,who,anxiety,desire,"
+            "objection,language,pay_willingness,pay_scene,pay_ceiling,evidence,"
+            "confidence,source) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?, 'interview')",
+            (str(uuid.uuid4()), persona_id, segment.strip(), who.strip(), anxiety.strip(),
+             desire.strip(), objection.strip(), language.strip(), pw,
+             pay_scene.strip(), pay_ceiling.strip(), evidence.strip(), cf))
+        await db.commit()
+    finally:
+        await db.close()
+    return JSONResponse({"ok": True})
+
+
+@router.post("/media/audience/{aid}/archive")
+async def audience_archive(aid: str):
+    db = await get_db()
+    try:
+        await db.execute("UPDATE media_audience SET status='archived' WHERE id=?", (aid,))
+        await db.commit()
+    finally:
+        await db.close()
+    return RedirectResponse("/media/audience", status_code=302)
 
 
 # ─────────────── 话题库 ───────────────

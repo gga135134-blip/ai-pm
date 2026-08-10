@@ -198,6 +198,9 @@ def _seed_persona_real(pid="RTP2", phase="AI落地期"):
         db = await get_db()
         try:
             await db.execute("DELETE FROM media_material WHERE persona_id=?", (pid,))
+            await db.execute("DELETE FROM media_audience WHERE persona_id=?", (pid,))
+            await db.execute("DELETE FROM media_anchor WHERE persona_id=?", (pid,))
+            await db.execute("DELETE FROM media_content WHERE persona_id=?", (pid,))
             await db.execute("DELETE FROM media_persona_trait WHERE persona_id=?", (pid,))
             await db.execute("DELETE FROM media_persona WHERE id=?", (pid,))
             await db.execute(
@@ -310,6 +313,9 @@ def _only_active_persona(pid="RTP2", phase="AI落地期"):
         try:
             await db.execute("UPDATE media_persona SET status='archived'")
             await db.execute("DELETE FROM media_material WHERE persona_id=?", (pid,))
+            await db.execute("DELETE FROM media_audience WHERE persona_id=?", (pid,))
+            await db.execute("DELETE FROM media_anchor WHERE persona_id=?", (pid,))
+            await db.execute("DELETE FROM media_content WHERE persona_id=?", (pid,))
             await db.execute("DELETE FROM media_persona WHERE id=?", (pid,))
             await db.execute(
                 "INSERT INTO media_persona (id,name,one_liner,current_phase,status) "
@@ -481,3 +487,77 @@ def test_persona_page_shows_learn_edit_block_with_count():
     assert r.status_code == 200
     assert "AI 学我改稿" in r.text
     assert "2 条" in r.text          # learnable_count=2（LC3 无改动排除）
+
+
+# ─────────────── 受众画像 ───────────────
+
+def _audience_rows(pid):
+    async def go():
+        db = await get_db()
+        try:
+            cur = await db.execute(
+                "SELECT * FROM media_audience WHERE persona_id=? ORDER BY created_at", (pid,))
+            return [dict(r) for r in await cur.fetchall()]
+        finally:
+            await db.close()
+    return asyncio.run(go())
+
+
+def test_audience_manual_create():
+    _seed_persona_real()
+    r = _client().post("/media/audience", data={
+        "persona_id": "RTP2", "segment": "焦虑的中小老板", "who": "35-50传统行业",
+        "anxiety": "怕被AI淘汰", "language": "这玩意能落地不", "pay_willingness": "4"},
+        follow_redirects=False)
+    assert r.status_code == 302
+    rows = [x for x in _audience_rows("RTP2") if x["segment"] == "焦虑的中小老板"]
+    assert len(rows) == 1
+    assert rows[0]["source"] == "manual" and rows[0]["pay_willingness"] == 4
+    assert rows[0]["language"] == "这玩意能落地不"
+
+
+def test_audience_draft_route(monkeypatch):
+    async def fake(db, pid, answers, model="auto"):
+        return {"ok": True, "segments": [{"segment": "S1", "who": "w", "anxiety": "a",
+                "desire": "d", "objection": "o", "language": "原话", "pay_willingness": 4,
+                "pay_scene": "ps", "pay_ceiling": "pc", "evidence": "e", "confidence": 3}],
+                "error": "", "cost": 0, "model": "m"}
+    monkeypatch.setattr("app.api.media.draft_audience_segments", fake)
+    _seed_persona_real()
+    r = _client().post("/media/audience/draft", data={"answers": "我的粉丝是老板"})
+    assert r.status_code == 200
+    assert r.json()["segments"][0]["language"] == "原话"
+
+
+def test_audience_adopt_writes_row():
+    _seed_persona_real()
+    r = _client().post("/media/audience/adopt", data={
+        "persona_id": "RTP2", "segment": "S2", "who": "w", "anxiety": "a",
+        "language": "原话2", "pay_willingness": "5", "confidence": "4"})
+    assert r.status_code == 200 and r.json()["ok"] is True
+    rows = [x for x in _audience_rows("RTP2") if x["segment"] == "S2"]
+    assert rows[0]["source"] == "interview" and rows[0]["pay_willingness"] == 5
+
+
+def test_audience_archive_and_page():
+    _only_active_persona()
+
+    async def seed():
+        db = await get_db()
+        try:
+            await db.execute("DELETE FROM media_audience WHERE persona_id='RTP2'")
+            await db.execute("INSERT INTO media_audience "
+                "(id,persona_id,segment,pay_willingness,status) VALUES "
+                "('AUD1','RTP2','高付费段',5,'active'),"
+                "('AUD2','RTP2','低付费段',2,'active')")
+            await db.commit()
+        finally:
+            await db.close()
+    asyncio.run(seed())
+
+    r = _client().post("/media/audience/AUD2/archive", follow_redirects=False)
+    assert r.status_code == 302
+
+    html = _client().get("/media/audience").text
+    assert "高付费段" in html            # active 显示
+    assert "低付费段" not in html         # archived 不显示
