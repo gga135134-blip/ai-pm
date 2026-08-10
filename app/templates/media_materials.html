@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% import "_icons.html" as ic %}
+{% block title %}原料库{% endblock %}
+{% block topbar %}
+<span class="crumb"><a href="/media" style="color:inherit;text-decoration:none">自媒体</a> {{ ic.icon('chevron') }} <b>原料库</b></span>
+{% endblock %}
+{% block content %}
+<style>
+  .mat-row{ padding:11px 0; border-bottom:1px solid var(--border); }
+  .mat-row:last-child{ border-bottom:0; }
+  .mat-head{ display:flex; align-items:flex-start; gap:10px; }
+  .mat-title{ flex:1; font-size:13.5px; color:var(--ink-1); line-height:1.5; }
+  .mat-brief{ font-size:11.5px; color:var(--ai); margin-top:4px; }
+  .mat-meta{ font-size:11.5px; color:var(--ink-3); margin-top:4px; display:flex; flex-wrap:wrap; gap:10px; }
+  .mat-detail{ font-size:12.5px; color:var(--ink-2); margin-top:6px; white-space:pre-wrap; line-height:1.6;
+               background:var(--panel-2); border-radius:6px; padding:8px 10px; }
+  .use-badge{ font-size:11px; white-space:nowrap; color:var(--ink-3); }
+  .use-badge.tired{ color:var(--warn); font-weight:600; }
+  .mat-row.tired .mat-title{ color:var(--ink-3); }
+  .src-tag{ font-size:11px; padding:1px 7px; border-radius:10px; background:var(--panel-2); color:var(--ink-3); }
+</style>
+
+{% if not persona %}
+<div class="module" style="max-width:460px; margin:0 auto">
+  <div class="mh"><span class="ttl">还没有人设</span></div>
+  <div class="inner">
+    <p style="font-size:13px; color:var(--ink-3); margin-bottom:14px">原料库挂在人设下。先去建一个人设，写内容时补的真料就会攒进这里。</p>
+    <a href="/media/persona" class="btn primary">去建人设</a>
+  </div>
+</div>
+{% else %}
+
+<div style="margin-bottom:18px">
+  <div class="pname" style="margin-bottom:8px">原料库</div>
+  <div style="display:flex; align-items:center; flex-wrap:wrap; gap:10px">
+    <span style="font-size:13px; color:var(--ink-2)">{{ persona.name }} · 跨内容复用的真故事/坑/判断</span>
+    <span class="pill run">{{ total }} 条</span>
+    <span class="sp"></span>
+    <a href="/media/persona/{{ persona.id }}" class="btn" style="padding:6px 12px; font-size:12.5px">{{ ic.icon('folder') }}人设档案</a>
+    <a href="/media" class="btn" style="padding:6px 12px; font-size:12.5px">← 看板</a>
+  </div>
+</div>
+
+<div class="module">
+  <div class="mh">
+    <span class="ttl">原料</span>
+    <span class="sp"></span>
+    <span class="sub">写脚本时 AI 按相关度自动调用，用旧的自动降权</span>
+  </div>
+  <div class="inner">
+    {% if not materials_by_type %}
+    <div class="empty">原料库还空着。写内容时 AI 标"缺真料"→你补上→好料点"存入原料库"，就会攒到这里；也可以下面「随手记」直接存一条。</div>
+    {% endif %}
+
+    {% for t, label in types.items() %}
+      {% if materials_by_type.get(t) %}
+      <div style="margin-bottom:16px">
+        <div style="font-size:11.5px; font-weight:600; color:var(--ink-3); margin-bottom:6px">
+          {{ label }} · {{ materials_by_type[t]|length }}
+        </div>
+        {% for m in materials_by_type[t] %}
+        <div class="mat-row {% if m.use_count >= fatigue %}tired{% endif %}">
+          <div class="mat-head">
+            <div class="mat-title">{{ m.title or m.brief or m.detail[:40] }}</div>
+            <span class="use-badge {% if m.use_count >= fatigue %}tired{% endif %}"
+                  title="被内容引用的次数">用过 {{ m.use_count }} 次{% if m.use_count >= fatigue %} · 该换新料了{% endif %}</span>
+            <form method="post" action="/media/material/{{ m.id }}/archive"
+                  onsubmit="return confirm('归档这条原料？以后写稿不再调用它。')">
+              <button class="iconbtn danger" title="归档">{{ ic.icon('trash') }}</button>
+            </form>
+          </div>
+          {% if m.brief and m.brief != m.title %}<div class="mat-brief">注入用：{{ m.brief }}</div>{% endif %}
+          {% if m.detail and m.detail != m.title %}
+          <details style="margin-top:4px">
+            <summary style="font-size:11.5px; color:var(--accent); cursor:pointer; list-style:none">展开完整原料</summary>
+            <div class="mat-detail">{{ m.detail }}</div>
+          </details>
+          {% endif %}
+          <div class="mat-meta">
+            {% if m.emotion %}<span>情绪：{{ m.emotion }}</span>{% endif %}
+            {% if m.usable_scene %}<span>适用：{{ m.usable_scene }}</span>{% endif %}
+            <span class="src-tag">{{ m.source or '补料' }}</span>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    {% endfor %}
+
+    {% if materials_by_type.get('_other') %}
+      <div style="margin-bottom:16px">
+        <div style="font-size:11.5px; font-weight:600; color:var(--ink-3); margin-bottom:6px">其它</div>
+        {% for m in materials_by_type['_other'] %}
+        <div class="mat-row">
+          <div class="mat-head">
+            <div class="mat-title">{{ m.title or m.brief or m.detail[:40] }}</div>
+            <span class="use-badge">用过 {{ m.use_count }} 次</span>
+            <form method="post" action="/media/material/{{ m.id }}/archive"
+                  onsubmit="return confirm('归档这条原料？')">
+              <button class="iconbtn danger" title="归档">{{ ic.icon('trash') }}</button>
+            </form>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+<details class="module" style="margin-top:12px">
+  <summary class="mh" style="cursor:pointer; list-style:none"><span class="ttl" style="font-size:14px">+ 随手记一条</span>
+    <span class="sub" style="margin-left:8px">想到个好故事/坑就先存下，写稿时 AI 会自己调</span></summary>
+  <div class="inner">
+    <form method="post" action="/media/materials" class="space-y-2">
+      <input type="hidden" name="persona_id" value="{{ persona.id }}">
+      <select name="type" class="input w-full">
+        {% for t, label in types.items() %}
+        <option value="{{ t }}">{{ label }}</option>
+        {% endfor %}
+      </select>
+      <textarea name="detail" required rows="3" placeholder="完整原料：时间/地点/细节/情绪，越具体越能写出真实感" class="input w-full" style="margin-top:8px"></textarea>
+      <input name="brief" maxlength="30" placeholder="一句话摘要（≤30字，留空自动截断）" class="input w-full" style="margin-top:8px">
+      <input name="usable_scene" placeholder="什么选题能用上它（可留空）" class="input w-full" style="margin-top:8px">
+      <input name="emotion" placeholder="情绪底色：懊悔/庆幸/愤怒/释然（可留空）" class="input w-full" style="margin-top:8px">
+      <button class="btn primary" style="margin-top:10px">存入原料库</button>
+    </form>
+  </div>
+</details>
+{% endif %}
+{% endblock %}

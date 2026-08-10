@@ -197,6 +197,7 @@ def _seed_persona_real(pid="RTP2", phase="AI落地期"):
     async def go():
         db = await get_db()
         try:
+            await db.execute("DELETE FROM media_material WHERE persona_id=?", (pid,))
             await db.execute("DELETE FROM media_persona_trait WHERE persona_id=?", (pid,))
             await db.execute("DELETE FROM media_persona WHERE id=?", (pid,))
             await db.execute(
@@ -297,3 +298,118 @@ def test_persona_interview_page_renders_seven_modules():
     assert r.status_code == 200
     assert "你是谁·定位" in r.text
     assert "生意锚点" in r.text        # 第 7 模块 anchor 在页面上
+
+
+# ─────────────── 原料库 ───────────────
+
+def _only_active_persona(pid="RTP2", phase="AI落地期"):
+    """页面用 _first_persona_id 取第一个 active 人设。先把其它人设归档，
+    保证 pid 是页面会命中的那个（消除测试间人设互相干扰）。"""
+    async def go():
+        db = await get_db()
+        try:
+            await db.execute("UPDATE media_persona SET status='archived'")
+            await db.execute("DELETE FROM media_material WHERE persona_id=?", (pid,))
+            await db.execute("DELETE FROM media_persona WHERE id=?", (pid,))
+            await db.execute(
+                "INSERT INTO media_persona (id,name,one_liner,current_phase,status) "
+                "VALUES (?,?,?,?, 'active')", (pid, "嘉姐", "务实落地AI", phase))
+            await db.commit()
+        finally:
+            await db.close()
+    asyncio.run(go())
+
+
+def _seed_material(pid, mid, mtype="story", detail="帮鞋厂三周上线客服AI",
+                   brief="鞋厂客服AI三周", use_count=0, source="补料"):
+    async def go():
+        db = await get_db()
+        try:
+            await db.execute("DELETE FROM media_material WHERE id=?", (mid,))
+            await db.execute(
+                "INSERT INTO media_material "
+                "(id,persona_id,type,title,detail,brief,use_count,source) "
+                "VALUES (?,?,?,?,?,?,?,?)",
+                (mid, pid, mtype, detail[:40], detail, brief, use_count, source))
+            await db.commit()
+        finally:
+            await db.close()
+    asyncio.run(go())
+
+
+def _material_row(mid):
+    async def go():
+        db = await get_db()
+        try:
+            cur = await db.execute("SELECT * FROM media_material WHERE id=?", (mid,))
+            row = await cur.fetchone()
+            return dict(row) if row else None
+        finally:
+            await db.close()
+    return asyncio.run(go())
+
+
+def test_materials_page_groups_by_type_and_shows_fatigue():
+    _only_active_persona()
+    _seed_material("RTP2", "MAT1", mtype="pit",
+                   detail="帮鞋厂三周上线客服AI但没算准并发", brief="鞋厂客服AI三周", use_count=0)
+    _seed_material("RTP2", "MAT2", mtype="quote",
+                   detail="自己试过才算数", brief="自己试过才算数", use_count=5)  # 用旧了
+    r = _client().get("/media/materials")
+    assert r.status_code == 200
+    html = r.text
+    assert "原料库" in html
+    assert "踩过的坑" in html and "金句" in html    # 类型中文标签分组
+    assert "鞋厂客服AI三周" in html                  # brief 渲染
+    assert "用过 5 次" in html                        # use_count 渲染
+    assert "该换新料了" in html                       # 疲劳提示（use_count≥阈值3）
+
+
+def test_material_manual_create_writes_row():
+    _seed_persona_real()
+    r = _client().post("/media/materials", data={
+        "persona_id": "RTP2", "type": "judgment",
+        "detail": "小公司别自己训模型，调 API 更划算",
+        "brief": "小公司调API别自训", "usable_scene": "劝退自训模型",
+        "emotion": "笃定"}, follow_redirects=False)
+    assert r.status_code == 302
+
+    async def find():
+        db = await get_db()
+        try:
+            cur = await db.execute(
+                "SELECT * FROM media_material WHERE persona_id='RTP2' AND type='judgment'")
+            return dict(await cur.fetchone())
+        finally:
+            await db.close()
+    row = asyncio.run(find())
+    assert row["source"] == "随手记"
+    assert "调 API" in row["detail"] and row["brief"] == "小公司调API别自训"
+    assert row["status"] == "active"
+
+
+def test_material_archive_soft_deletes():
+    _seed_persona_real()
+    _seed_material("RTP2", "MATA", use_count=0)
+    r = _client().post("/media/material/MATA/archive", follow_redirects=False)
+    assert r.status_code == 302
+    assert _material_row("MATA")["status"] == "archived"
+
+
+def test_archived_material_not_shown_on_page():
+    _only_active_persona()
+    _seed_material("RTP2", "MATH", detail="只出现在列表的活跃料", brief="活跃料唯一标记")
+    _seed_material("RTP2", "MATG", detail="已归档不该出现", brief="归档料唯一标记")
+    asyncio.run(_archive("MATG"))
+    html = _client().get("/media/materials").text
+    assert "活跃料唯一标记" in html
+    assert "归档料唯一标记" not in html
+
+
+async def _archive(mid):
+    db = await get_db()
+    try:
+        await db.execute("UPDATE media_material SET status='archived' WHERE id=?", (mid,))
+        await db.commit()
+    finally:
+        await db.close()

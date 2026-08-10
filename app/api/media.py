@@ -35,6 +35,18 @@ TRAIT_DIMENSIONS = {
     "anchor": "生意锚点",
 }
 
+# 原料库素材类型（对应 spec §3.3 media_material.type）
+MATERIAL_TYPES = {
+    "story": "故事",
+    "pit": "踩过的坑",
+    "judgment": "判断",
+    "opinion": "观点",
+    "data": "数据素材",
+    "quote": "金句",
+}
+# use_count 到这个数就提示"用旧了"（受众会听腻，逼着补新料）。阈值待实测调，见 spec §8.4。
+MATERIAL_FATIGUE = 3
+
 
 def _tpl(request, name, ctx):
     ctx["request"] = request
@@ -257,6 +269,81 @@ async def account_create(pid: str, platform: str = Form(...),
     finally:
         await db.close()
     return RedirectResponse(f"/media/persona/{pid}", status_code=302)
+
+
+# ─────────────── 原料库（资产层 media_material）───────────────
+
+@router.get("/media/materials", response_class=HTMLResponse)
+async def materials_home(request: Request):
+    """原料库查看页：补料闭环沉淀下来的真料"档案柜"。按 type 分组，显示
+    brief / use_count / 来源，用旧的（use_count≥阈值）标灰提示补新料。spec §3.3。"""
+    db = await get_db()
+    try:
+        pid = await _first_persona_id(db)
+        persona = None
+        materials = []
+        if pid:
+            cur = await db.execute("SELECT * FROM media_persona WHERE id=?", (pid,))
+            row = await cur.fetchone()
+            persona = dict(row) if row else None
+            cur = await db.execute(
+                "SELECT * FROM media_material WHERE persona_id=? AND status='active' "
+                "ORDER BY use_count ASC, created_at DESC", (pid,))
+            materials = [dict(r) for r in await cur.fetchall()]
+    finally:
+        await db.close()
+
+    # 按类型分组，已知类型按 MATERIAL_TYPES 顺序，未知类型兜底进最后
+    by_type = {}
+    for t in MATERIAL_TYPES:
+        hit = [m for m in materials if m["type"] == t]
+        if hit:
+            by_type[t] = hit
+    other = [m for m in materials if m["type"] not in MATERIAL_TYPES]
+    if other:
+        by_type["_other"] = other
+
+    return _tpl(request, "media_materials.html", {
+        "persona": persona, "materials_by_type": by_type,
+        "types": MATERIAL_TYPES, "total": len(materials),
+        "fatigue": MATERIAL_FATIGUE})
+
+
+@router.post("/media/materials")
+async def material_create(persona_id: str = Form(...), type: str = Form("story"),
+                          detail: str = Form(...), brief: str = Form(""),
+                          usable_scene: str = Form(""), emotion: str = Form("")):
+    """随手记：一句话直接存进原料库（spec §3.3 入库路径①）。"""
+    mtype = type if type in MATERIAL_TYPES else "story"
+    detail = detail.strip()
+    if not detail:
+        return RedirectResponse("/media/materials", status_code=302)
+    db = await get_db()
+    try:
+        await db.execute(
+            "INSERT INTO media_material "
+            "(id,persona_id,type,title,detail,brief,emotion,usable_scene,source) "
+            "VALUES (?,?,?,?,?,?,?,?,?)",
+            (str(uuid.uuid4()), persona_id, mtype, detail[:40], detail,
+             (brief.strip() or detail)[:30], emotion.strip(),
+             usable_scene.strip(), "随手记"))
+        await db.commit()
+    finally:
+        await db.close()
+    return RedirectResponse("/media/materials", status_code=302)
+
+
+@router.post("/media/material/{mid}/archive")
+async def material_archive(mid: str):
+    """归档一条原料（软删，保留演化史，不再注入 AI）。"""
+    db = await get_db()
+    try:
+        await db.execute(
+            "UPDATE media_material SET status='archived' WHERE id=?", (mid,))
+        await db.commit()
+    finally:
+        await db.close()
+    return RedirectResponse("/media/materials", status_code=302)
 
 
 # ─────────────── 话题库 ───────────────
@@ -668,10 +755,10 @@ async def evidence_promote(cid: str, eid: str, item: str = Form(...),
         pid = row["persona_id"]
         mid = str(uuid.uuid4())
         await db.execute(
-            "INSERT INTO media_material (id,persona_id,type,title,detail,brief) "
-            "VALUES (?,?,?,?,?,?)",
+            "INSERT INTO media_material (id,persona_id,type,title,detail,brief,source) "
+            "VALUES (?,?,?,?,?,?,?)",
             (mid, pid, mtype, item.strip()[:40], item.strip(),
-             (brief.strip() or item.strip())[:30]))
+             (brief.strip() or item.strip())[:30], "补料"))
         await db.execute(
             "UPDATE media_evidence SET promoted_to_material_id=? WHERE id=?", (mid, eid))
         await db.commit()

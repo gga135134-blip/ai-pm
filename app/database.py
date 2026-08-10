@@ -441,6 +441,7 @@ MIGRATIONS = [
     "ALTER TABLE media_content ADD COLUMN ai_draft TEXT DEFAULT ''",
     "ALTER TABLE media_content ADD COLUMN revision_count INTEGER DEFAULT 0",
     "ALTER TABLE media_content ADD COLUMN finalized_at DATETIME",
+    "ALTER TABLE media_material ADD COLUMN source TEXT DEFAULT ''",
 ]
 
 
