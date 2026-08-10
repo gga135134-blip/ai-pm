@@ -413,3 +413,71 @@ async def _archive(mid):
         await db.commit()
     finally:
         await db.close()
+
+
+# ─────────────── 功能B：AI 学改稿 ───────────────
+
+def test_adopt_accepts_learned_edit_source():
+    """adopt 加 source 参数：功能B 传 learned_edit，写进 trait.source。"""
+    _seed_persona_real()
+    r = _client().post("/media/persona/RTP2/interview/adopt", data={
+        "dimension": "tone", "content": "开头不铺垫直接抛结论",
+        "brief": "开头直接抛结论", "confidence": "4",
+        "evidence": "把'首先我们要明确'删成'落地。'", "phase_tag": "",
+        "source": "learned_edit"})
+    assert r.status_code == 200 and r.json()["ok"] is True
+    rows = _count_traits("RTP2", dimension="tone")
+    assert len(rows) == 1
+    assert rows[0]["source"] == "learned_edit"
+
+
+def test_adopt_source_defaults_to_interview():
+    """不传 source 时仍写 interview —— 保护现有访谈流程向后兼容。"""
+    _seed_persona_real()
+    r = _client().post("/media/persona/RTP2/interview/adopt", data={
+        "dimension": "signature", "content": "招牌收尾'说白了'",
+        "brief": "说白了", "confidence": "5", "evidence": "", "phase_tag": ""})
+    assert r.status_code == 200 and r.json()["ok"] is True
+    rows = _count_traits("RTP2", dimension="signature")
+    assert rows[0]["source"] == "interview"
+
+
+def test_learn_edits_route_returns_candidates(monkeypatch):
+    async def fake(db, persona_id, model="auto"):
+        return {"ok": True, "traits": [{"dimension": "tone",
+                "content": "长句拆短", "brief": "长句拆短", "evidence": "例子",
+                "confidence": 4, "phase_tag": ""}],
+                "pair_count": 3, "error": "", "cost": 0, "model": "x"}
+    monkeypatch.setattr("app.api.media.learn_edit_style", fake)
+    _seed_persona_real()
+    r = _client().post("/media/persona/RTP2/learn-edits")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is True and body["pair_count"] == 3
+    assert body["traits"][0]["dimension"] == "tone"
+
+
+def test_persona_page_shows_learn_edit_block_with_count():
+    """人设页渲染学改稿块，显示可学定稿数。"""
+    _seed_persona_real()
+
+    async def seed_finalized():
+        db = await get_db()
+        try:
+            await db.execute("DELETE FROM media_content WHERE persona_id='RTP2'")
+            # 2 条有改动的定稿 + 1 条无改动（不计入）
+            await db.execute(
+                "INSERT INTO media_content (id,persona_id,title,authoring_stage,"
+                "ai_draft,script,finalized_at) VALUES "
+                "('LC1','RTP2','t1','finalized','AI草稿一','定稿一',CURRENT_TIMESTAMP),"
+                "('LC2','RTP2','t2','finalized','AI草稿二','定稿二',CURRENT_TIMESTAMP),"
+                "('LC3','RTP2','t3','finalized','一样的','一样的',CURRENT_TIMESTAMP)")
+            await db.commit()
+        finally:
+            await db.close()
+    asyncio.run(seed_finalized())
+
+    r = _client().get("/media/persona/RTP2")
+    assert r.status_code == 200
+    assert "AI 学我改稿" in r.text
+    assert "2 条" in r.text          # learnable_count=2（LC3 无改动排除）

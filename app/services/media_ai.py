@@ -446,6 +446,87 @@ async def persona_interview_extract(db, persona_id: str, module: str,
             "cost": result.get("cost", 0), "model": result.get("model", "")}
 
 
+LEARN_EDIT_MAX_PAIRS = 15  # 一次最多看多少条定稿对，防 token 撑爆（拍脑袋值，实测调）
+
+LEARN_EDIT_SYSTEM = """你对比"AI 写的草稿"和"创作者真人改后的定稿"，提炼创作者反复出现的改稿习惯，作为其"语气/记忆点"人设条目。
+
+铁律：
+1. 只归纳给定改动里真实反复出现的模式，绝不编造创作者没做过的改动。看不出稳定规律就少提甚至不提（返回空）。
+2. 已经给你列出的"现有条目"里已有的，别重复提。
+3. 每条给：dimension（只能是 tone 或 signature；改口气/句式/节奏归 tone，招牌口头禅/固定收尾归 signature）、content（完整表述这条习惯）、brief（≤30字精简版，注入用）、evidence（引用一个真实的"草稿→定稿"改动例子）、confidence（1-5，出现越多次越高）。
+4. 只输出 JSON：{"traits":[{...}]}，不要解释。"""
+
+
+async def learn_edit_style(db, persona_id: str, model: str = "auto") -> dict:
+    """对比最近定稿的 AI 草稿 vs 用户定稿，提炼反复出现的改稿习惯为候选风格条目。
+    绝不写库 —— 返回候选，人拍板 adopt 才入。功能B / spec §6.1。"""
+    cur = await db.execute("SELECT * FROM media_persona WHERE id=?", (persona_id,))
+    if not await cur.fetchone():
+        return {"ok": False, "error": "人设不存在", "traits": [],
+                "pair_count": 0, "cost": 0, "model": ""}
+
+    cur = await db.execute(
+        "SELECT title, ai_draft, script FROM media_content "
+        "WHERE persona_id=? AND authoring_stage='finalized' "
+        "AND ai_draft != '' AND script != '' AND script != ai_draft "
+        "ORDER BY finalized_at DESC LIMIT ?",
+        (persona_id, LEARN_EDIT_MAX_PAIRS))
+    pairs = [dict(r) for r in await cur.fetchall()]
+    if not pairs:
+        return {"ok": True, "error": "", "traits": [], "pair_count": 0,
+                "cost": 0, "model": ""}
+
+    # 现有 tone/signature 条目，喂给 AI 让它别重复提
+    cur = await db.execute(
+        "SELECT brief, content FROM media_persona_trait "
+        "WHERE persona_id=? AND status='active' AND dimension IN ('tone','signature')",
+        (persona_id,))
+    existing = [(_txt(r["brief"]) or _txt(r["content"])) for r in await cur.fetchall()]
+
+    pair_blocks = []
+    for i, p in enumerate(pairs, 1):
+        pair_blocks.append(
+            f"[改动 {i}]\nAI 草稿：{_txt(p['ai_draft'])[:1200]}\n"
+            f"我的定稿：{_txt(p['script'])[:1200]}")
+
+    parts = [
+        "【已有的 tone/signature 条目（别重复提）】\n"
+        + ("\n".join(f"- {e}" for e in existing) if existing else "（暂无）"),
+        "【草稿 vs 定稿 对比】\n\n" + "\n\n".join(pair_blocks),
+        "请提炼反复出现的改稿习惯为结构化条目。",
+    ]
+    result = await ask_ai("\n\n".join(parts), model=model,
+                          task_type="media_learn_edit",
+                          system_prompt=LEARN_EDIT_SYSTEM, json_mode=True)
+    resp = result.get("response", "")
+    if resp.startswith("[错误]") or resp.startswith("[费用保护]"):
+        return {"ok": False, "error": resp, "traits": [],
+                "pair_count": len(pairs),
+                "cost": result.get("cost", 0), "model": result.get("model", "")}
+
+    obj = extract_json(resp, expect="object")
+    raw = [it for it in (obj.get("traits") or []) if isinstance(it, dict)]
+    traits = []
+    for it in raw:
+        content = _txt(it.get("content"))
+        if not content:
+            continue
+        dim = it.get("dimension") if it.get("dimension") in ("tone", "signature") else "tone"
+        conf = it.get("confidence")
+        conf = conf if isinstance(conf, int) and 1 <= conf <= 5 else 3
+        traits.append({
+            "dimension": dim,
+            "content": content,
+            "brief": (_txt(it.get("brief")) or content)[:30],
+            "evidence": _txt(it.get("evidence")),
+            "confidence": conf,
+            "phase_tag": "",   # tone/signature 永久，不绑阶段
+        })
+    await log_injection(db, "", "media_learn_edit", [], result.get("tokens", 0))
+    return {"ok": True, "traits": traits, "error": "", "pair_count": len(pairs),
+            "cost": result.get("cost", 0), "model": result.get("model", "")}
+
+
 async def write_script(db, content_id: str, mode: str = "full",
                        model: str = "auto", hint: str = "") -> dict:
     """AI 写口播脚本。hint 非空=带要求重写（如"开头别铺垫，更狠"/"加个案例"）。

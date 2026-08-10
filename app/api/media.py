@@ -15,6 +15,7 @@ from app.services.media_ai import (
     interview_questions, extract_evidence, propose_angles,
     critique_draft, revise_draft,
     persona_interview_questions, persona_interview_extract,
+    learn_edit_style,
 )
 from app.services.media_flow import finalize_updates, clean_body
 from app.services.ai_router import _load_config
@@ -115,6 +116,12 @@ async def persona_detail(request: Request, pid: str):
         cur = await db.execute(
             "SELECT * FROM media_account WHERE persona_id=? ORDER BY created_at", (pid,))
         accounts = [dict(r) for r in await cur.fetchall()]
+
+        cur = await db.execute(
+            "SELECT COUNT(*) AS n FROM media_content WHERE persona_id=? "
+            "AND authoring_stage='finalized' AND ai_draft != '' "
+            "AND script != '' AND script != ai_draft", (pid,))
+        learnable_count = (await cur.fetchone())["n"]
     finally:
         await db.close()
 
@@ -130,7 +137,8 @@ async def persona_detail(request: Request, pid: str):
                 {"persona": persona, "traits_by_dim": traits_by_dim,
                  "accounts": accounts, "dimensions": TRAIT_DIMENSIONS,
                  "platforms": PLATFORMS, "archived": archived,
-                 "done_count": len(done_modules), "module_total": len(PERSONA_MODULE_ORDER)})
+                 "done_count": len(done_modules), "module_total": len(PERSONA_MODULE_ORDER),
+                 "learnable_count": learnable_count})
 
 
 @router.post("/media/persona/{pid}/trait")
@@ -197,20 +205,38 @@ async def persona_interview_ex(pid: str, module: str, answers: str = Form(...)):
 async def persona_interview_adopt(pid: str, dimension: str = Form(...),
                                   content: str = Form(...), brief: str = Form(""),
                                   confidence: int = Form(3), evidence: str = Form(""),
-                                  phase_tag: str = Form("")):
-    """人拍板：把一条候选条目写进注册表，source='interview'。"""
+                                  phase_tag: str = Form(""),
+                                  source: str = Form("interview")):
+    """人拍板：把一条候选条目写进注册表。source 区分来源（interview / learned_edit）。"""
+    src = source if source in ("interview", "learned_edit") else "interview"
     db = await get_db()
     try:
         await db.execute(
             "INSERT INTO media_persona_trait "
             "(id,persona_id,dimension,content,brief,source,evidence,confidence,phase_tag) "
-            "VALUES (?,?,?,?,?, 'interview', ?,?,?)",
+            "VALUES (?,?,?,?,?,?,?,?,?)",
             (str(uuid.uuid4()), pid, dimension, content.strip(),
-             brief.strip()[:30], evidence.strip(), confidence, phase_tag.strip()))
+             brief.strip()[:30], src, evidence.strip(), confidence, phase_tag.strip()))
         await db.commit()
     finally:
         await db.close()
     return JSONResponse({"ok": True})
+
+
+@router.post("/media/persona/{pid}/learn-edits")
+async def persona_learn_edits(pid: str):
+    """功能B：AI 复盘最近定稿的改稿习惯，返回候选（绝不写库，人拍板 adopt 才入）。"""
+    db = await get_db()
+    try:
+        try:
+            result = await learn_edit_style(db, pid)
+        except Exception as e:
+            log.exception("学改稿提炼失败")
+            return JSONResponse({"ok": False, "error": str(e),
+                                 "traits": [], "pair_count": 0})
+    finally:
+        await db.close()
+    return JSONResponse(result)
 
 
 @router.post("/media/persona/{pid}/new-phase")

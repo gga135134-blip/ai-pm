@@ -154,7 +154,79 @@
         </details>
       </div>
     </div>
+
+    <div class="module" style="margin-top:12px">
+      <div class="mh"><span class="ttl" style="font-size:14px">🪞 AI 学我改稿</span></div>
+      <div class="inner">
+        <p style="font-size:12px; color:var(--ink-3); margin-bottom:10px">
+          对比 AI 草稿和你改后的定稿，提炼你反复出现的改稿习惯，攒进语气/记忆点。
+        </p>
+        {% set lc = learnable_count|default(0) %}
+        <div style="font-size:12.5px; color:var(--ink-2); margin-bottom:8px">
+          已有 <b>{{ lc }} 条</b>定稿可供学习{% if lc < 3 %}<span style="color:var(--ink-3)">（再攒几条更准）</span>{% endif %}
+        </div>
+        <button id="learn-btn" class="btn ai" style="width:100%; justify-content:center"
+                onclick="learnEdits('{{ persona.id }}')"{% if lc == 0 %} disabled{% endif %}>
+          让 AI 复盘
+        </button>
+        <div id="learn-cands" style="margin-top:12px"></div>
+      </div>
+    </div>
   </div>
 </div>
 {% endif %}
+
+<script>
+async function learnEdits(pid){
+  const btn = document.getElementById('learn-btn');
+  const box = document.getElementById('learn-cands');
+  btn.disabled = true; btn.textContent = '正在复盘…';
+  box.innerHTML = '';
+  try{
+    const r = await fetch(`/media/persona/${pid}/learn-edits`, {method:'POST'});
+    const d = await r.json();
+    if(!d.ok){ box.innerHTML = '<div class="empty">复盘失败：'+(d.error||'')+'</div>'; return; }
+    if(!d.traits || d.traits.length === 0){
+      box.innerHTML = '<div class="empty">这批改稿没提炼出稳定习惯，再攒几条。</div>'; return;
+    }
+    d.traits.forEach(function(t){
+      const dimLabel = t.dimension === 'signature' ? '记忆点' : '语气';
+      const card = document.createElement('div');
+      card.className = 'trait-row';
+      card.style.flexDirection = 'column';
+      card.innerHTML =
+        '<div style="font-size:13px;color:var(--ink-1)"><span class="tag">'+dimLabel+'</span> '+
+        escapeHtml(t.content)+'</div>'+
+        (t.evidence ? '<div class="evidence">例子：'+escapeHtml(t.evidence)+'</div>' : '')+
+        '<div style="margin-top:6px;display:flex;gap:8px">'+
+        '<button class="btn primary" style="padding:4px 12px">采纳</button>'+
+        '<button class="btn ghost" style="padding:4px 12px">丢弃</button></div>';
+      const adoptBtn = card.querySelectorAll('button')[0];
+      const dropBtn = card.querySelectorAll('button')[1];
+      adoptBtn.onclick = async function(){
+        adoptBtn.disabled = true; adoptBtn.textContent = '采纳中…';
+        const fd = new URLSearchParams();
+        fd.set('dimension', t.dimension); fd.set('content', t.content);
+        fd.set('brief', t.brief || t.content); fd.set('confidence', t.confidence || 3);
+        fd.set('evidence', t.evidence || ''); fd.set('phase_tag', '');
+        fd.set('source', 'learned_edit');
+        const rr = await fetch(`/media/persona/${pid}/interview/adopt`,
+          {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:fd});
+        const dd = await rr.json();
+        if(dd.ok){ card.innerHTML = '<div style="color:var(--ink-3);font-size:12.5px">✓ 已入库（'+dimLabel+'）</div>'; }
+        else { adoptBtn.disabled = false; adoptBtn.textContent = '采纳'; }
+      };
+      dropBtn.onclick = function(){ card.remove(); };
+      box.appendChild(card);
+    });
+  } catch(e){
+    box.innerHTML = '<div class="empty">出错了：'+e+'</div>';
+  } finally {
+    btn.disabled = false; btn.textContent = '让 AI 复盘';
+  }
+}
+function escapeHtml(s){
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+</script>
 {% endblock %}
