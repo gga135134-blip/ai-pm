@@ -413,3 +413,45 @@ async def _archive(mid):
         await db.commit()
     finally:
         await db.close()
+
+
+# ─────────────── 功能B：AI 学改稿 ───────────────
+
+def test_adopt_accepts_learned_edit_source():
+    """adopt 加 source 参数：功能B 传 learned_edit，写进 trait.source。"""
+    _seed_persona_real()
+    r = _client().post("/media/persona/RTP2/interview/adopt", data={
+        "dimension": "tone", "content": "开头不铺垫直接抛结论",
+        "brief": "开头直接抛结论", "confidence": "4",
+        "evidence": "把'首先我们要明确'删成'落地。'", "phase_tag": "",
+        "source": "learned_edit"})
+    assert r.status_code == 200 and r.json()["ok"] is True
+    rows = _count_traits("RTP2", dimension="tone")
+    assert len(rows) == 1
+    assert rows[0]["source"] == "learned_edit"
+
+
+def test_adopt_source_defaults_to_interview():
+    """不传 source 时仍写 interview —— 保护现有访谈流程向后兼容。"""
+    _seed_persona_real()
+    r = _client().post("/media/persona/RTP2/interview/adopt", data={
+        "dimension": "signature", "content": "招牌收尾'说白了'",
+        "brief": "说白了", "confidence": "5", "evidence": "", "phase_tag": ""})
+    assert r.status_code == 200 and r.json()["ok"] is True
+    rows = _count_traits("RTP2", dimension="signature")
+    assert rows[0]["source"] == "interview"
+
+
+def test_learn_edits_route_returns_candidates(monkeypatch):
+    async def fake(db, persona_id, model="auto"):
+        return {"ok": True, "traits": [{"dimension": "tone",
+                "content": "长句拆短", "brief": "长句拆短", "evidence": "例子",
+                "confidence": 4, "phase_tag": ""}],
+                "pair_count": 3, "error": "", "cost": 0, "model": "x"}
+    monkeypatch.setattr("app.api.media.learn_edit_style", fake)
+    _seed_persona_real()
+    r = _client().post("/media/persona/RTP2/learn-edits")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is True and body["pair_count"] == 3
+    assert body["traits"][0]["dimension"] == "tone"
