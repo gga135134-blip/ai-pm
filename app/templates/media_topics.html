@@ -112,6 +112,7 @@ function rejectTopic(id) {
 async function aiRecommend() {
   const btn = document.getElementById('ai-btn');
   const status = document.getElementById('ai-status');
+  const orig = btn.innerHTML;   // 存原始 HTML（含图标），失败时还原——别把 SVG 图标塞进 JS 字符串
   btn.disabled = true;
   btn.textContent = '思考中…';
   status.style.display = 'block';
@@ -125,12 +126,12 @@ async function aiRecommend() {
     } else {
       status.textContent = '失败：' + (d.error || '未知错误');
       btn.disabled = false;
-      btn.innerHTML = '{{ ic.icon("robot") }}AI 推选题';
+      btn.innerHTML = orig;
     }
   } catch (e) {
     status.textContent = '请求失败：' + e;
     btn.disabled = false;
-    btn.innerHTML = '{{ ic.icon("robot") }}AI 推选题';
+    btn.innerHTML = orig;
   }
 }
 </script>
