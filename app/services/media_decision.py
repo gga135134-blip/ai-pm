@@ -4,17 +4,25 @@ spec: docs/superpowers/specs/2026-08-11-media-phase2-decision-engine-design.md""
 
 # 权重按 persona.current_phase 三套预设（初值靠经验，L2 复盘迭代）。
 # evidence/playbook/gap 当前 0（数据源未建），建好改这里即可。
+# 用户看重定位/受众/变现/一致 → fit(定位+一致)/audience_hit/anchor_distance 权重整体抬高，
+# 热度/原料相对让位。
 WEIGHTS = {
-    "冷启动": {"fit": 2, "heat": 3, "audience_hit": 2, "anchor_distance": 1,
-              "material_ready": 2, "risk": 3, "fatigue": 1, "dup_penalty": 2,
+    "冷启动": {"fit": 3, "heat": 3, "audience_hit": 3, "anchor_distance": 2,
+              "material_ready": 1, "risk": 3, "fatigue": 1, "dup_penalty": 2,
               "evidence": 0, "playbook": 0, "gap": 0},
-    "涨粉":   {"fit": 3, "heat": 2, "audience_hit": 3, "anchor_distance": 1,
+    "涨粉":   {"fit": 4, "heat": 1, "audience_hit": 4, "anchor_distance": 2,
               "material_ready": 2, "risk": 3, "fatigue": 2, "dup_penalty": 2,
               "evidence": 0, "playbook": 0, "gap": 0},
-    "转化":   {"fit": 2, "heat": 1, "audience_hit": 3, "anchor_distance": 3,
+    "转化":   {"fit": 3, "heat": 1, "audience_hit": 4, "anchor_distance": 4,
               "material_ready": 2, "risk": 3, "fatigue": 2, "dup_penalty": 2,
               "evidence": 0, "playbook": 0, "gap": 0},
 }
+
+# fit 分两半：定位(权重高) + 一致(权重低)。定位看"射程"，一致看"一贯人设/调性"。
+FIT_POSITIONING_WEIGHT = 0.65
+FIT_CONSISTENCY_WEIGHT = 0.35
+FIT_POSITIONING_DIMS = ("positioning", "differentiator")
+FIT_CONSISTENCY_DIMS = ("topics", "tone", "signature")
 
 
 def _bigrams(s: str) -> set:
@@ -63,11 +71,30 @@ def score_topic(topic: dict, ctx: dict, phase: str) -> dict:
     text = _topic_text(topic)
     factors = {}
 
-    # ── A 类：已存字段 ──
-    fit = (_clamp15(topic.get("fit_score", 3)) - 1) / 4
+    # ── 热度：已存字段（AI 生成时给，暂无真实热度源，见 spec/记忆软肋条）──
     heat = (_clamp15(topic.get("heat", 3)) - 1) / 4
-    factors["fit"] = {"value": fit, "note": f"契合人设 {'★' * _clamp15(topic.get('fit_score', 3))}"}
     factors["heat"] = {"value": heat, "note": f"热度 {'★' * _clamp15(topic.get('heat', 3))}"}
+
+    # ── fit：从人设条目算 = 定位(0.65) + 一致(0.35)。不用 AI 给的 fit_score。──
+    def _best_trait_overlap(dims):
+        best, hit = 0.0, None
+        for tr in ctx["traits"]:
+            if tr.get("dimension") in dims:
+                ov = _overlap(text, (tr.get("content") or "") + " " + (tr.get("brief") or ""))
+                if ov > best:
+                    best, hit = ov, tr
+        return best, hit
+
+    positioning, pos_hit = _best_trait_overlap(FIT_POSITIONING_DIMS)
+    consistency, con_hit = _best_trait_overlap(FIT_CONSISTENCY_DIMS)
+    fit = FIT_POSITIONING_WEIGHT * positioning + FIT_CONSISTENCY_WEIGHT * consistency
+    fit_bits = []
+    if pos_hit and positioning > 0:
+        fit_bits.append(f"契合定位'{pos_hit.get('brief') or pos_hit.get('content', '')}'")
+    if con_hit and consistency > 0:
+        fit_bits.append(f"延续一贯'{con_hit.get('brief') or con_hit.get('content', '')}'")
+    factors["fit"] = {"value": fit,
+                      "note": "，".join(fit_bits) if fit_bits else "与定位/一贯人设关联弱"}
 
     # ── B 类：纯计算重叠 ──
     # audience_hit：命中 segment 焦虑/原话，按付费意愿加权

@@ -23,11 +23,31 @@ def test_overlap_short_text_no_crash():
     assert _overlap("a", "") == 0.0
 
 
-def test_fit_and_heat_normalized_full():
+def test_heat_normalized_full():
     t = {"title": "随便", "puzzle": "", "fit_score": 5, "heat": 5}
     res = score_topic(t, _ctx(), "涨粉")
-    assert res["factors"]["fit"]["value"] == 1.0
     assert res["factors"]["heat"]["value"] == 1.0
+
+
+def test_fit_grounded_positioning_weighted_more_than_consistency():
+    """fit 从人设条目算：定位(0.65) + 一致(0.35)，不再看 AI 给的 fit_score。"""
+    text = "中小企业AI落地避坑"
+    t = {"title": text, "puzzle": "", "fit_score": 1, "heat": 3}  # fit_score=1 应被忽略
+    # 只命中定位 → fit ≈ 0.65
+    pos_only = score_topic(t, _ctx(traits=[
+        {"dimension": "positioning", "content": text, "brief": ""}]), "涨粉")
+    # 只命中一致(选题域) → fit ≈ 0.35
+    con_only = score_topic(t, _ctx(traits=[
+        {"dimension": "topics", "content": text, "brief": ""}]), "涨粉")
+    assert pos_only["factors"]["fit"]["value"] > con_only["factors"]["fit"]["value"]
+    assert abs(pos_only["factors"]["fit"]["value"] - 0.65) < 0.01
+    assert abs(con_only["factors"]["fit"]["value"] - 0.35) < 0.01
+    # 全命中定位+一致 → fit = 1.0，且忽略了 fit_score=1
+    both = score_topic(t, _ctx(traits=[
+        {"dimension": "positioning", "content": text, "brief": ""},
+        {"dimension": "tone", "content": text, "brief": ""}]), "涨粉")
+    assert abs(both["factors"]["fit"]["value"] - 1.0) < 0.01
+    assert "定位" in both["report"]
 
 
 def test_audience_hit_matches_and_weights_by_pay():
@@ -68,6 +88,8 @@ def test_degraded_factors_marked_and_not_in_denominator():
     text = "中小企业AI落地避坑"
     t = {"title": text, "puzzle": "", "fit_score": 5, "heat": 5}
     ctx = _ctx(
+        traits=[{"dimension": "positioning", "content": text, "brief": ""},
+                {"dimension": "tone", "content": text, "brief": ""}],
         audiences=[{"segment": "老板", "anxiety": text, "language": "", "pay_willingness": 5}],
         anchors=[{"name": text, "value_prop": "", "status": "proven"}],
         materials=[{"brief": text, "title": ""}])
