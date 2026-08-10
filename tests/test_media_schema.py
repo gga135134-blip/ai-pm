@@ -106,3 +106,22 @@ def test_content_gains_authoring_columns():
     cols = _cols_migrated("media_content")
     assert {"authoring_stage", "brief", "evidence_gap", "selected_angle_id",
             "ai_draft", "revision_count", "finalized_at"} <= cols
+
+
+# ─────────────── 二期资产层🅑：受众画像 + 生意锚点 ───────────────
+
+def test_audience_anchor_tables_exist():
+    assert {"media_audience", "media_anchor"} <= _tables()
+
+
+def test_audience_columns():
+    cols = _cols("media_audience")
+    assert {"persona_id", "segment", "who", "anxiety", "desire", "objection",
+            "language", "pay_willingness", "pay_scene", "pay_ceiling",
+            "evidence", "confidence", "source", "status"} <= cols
+
+
+def test_anchor_columns():
+    cols = _cols("media_anchor")
+    assert {"persona_id", "name", "type", "value_prop", "price_band",
+            "path", "evidence", "source", "status"} <= cols

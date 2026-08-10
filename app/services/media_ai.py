@@ -527,6 +527,99 @@ async def learn_edit_style(db, persona_id: str, model: str = "auto") -> dict:
             "cost": result.get("cost", 0), "model": result.get("model", "")}
 
 
+ANCHOR_TYPES = {"product", "service", "带货", "广告", "引流私域"}
+
+AUDIENCE_DRAFT_SYSTEM = """你把创作者对自己受众的一段描述（或粘贴的评论/私信文本），提炼成结构化的受众画像 segment。
+
+铁律：
+1. 只基于给定文本归纳，绝不编造创作者没提到的人群或数据。看不出就少提。
+2. language 字段必须是受众真实原话或创作者提供的措辞，绝不自造口吻——它会直接进文案。
+3. 每个 segment 给：segment(人群名)、who(他们是谁)、anxiety(在焦虑什么)、desire(渴望)、objection(顾虑)、language(他们的原话)、pay_willingness(付费意愿1-5)、pay_scene(什么场景掏钱)、pay_ceiling(价格带)、evidence(依据)、confidence(1-5)。
+4. 只输出 JSON：{"segments":[{...}]}，不要解释。"""
+
+ANCHOR_DRAFT_SYSTEM = """你把创作者对自己变现方式的描述，提炼成结构化的生意锚点。
+
+铁律：
+1. 只基于给定文本归纳，绝不编造不存在的产品或转化数据。
+2. type 只能是 product/service/带货/广告/引流私域 之一。
+3. 每个锚点给：name(锚点名)、type、value_prop(解决什么问题)、price_band(价格带)、path(从内容到成交的路径)、evidence(转化数据/依据)。
+4. 只输出 JSON：{"anchors":[{...}]}，不要解释。"""
+
+
+async def draft_audience_segments(db, persona_id: str, answers: str,
+                                  model: str = "auto") -> dict:
+    """把用户对受众的一段回答/粘贴文本，提炼成 segment 画像候选。绝不写库。资产层🅑。"""
+    cur = await db.execute("SELECT id FROM media_persona WHERE id=?", (persona_id,))
+    if not await cur.fetchone():
+        return {"ok": False, "error": "人设不存在", "segments": [], "cost": 0, "model": ""}
+    if not (answers or "").strip():
+        return {"ok": False, "error": "没有内容可提炼", "segments": [], "cost": 0, "model": ""}
+
+    result = await ask_ai(f"【创作者的描述】\n{answers[:8000]}\n\n请提炼成受众画像 segment。",
+                          model=model, task_type="media_draft_audience",
+                          system_prompt=AUDIENCE_DRAFT_SYSTEM, json_mode=True)
+    resp = result.get("response", "")
+    if resp.startswith("[错误]") or resp.startswith("[费用保护]"):
+        return {"ok": False, "error": resp, "segments": [],
+                "cost": result.get("cost", 0), "model": result.get("model", "")}
+
+    obj = extract_json(resp, expect="object")
+    raw = [it for it in (obj.get("segments") or []) if isinstance(it, dict)]
+    segments = []
+    for it in raw:
+        seg = _txt(it.get("segment"))
+        if not seg:
+            continue
+        pw = it.get("pay_willingness")
+        pw = pw if isinstance(pw, int) and 1 <= pw <= 5 else 3
+        cf = it.get("confidence")
+        cf = cf if isinstance(cf, int) and 1 <= cf <= 5 else 3
+        segments.append({
+            "segment": seg, "who": _txt(it.get("who")), "anxiety": _txt(it.get("anxiety")),
+            "desire": _txt(it.get("desire")), "objection": _txt(it.get("objection")),
+            "language": _txt(it.get("language")), "pay_willingness": pw,
+            "pay_scene": _txt(it.get("pay_scene")), "pay_ceiling": _txt(it.get("pay_ceiling")),
+            "evidence": _txt(it.get("evidence")), "confidence": cf,
+        })
+    await log_injection(db, "", "media_draft_audience", [], result.get("tokens", 0))
+    return {"ok": True, "segments": segments, "error": "",
+            "cost": result.get("cost", 0), "model": result.get("model", "")}
+
+
+async def draft_anchors(db, persona_id: str, answers: str, model: str = "auto") -> dict:
+    """把用户对变现方式的描述，提炼成锚点候选。绝不写库。资产层🅑。"""
+    cur = await db.execute("SELECT id FROM media_persona WHERE id=?", (persona_id,))
+    if not await cur.fetchone():
+        return {"ok": False, "error": "人设不存在", "anchors": [], "cost": 0, "model": ""}
+    if not (answers or "").strip():
+        return {"ok": False, "error": "没有内容可提炼", "anchors": [], "cost": 0, "model": ""}
+
+    result = await ask_ai(f"【创作者的描述】\n{answers[:8000]}\n\n请提炼成生意锚点。",
+                          model=model, task_type="media_draft_anchor",
+                          system_prompt=ANCHOR_DRAFT_SYSTEM, json_mode=True)
+    resp = result.get("response", "")
+    if resp.startswith("[错误]") or resp.startswith("[费用保护]"):
+        return {"ok": False, "error": resp, "anchors": [],
+                "cost": result.get("cost", 0), "model": result.get("model", "")}
+
+    obj = extract_json(resp, expect="object")
+    raw = [it for it in (obj.get("anchors") or []) if isinstance(it, dict)]
+    anchors = []
+    for it in raw:
+        name = _txt(it.get("name"))
+        if not name:
+            continue
+        atype = it.get("type") if it.get("type") in ANCHOR_TYPES else "service"
+        anchors.append({
+            "name": name, "type": atype, "value_prop": _txt(it.get("value_prop")),
+            "price_band": _txt(it.get("price_band")), "path": _txt(it.get("path")),
+            "evidence": _txt(it.get("evidence")),
+        })
+    await log_injection(db, "", "media_draft_anchor", [], result.get("tokens", 0))
+    return {"ok": True, "anchors": anchors, "error": "",
+            "cost": result.get("cost", 0), "model": result.get("model", "")}
+
+
 async def write_script(db, content_id: str, mode: str = "full",
                        model: str = "auto", hint: str = "") -> dict:
     """AI 写口播脚本。hint 非空=带要求重写（如"开头别铺垫，更狠"/"加个案例"）。

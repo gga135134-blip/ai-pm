@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% import "_icons.html" as ic %}
+{% block title %}受众画像{% endblock %}
+{% block topbar %}
+<span class="crumb"><a href="/media" style="color:inherit;text-decoration:none">自媒体</a> {{ ic.icon('chevron') }} <b>受众画像</b></span>
+{% endblock %}
+{% block content %}
+<style>
+  .seg-card{ border:1px solid var(--border); border-radius:8px; padding:12px 14px; margin-bottom:10px; }
+  .seg-name{ font-size:14px; font-weight:600; color:var(--ink-1); }
+  .seg-lang{ font-size:12.5px; color:var(--ai); background:var(--panel-2); border-radius:6px; padding:6px 9px; margin-top:6px; }
+  .seg-meta{ font-size:11.5px; color:var(--ink-3); margin-top:5px; display:flex; flex-wrap:wrap; gap:10px; }
+  .pw{ color:var(--warn); white-space:nowrap; }
+</style>
+
+{% if not persona %}
+<div class="module" style="max-width:460px; margin:0 auto">
+  <div class="mh"><span class="ttl">还没有人设</span></div>
+  <div class="inner"><p style="font-size:13px; color:var(--ink-3); margin-bottom:14px">受众画像挂在人设下，先去建一个人设。</p>
+  <a href="/media/persona" class="btn primary">去建人设</a></div>
+</div>
+{% else %}
+
+<div style="margin-bottom:18px">
+  <div class="pname" style="margin-bottom:8px">受众画像</div>
+  <div style="display:flex; align-items:center; flex-wrap:wrap; gap:10px">
+    <span style="font-size:13px; color:var(--ink-2)">{{ persona.name }} · 选题和生意的双重筛子</span>
+    <span class="pill run">{{ total }} 个人群</span>
+    <span class="sp"></span>
+    <a href="/media/anchor" class="btn" style="padding:6px 12px; font-size:12.5px">{{ ic.icon('folder') }}生意锚点</a>
+    <a href="/media" class="btn" style="padding:6px 12px; font-size:12.5px">← 看板</a>
+  </div>
+</div>
+
+<div class="module">
+  <div class="mh"><span class="ttl">🎯 AI 帮我梳理受众</span></div>
+  <div class="inner">
+    <p style="font-size:12px; color:var(--ink-3); margin-bottom:8px">说说你的粉丝/买家是谁、在愁什么、口头怎么说；也可以把评论区/私信粘一段进来。</p>
+    <textarea id="aud-answers" rows="3" class="input w-full" placeholder="我的粉丝大多是……他们最焦虑……常说……"></textarea>
+    <button id="aud-draft-btn" class="btn ai" style="margin-top:8px" onclick="draftAudience('{{ persona.id }}')">让 AI 提炼</button>
+    <div id="aud-cands" style="margin-top:12px"></div>
+  </div>
+</div>
+
+<div class="module" style="margin-top:12px">
+  <div class="mh"><span class="ttl">人群</span><span class="sp"></span><span class="sub">按付费意愿排序，值钱的靠前</span></div>
+  <div class="inner">
+    {% if not segments %}<div class="empty">还没有受众画像。上面让 AI 帮你梳理，或下面手动加一条。</div>{% endif %}
+    {% for s in segments %}
+    <div class="seg-card">
+      <div style="display:flex; align-items:flex-start; gap:10px">
+        <div style="flex:1"><span class="seg-name">{{ s.segment }}</span>
+          {% if s.who %}<span style="font-size:12px; color:var(--ink-3)"> · {{ s.who }}</span>{% endif %}</div>
+        <span class="pw" title="付费意愿">{{ '★' * s.pay_willingness }}</span>
+        <form method="post" action="/media/audience/{{ s.id }}/archive" onsubmit="return confirm('归档这个人群？')">
+          <button class="iconbtn danger" title="归档">{{ ic.icon('trash') }}</button></form>
+      </div>
+      {% if s.anxiety %}<div style="font-size:12.5px; color:var(--ink-2); margin-top:4px">焦虑：{{ s.anxiety }}</div>{% endif %}
+      {% if s.language %}<div class="seg-lang">🗣️ 原话（可直接进文案）：{{ s.language }}</div>{% endif %}
+      <div class="seg-meta">
+        {% if s.desire %}<span>渴望：{{ s.desire }}</span>{% endif %}
+        {% if s.objection %}<span>顾虑：{{ s.objection }}</span>{% endif %}
+        {% if s.pay_scene %}<span>掏钱场景：{{ s.pay_scene }}</span>{% endif %}
+        {% if s.pay_ceiling %}<span>价格带：{{ s.pay_ceiling }}</span>{% endif %}
+        <span class="tag" style="color:var(--ink-3); background:var(--panel-2)">{{ s.source or 'manual' }}</span>
+      </div>
+    </div>
+    {% endfor %}
+
+    <details style="margin-top:10px">
+      <summary style="font-size:13px; color:var(--accent); cursor:pointer">+ 手动加一个人群</summary>
+      <form method="post" action="/media/audience" class="space-y-2" style="margin-top:10px">
+        <input type="hidden" name="persona_id" value="{{ persona.id }}">
+        <input name="segment" required placeholder="人群名（必填）" class="input w-full">
+        <input name="who" placeholder="他们是谁（年龄/职业/状态）" class="input w-full" style="margin-top:8px">
+        <input name="anxiety" placeholder="在焦虑什么" class="input w-full" style="margin-top:8px">
+        <input name="language" placeholder="他们的原话（进文案用）" class="input w-full" style="margin-top:8px">
+        <input name="desire" placeholder="渴望（可留空）" class="input w-full" style="margin-top:8px">
+        <input name="objection" placeholder="顾虑（可留空）" class="input w-full" style="margin-top:8px">
+        <select name="pay_willingness" class="input w-full" style="margin-top:8px">
+          <option value="5">付费意愿 ★★★★★</option><option value="4">★★★★</option>
+          <option value="3" selected>★★★</option><option value="2">★★</option><option value="1">★</option>
+        </select>
+        <input name="pay_scene" placeholder="什么场景掏钱（可留空）" class="input w-full" style="margin-top:8px">
+        <input name="pay_ceiling" placeholder="价格带（可留空）" class="input w-full" style="margin-top:8px">
+        <button class="btn primary" style="margin-top:10px">保存</button>
+      </form>
+    </details>
+  </div>
+</div>
+
+<script>
+async function draftAudience(pid){
+  var btn = document.getElementById('aud-draft-btn');
+  var box = document.getElementById('aud-cands');
+  var ans = document.getElementById('aud-answers').value;
+  btn.disabled = true; btn.textContent = '正在提炼…'; box.innerHTML = '';
+  try{
+    var fd = new URLSearchParams(); fd.set('answers', ans);
+    var r = await fetch('/media/audience/draft', {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:fd});
+    var d = await r.json();
+    if(!d.ok){ box.innerHTML = '<div class="empty">'+(d.error||'提炼失败')+'</div>'; return; }
+    if(!d.segments || d.segments.length===0){ box.innerHTML = '<div class="empty">没提炼出画像，多说点或换个角度。</div>'; return; }
+    d.segments.forEach(function(s){
+      var card = document.createElement('div'); card.className = 'seg-card';
+      card.innerHTML =
+        '<div class="seg-name">'+escapeHtml(s.segment)+' <span style="font-size:12px;color:var(--ink-3)">'+escapeHtml(s.who||'')+'</span></div>'+
+        (s.anxiety?'<div style="font-size:12.5px;color:var(--ink-2);margin-top:4px">焦虑：'+escapeHtml(s.anxiety)+'</div>':'')+
+        (s.language?'<div class="seg-lang">🗣️ 原话：'+escapeHtml(s.language)+'</div>':'')+
+        '<div style="margin-top:8px;display:flex;gap:8px">'+
+        '<button class="btn primary" style="padding:4px 12px">采纳</button>'+
+        '<button class="btn ghost" style="padding:4px 12px">丢弃</button></div>';
+      var btns = card.querySelectorAll('button');
+      btns[0].onclick = async function(){
+        btns[0].disabled = true; btns[0].textContent = '采纳中…';
+        var f = new URLSearchParams();
+        f.set('persona_id', pid); f.set('segment', s.segment); f.set('who', s.who||'');
+        f.set('anxiety', s.anxiety||''); f.set('desire', s.desire||''); f.set('objection', s.objection||'');
+        f.set('language', s.language||''); f.set('pay_willingness', s.pay_willingness||3);
+        f.set('pay_scene', s.pay_scene||''); f.set('pay_ceiling', s.pay_ceiling||'');
+        f.set('evidence', s.evidence||''); f.set('confidence', s.confidence||3);
+        var rr = await fetch('/media/audience/adopt', {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:f});
+        var dd = await rr.json();
+        if(dd.ok){ card.innerHTML = '<div style="color:var(--ink-3);font-size:12.5px">✓ 已入库（刷新页面看）</div>'; }
+        else { btns[0].disabled=false; btns[0].textContent='采纳'; }
+      };
+      btns[1].onclick = function(){ card.remove(); };
+      box.appendChild(card);
+    });
+  } catch(e){ box.innerHTML = '<div class="empty">出错了：'+e+'</div>'; }
+  finally { btn.disabled = false; btn.textContent = '让 AI 提炼'; }
+}
+function escapeHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+</script>
+{% endif %}
+{% endblock %}
