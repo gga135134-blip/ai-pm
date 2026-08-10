@@ -476,6 +476,115 @@ async def audience_archive(aid: str):
     return RedirectResponse("/media/audience", status_code=302)
 
 
+# ─────────────── 生意锚点（资产层🅑 media_anchor）───────────────
+
+ANCHOR_TYPE_LABELS = {
+    "product": "自有产品", "service": "服务", "带货": "带货",
+    "广告": "广告", "引流私域": "引流私域",
+}
+ANCHOR_STATUS_ORDER = ["proven", "validating", "dropped"]
+ANCHOR_STATUS_LABELS = {"proven": "已跑通", "validating": "验证中", "dropped": "已放弃"}
+
+
+@router.get("/media/anchor", response_class=HTMLResponse)
+async def anchor_home(request: Request):
+    """生意锚点查看页：按 status 分组 proven→validating→dropped。"""
+    db = await get_db()
+    try:
+        pid = await _first_persona_id(db)
+        persona = None
+        anchors = []
+        if pid:
+            cur = await db.execute("SELECT * FROM media_persona WHERE id=?", (pid,))
+            row = await cur.fetchone()
+            persona = dict(row) if row else None
+            cur = await db.execute(
+                "SELECT * FROM media_anchor WHERE persona_id=? AND status!='archived' "
+                "ORDER BY created_at DESC", (pid,))
+            anchors = [dict(r) for r in await cur.fetchall()]
+    finally:
+        await db.close()
+    by_status = {}
+    for st in ANCHOR_STATUS_ORDER:
+        hit = [a for a in anchors if a["status"] == st]
+        if hit:
+            by_status[st] = hit
+    return _tpl(request, "media_anchor.html",
+                {"persona": persona, "anchors_by_status": by_status, "total": len(anchors),
+                 "type_labels": ANCHOR_TYPE_LABELS, "status_labels": ANCHOR_STATUS_LABELS,
+                 "status_order": ANCHOR_STATUS_ORDER})
+
+
+@router.post("/media/anchor")
+async def anchor_create(persona_id: str = Form(...), name: str = Form(...),
+                        type: str = Form("service"), value_prop: str = Form(""),
+                        price_band: str = Form(""), path: str = Form(""),
+                        evidence: str = Form(""), status: str = Form("validating")):
+    if not name.strip():
+        return RedirectResponse("/media/anchor", status_code=302)
+    atype = type if type in ANCHOR_TYPE_LABELS else "service"
+    st = status if status in ANCHOR_STATUS_LABELS else "validating"
+    db = await get_db()
+    try:
+        await db.execute(
+            "INSERT INTO media_anchor (id,persona_id,name,type,value_prop,price_band,"
+            "path,evidence,status,source) VALUES (?,?,?,?,?,?,?,?,?, 'manual')",
+            (str(uuid.uuid4()), persona_id, name.strip(), atype, value_prop.strip(),
+             price_band.strip(), path.strip(), evidence.strip(), st))
+        await db.commit()
+    finally:
+        await db.close()
+    return RedirectResponse("/media/anchor", status_code=302)
+
+
+@router.post("/media/anchor/draft")
+async def anchor_draft(answers: str = Form("")):
+    db = await get_db()
+    try:
+        pid = await _first_persona_id(db)
+        if not pid:
+            return JSONResponse({"ok": False, "error": "先建人设", "anchors": []})
+        try:
+            result = await draft_anchors(db, pid, answers)
+        except Exception as e:
+            log.exception("锚点起草失败")
+            return JSONResponse({"ok": False, "error": str(e), "anchors": []})
+    finally:
+        await db.close()
+    return JSONResponse(result)
+
+
+@router.post("/media/anchor/adopt")
+async def anchor_adopt(persona_id: str = Form(...), name: str = Form(...),
+                       type: str = Form("service"), value_prop: str = Form(""),
+                       price_band: str = Form(""), path: str = Form(""),
+                       evidence: str = Form(""), status: str = Form("validating")):
+    atype = type if type in ANCHOR_TYPE_LABELS else "service"
+    st = status if status in ANCHOR_STATUS_LABELS else "validating"
+    db = await get_db()
+    try:
+        await db.execute(
+            "INSERT INTO media_anchor (id,persona_id,name,type,value_prop,price_band,"
+            "path,evidence,status,source) VALUES (?,?,?,?,?,?,?,?,?, 'interview')",
+            (str(uuid.uuid4()), persona_id, name.strip(), atype, value_prop.strip(),
+             price_band.strip(), path.strip(), evidence.strip(), st))
+        await db.commit()
+    finally:
+        await db.close()
+    return JSONResponse({"ok": True})
+
+
+@router.post("/media/anchor/{aid}/archive")
+async def anchor_archive(aid: str):
+    db = await get_db()
+    try:
+        await db.execute("UPDATE media_anchor SET status='archived' WHERE id=?", (aid,))
+        await db.commit()
+    finally:
+        await db.close()
+    return RedirectResponse("/media/anchor", status_code=302)
+
+
 # ─────────────── 话题库 ───────────────
 
 TOPIC_SOURCES = {

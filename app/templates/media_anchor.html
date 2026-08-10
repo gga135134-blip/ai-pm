@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% import "_icons.html" as ic %}
+{% block title %}生意锚点{% endblock %}
+{% block topbar %}
+<span class="crumb"><a href="/media" style="color:inherit;text-decoration:none">自媒体</a> {{ ic.icon('chevron') }} <b>生意锚点</b></span>
+{% endblock %}
+{% block content %}
+<style>
+  .anc-card{ border:1px solid var(--border); border-radius:8px; padding:12px 14px; margin-bottom:10px; }
+  .anc-name{ font-size:14px; font-weight:600; color:var(--ink-1); }
+  .anc-meta{ font-size:11.5px; color:var(--ink-3); margin-top:5px; display:flex; flex-wrap:wrap; gap:10px; }
+</style>
+
+{% if not persona %}
+<div class="module" style="max-width:460px; margin:0 auto">
+  <div class="mh"><span class="ttl">还没有人设</span></div>
+  <div class="inner"><p style="font-size:13px; color:var(--ink-3); margin-bottom:14px">生意锚点挂在人设下，先去建一个人设。</p>
+  <a href="/media/persona" class="btn primary">去建人设</a></div>
+</div>
+{% else %}
+
+<div style="margin-bottom:18px">
+  <div class="pname" style="margin-bottom:8px">生意锚点</div>
+  <div style="display:flex; align-items:center; flex-wrap:wrap; gap:10px">
+    <span style="font-size:13px; color:var(--ink-2)">{{ persona.name }} · 内容为什么值钱</span>
+    <span class="pill run">{{ total }} 个</span>
+    <span class="sp"></span>
+    <a href="/media/audience" class="btn" style="padding:6px 12px; font-size:12.5px">{{ ic.icon('folder') }}受众画像</a>
+    <a href="/media" class="btn" style="padding:6px 12px; font-size:12.5px">← 看板</a>
+  </div>
+</div>
+
+<div class="module">
+  <div class="mh"><span class="ttl">🧭 AI 帮我梳理变现</span></div>
+  <div class="inner">
+    <p style="font-size:12px; color:var(--ink-3); margin-bottom:8px">说说你靠什么变现、卖给谁、多少钱、怎么成交。</p>
+    <textarea id="anc-answers" rows="3" class="input w-full" placeholder="我主要靠……收费……成交路径是……"></textarea>
+    <button id="anc-draft-btn" class="btn ai" style="margin-top:8px" onclick="draftAnchor('{{ persona.id }}')">让 AI 提炼</button>
+    <div id="anc-cands" style="margin-top:12px"></div>
+  </div>
+</div>
+
+<div class="module" style="margin-top:12px">
+  <div class="mh"><span class="ttl">锚点</span></div>
+  <div class="inner">
+    {% if not anchors_by_status %}<div class="empty">还没有生意锚点。上面让 AI 帮你梳理，或下面手动加。</div>{% endif %}
+    {% for st in status_order %}
+      {% if anchors_by_status.get(st) %}
+      <div style="margin-bottom:14px">
+        <div style="font-size:11.5px; font-weight:600; color:var(--ink-3); margin-bottom:6px">{{ status_labels[st] }} · {{ anchors_by_status[st]|length }}</div>
+        {% for a in anchors_by_status[st] %}
+        <div class="anc-card">
+          <div style="display:flex; align-items:flex-start; gap:10px">
+            <div style="flex:1"><span class="anc-name">{{ a.name }}</span>
+              <span class="tag" style="margin-left:6px; color:var(--ink-3); background:var(--panel-2)">{{ type_labels.get(a.type, a.type) }}</span></div>
+            <form method="post" action="/media/anchor/{{ a.id }}/archive" onsubmit="return confirm('归档这个锚点？')">
+              <button class="iconbtn danger" title="归档">{{ ic.icon('trash') }}</button></form>
+          </div>
+          {% if a.value_prop %}<div style="font-size:12.5px; color:var(--ink-2); margin-top:4px">{{ a.value_prop }}</div>{% endif %}
+          <div class="anc-meta">
+            {% if a.price_band %}<span>价格带：{{ a.price_band }}</span>{% endif %}
+            {% if a.path %}<span>路径：{{ a.path }}</span>{% endif %}
+            {% if a.evidence %}<span>依据：{{ a.evidence }}</span>{% endif %}
+            <span class="tag" style="color:var(--ink-3); background:var(--panel-2)">{{ a.source or 'manual' }}</span>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    {% endfor %}
+
+    <details style="margin-top:10px">
+      <summary style="font-size:13px; color:var(--accent); cursor:pointer">+ 手动加一个锚点</summary>
+      <form method="post" action="/media/anchor" class="space-y-2" style="margin-top:10px">
+        <input type="hidden" name="persona_id" value="{{ persona.id }}">
+        <input name="name" required placeholder="锚点名（必填）" class="input w-full">
+        <select name="type" class="input w-full" style="margin-top:8px">
+          {% for code, label in type_labels.items() %}<option value="{{ code }}">{{ label }}</option>{% endfor %}
+        </select>
+        <input name="value_prop" placeholder="解决什么问题" class="input w-full" style="margin-top:8px">
+        <input name="price_band" placeholder="价格带（可留空）" class="input w-full" style="margin-top:8px">
+        <input name="path" placeholder="成交路径（可留空）" class="input w-full" style="margin-top:8px">
+        <select name="status" class="input w-full" style="margin-top:8px">
+          <option value="validating" selected>验证中</option><option value="proven">已跑通</option><option value="dropped">已放弃</option>
+        </select>
+        <button class="btn primary" style="margin-top:10px">保存</button>
+      </form>
+    </details>
+  </div>
+</div>
+
+<script>
+async function draftAnchor(pid){
+  var btn = document.getElementById('anc-draft-btn');
+  var box = document.getElementById('anc-cands');
+  var ans = document.getElementById('anc-answers').value;
+  btn.disabled = true; btn.textContent = '正在提炼…'; box.innerHTML = '';
+  try{
+    var fd = new URLSearchParams(); fd.set('answers', ans);
+    var r = await fetch('/media/anchor/draft', {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:fd});
+    var d = await r.json();
+    if(!d.ok){ box.innerHTML = '<div class="empty">'+(d.error||'提炼失败')+'</div>'; return; }
+    if(!d.anchors || d.anchors.length===0){ box.innerHTML = '<div class="empty">没提炼出锚点，多说点。</div>'; return; }
+    d.anchors.forEach(function(a){
+      var card = document.createElement('div'); card.className = 'anc-card';
+      card.innerHTML =
+        '<div class="anc-name">'+escapeHtml(a.name)+' <span class="tag" style="color:var(--ink-3);background:var(--panel-2)">'+escapeHtml(a.type||'')+'</span></div>'+
+        (a.value_prop?'<div style="font-size:12.5px;color:var(--ink-2);margin-top:4px">'+escapeHtml(a.value_prop)+'</div>':'')+
+        (a.path?'<div style="font-size:11.5px;color:var(--ink-3);margin-top:4px">路径：'+escapeHtml(a.path)+'</div>':'')+
+        '<div style="margin-top:8px;display:flex;gap:8px">'+
+        '<button class="btn primary" style="padding:4px 12px">采纳</button>'+
+        '<button class="btn ghost" style="padding:4px 12px">丢弃</button></div>';
+      var btns = card.querySelectorAll('button');
+      btns[0].onclick = async function(){
+        btns[0].disabled = true; btns[0].textContent = '采纳中…';
+        var f = new URLSearchParams();
+        f.set('persona_id', pid); f.set('name', a.name); f.set('type', a.type||'service');
+        f.set('value_prop', a.value_prop||''); f.set('price_band', a.price_band||'');
+        f.set('path', a.path||''); f.set('evidence', a.evidence||''); f.set('status', 'validating');
+        var rr = await fetch('/media/anchor/adopt', {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:f});
+        var dd = await rr.json();
+        if(dd.ok){ card.innerHTML = '<div style="color:var(--ink-3);font-size:12.5px">✓ 已入库（刷新页面看）</div>'; }
+        else { btns[0].disabled=false; btns[0].textContent='采纳'; }
+      };
+      btns[1].onclick = function(){ card.remove(); };
+      box.appendChild(card);
+    });
+  } catch(e){ box.innerHTML = '<div class="empty">出错了：'+e+'</div>'; }
+  finally { btn.disabled = false; btn.textContent = '让 AI 提炼'; }
+}
+function escapeHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+</script>
+{% endif %}
+{% endblock %}

@@ -561,3 +561,65 @@ def test_audience_archive_and_page():
     html = _client().get("/media/audience").text
     assert "高付费段" in html            # active 显示
     assert "低付费段" not in html         # archived 不显示
+
+
+# ─────────────── 生意锚点 ───────────────
+
+def _anchor_rows(pid):
+    async def go():
+        db = await get_db()
+        try:
+            cur = await db.execute(
+                "SELECT * FROM media_anchor WHERE persona_id=? ORDER BY created_at", (pid,))
+            return [dict(r) for r in await cur.fetchall()]
+        finally:
+            await db.close()
+    return asyncio.run(go())
+
+
+def test_anchor_manual_create():
+    _seed_persona_real()
+    r = _client().post("/media/anchor", data={
+        "persona_id": "RTP2", "name": "1v1陪跑", "type": "service",
+        "value_prop": "手把手落地", "price_band": "几千", "path": "内容→私信→付费"},
+        follow_redirects=False)
+    assert r.status_code == 302
+    rows = [x for x in _anchor_rows("RTP2") if x["name"] == "1v1陪跑"]
+    assert rows[0]["source"] == "manual" and rows[0]["type"] == "service"
+
+
+def test_anchor_draft_route(monkeypatch):
+    async def fake(db, pid, answers, model="auto"):
+        return {"ok": True, "anchors": [{"name": "训练营", "type": "service",
+                "value_prop": "系统课", "price_band": "低", "path": "内容→社群→报名",
+                "evidence": ""}], "error": "", "cost": 0, "model": "m"}
+    monkeypatch.setattr("app.api.media.draft_anchors", fake)
+    _seed_persona_real()
+    r = _client().post("/media/anchor/draft", data={"answers": "我靠训练营变现"})
+    assert r.status_code == 200
+    assert r.json()["anchors"][0]["name"] == "训练营"
+
+
+def test_anchor_adopt_and_archive_and_page():
+    _only_active_persona()
+    c = _client()
+    r = c.post("/media/anchor/adopt", data={
+        "persona_id": "RTP2", "name": "已跑通锚点", "type": "service",
+        "value_prop": "vp", "status": "proven"})
+    assert r.json()["ok"] is True
+
+    async def seed_more():
+        db = await get_db()
+        try:
+            await db.execute("INSERT INTO media_anchor "
+                "(id,persona_id,name,type,status) VALUES ('ANC_D','RTP2','废弃锚点','service','dropped')")
+            await db.commit()
+        finally:
+            await db.close()
+    asyncio.run(seed_more())
+
+    r = c.post("/media/anchor/ANC_D/archive", follow_redirects=False)
+    assert r.status_code == 302
+    html = c.get("/media/anchor").text
+    assert "已跑通锚点" in html         # active 显示
+    assert "废弃锚点" not in html        # archived 不显示
