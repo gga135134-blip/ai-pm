@@ -623,3 +623,43 @@ def test_anchor_adopt_and_archive_and_page():
     html = c.get("/media/anchor").text
     assert "已跑通锚点" in html         # active 显示
     assert "废弃锚点" not in html        # archived 不显示
+
+
+# ─────────────── 决策引擎 ───────────────
+
+def test_topics_rank_writes_scores():
+    _only_active_persona()
+
+    async def seed():
+        db = await get_db()
+        try:
+            await db.execute("DELETE FROM media_topic WHERE persona_id='RTP2'")
+            await db.execute("INSERT INTO media_audience "
+                "(id,persona_id,segment,anxiety,language,pay_willingness,status) VALUES "
+                "('SG1','RTP2','焦虑老板','中小企业AI落地难','能落地不',5,'active')")
+            await db.execute("INSERT INTO media_topic "
+                "(id,persona_id,title,puzzle,fit_score,heat,status) VALUES "
+                "('TP_HI','RTP2','中小企业AI落地为什么这么难','',5,5,'pool'),"
+                "('TP_LO','RTP2','随便一个不相关话题','',1,1,'pool')")
+            await db.commit()
+        finally:
+            await db.close()
+    asyncio.run(seed())
+
+    r = _client().post("/media/topics/rank", follow_redirects=False)
+    assert r.status_code == 302
+
+    async def check():
+        db = await get_db()
+        try:
+            cur = await db.execute(
+                "SELECT id,decision_score,decision_report FROM media_topic "
+                "WHERE persona_id='RTP2' ORDER BY decision_score DESC")
+            return [dict(r) for r in await cur.fetchall()]
+        finally:
+            await db.close()
+    rows = asyncio.run(check())
+    assert rows[0]["id"] == "TP_HI"                 # 高契合+命中受众 排前
+    assert rows[0]["decision_score"] > rows[1]["decision_score"]
+    assert "决策得分" in rows[0]["decision_report"]
+    assert "未计" in rows[0]["decision_report"]      # C 类降级标注在

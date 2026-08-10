@@ -18,6 +18,7 @@ from app.services.media_ai import (
     learn_edit_style, draft_audience_segments, draft_anchors,
 )
 from app.services.media_flow import finalize_updates, clean_body
+from app.services.media_decision import build_decision_context, rank_pool
 from app.services.ai_router import _load_config
 from app.config import BASE_DIR
 
@@ -780,6 +781,55 @@ async def topics_ai_recommend():
     finally:
         await db.close()
     return JSONResponse(result)
+
+
+@router.post("/media/topics/rank")
+async def topics_rank():
+    """一键给选题池全部 pool 话题打分，写 decision_score + decision_report。纯计算。"""
+    db = await get_db()
+    try:
+        pid = await _first_persona_id(db)
+        if not pid:
+            return RedirectResponse("/media/topics", status_code=302)
+        cur = await db.execute("SELECT current_phase FROM media_persona WHERE id=?", (pid,))
+        prow = await cur.fetchone()
+        phase = (prow["current_phase"] if prow else "") or "涨粉"
+
+        cur = await db.execute(
+            "SELECT * FROM media_persona_trait WHERE persona_id=? AND status='active'", (pid,))
+        traits = [dict(r) for r in await cur.fetchall()]
+        cur = await db.execute(
+            "SELECT * FROM media_audience WHERE persona_id=? AND status='active'", (pid,))
+        audiences = [dict(r) for r in await cur.fetchall()]
+        cur = await db.execute(
+            "SELECT * FROM media_anchor WHERE persona_id=? AND status!='dropped' "
+            "AND status!='archived'", (pid,))
+        anchors = [dict(r) for r in await cur.fetchall()]
+        cur = await db.execute(
+            "SELECT * FROM media_material WHERE persona_id=? AND status='active'", (pid,))
+        materials = [dict(r) for r in await cur.fetchall()]
+        cur = await db.execute(
+            "SELECT title, brief FROM media_content WHERE persona_id=? "
+            "ORDER BY created_at DESC LIMIT 5", (pid,))
+        recent = [dict(r) for r in await cur.fetchall()]
+        cur = await db.execute(
+            "SELECT title, topic_fingerprint, outcome FROM media_content WHERE persona_id=?", (pid,))
+        history = [dict(r) for r in await cur.fetchall()]
+
+        cur = await db.execute(
+            "SELECT * FROM media_topic WHERE persona_id=? AND status='pool'", (pid,))
+        topics = [dict(r) for r in await cur.fetchall()]
+
+        ctx = build_decision_context(traits, audiences, anchors, materials, recent, history)
+        ranked = rank_pool(topics, ctx, phase)
+        for t in ranked:
+            await db.execute(
+                "UPDATE media_topic SET decision_score=?, decision_report=? WHERE id=?",
+                (t["decision_score"], t["decision_report"], t["id"]))
+        await db.commit()
+    finally:
+        await db.close()
+    return RedirectResponse("/media/topics", status_code=302)
 
 
 # ─────────────── 内容详情 ───────────────
