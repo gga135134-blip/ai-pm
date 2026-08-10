@@ -403,6 +403,41 @@ CREATE TABLE IF NOT EXISTS media_material (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (persona_id) REFERENCES media_persona(id)
 );
+
+CREATE TABLE IF NOT EXISTS media_audience (
+    id TEXT PRIMARY KEY,
+    persona_id TEXT NOT NULL,
+    segment TEXT DEFAULT '',
+    who TEXT DEFAULT '',
+    anxiety TEXT DEFAULT '',
+    desire TEXT DEFAULT '',
+    objection TEXT DEFAULT '',
+    language TEXT DEFAULT '',
+    pay_willingness INTEGER DEFAULT 3,
+    pay_scene TEXT DEFAULT '',
+    pay_ceiling TEXT DEFAULT '',
+    evidence TEXT DEFAULT '',
+    confidence INTEGER DEFAULT 3,
+    source TEXT DEFAULT '',
+    status TEXT DEFAULT 'active',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (persona_id) REFERENCES media_persona(id)
+);
+
+CREATE TABLE IF NOT EXISTS media_anchor (
+    id TEXT PRIMARY KEY,
+    persona_id TEXT NOT NULL,
+    name TEXT DEFAULT '',
+    type TEXT DEFAULT 'service',
+    value_prop TEXT DEFAULT '',
+    price_band TEXT DEFAULT '',
+    path TEXT DEFAULT '',
+    evidence TEXT DEFAULT '',
+    source TEXT DEFAULT '',
+    status TEXT DEFAULT 'validating',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (persona_id) REFERENCES media_persona(id)
+);
 """
 
 
