@@ -1394,3 +1394,69 @@ async def extract_from_transcript(transcript: str, model: str = "auto") -> dict:
         "topic_fingerprint": _txt(obj.get("topic_fingerprint")),
         **meta,
     }
+
+
+_MINE_MATERIAL_TYPES = ("story", "pit", "judgment", "opinion", "data", "quote")
+
+MINE_SYSTEM = """你是自媒体资产提炼师。给你一段已发视频的口播转写稿，你要挖出两桶「精华」——
+只挖真正值钱的，废话直接不提（宁缺毋滥）。
+
+桶A 内容素材（可复用的内容资产）——只留满足"未来别的内容能复用 + 体现真实经历/独特视角"的：
+- story 故事：具体真实事件/案例（有人物有情节，不是泛泛"我经历过"）
+- pit 踩过的坑：真实教训/弯路
+- judgment 判断 / opinion 观点：有信息量的独到看法（不是正确的废话）
+- data 数据素材：具体数字/实证
+- quote 金句：有记忆点、能单独拎出来用的表达
+丢：开场问候/自我介绍、点赞关注引导/平台套话、纯过渡句、泛泛而谈、重复啰嗦。
+
+桶B 口头禅/记忆点（用户标志性的说话方式/腔调，进人设让 AI 写得越来越像用户）——
+留：反复出现、标志性、一听就"这是他"的表达/句式/腔调。
+丢：谁都在用的口水词（"然后""这个""嗯"）、偶发一次没成习惯的。
+
+铁律：
+1. 只从转写稿里挖，绝不编造用户没说过的；每条 evidence 引一句原文。
+2. 只给精华：内容料每类最多3条、口头禅最多5条，够不上标准的不提。
+3. 每条给一句"为什么值得留"(reason)。
+4. 只输出 JSON，不要任何解释。
+
+输出格式：
+{"materials":[{"type":"story","content":"...","brief":"注入用一句话","evidence":"原文片段","reason":"为什么值得留"}],
+ "signatures":[{"content":"口头禅/句式","brief":"一句话","evidence":"原文片段","reason":"为什么值得留"}]}"""
+
+
+async def mine_from_transcript(db, persona_id: str, transcript: str,
+                               model: str = "auto") -> dict:
+    """从转写稿挖两桶精华候选（内容素材/口头禅）。绝不写库——返回候选，人拍板 adopt 才入。"""
+    snippet = (transcript or "").strip()[:8000]
+    if not snippet:
+        return {"ok": False, "materials": [], "signatures": [],
+                "error": "转写稿为空", "cost": 0, "model": ""}
+    result = await ask_ai(f"转写稿：\n{snippet}", model=model, task_type="media_topic",
+                          system_prompt=MINE_SYSTEM, json_mode=True)
+    resp = result.get("response", "")
+    await log_injection(db, "", "mine_from_transcript", [], result.get("tokens", 0))
+    if resp.startswith("[错误]") or resp.startswith("[费用保护]"):
+        return {"ok": False, "materials": [], "signatures": [],
+                "error": resp, "cost": result.get("cost", 0), "model": result.get("model", "")}
+    obj = extract_json(resp, expect="object")
+    mats, sigs = [], []
+    for it in (obj.get("materials") or []) if isinstance(obj, dict) else []:
+        if not isinstance(it, dict):
+            continue
+        t = _txt(it.get("type"))
+        mats.append({
+            "type": t if t in _MINE_MATERIAL_TYPES else "story",
+            "content": _txt(it.get("content")), "brief": _txt(it.get("brief")),
+            "evidence": _txt(it.get("evidence")), "reason": _txt(it.get("reason")),
+        })
+    for it in (obj.get("signatures") or []) if isinstance(obj, dict) else []:
+        if not isinstance(it, dict):
+            continue
+        sigs.append({
+            "content": _txt(it.get("content")), "brief": _txt(it.get("brief")),
+            "evidence": _txt(it.get("evidence")), "reason": _txt(it.get("reason")),
+        })
+    mats = [m for m in mats if m["content"]]
+    sigs = [s for s in sigs if s["content"]]
+    return {"ok": True, "materials": mats, "signatures": sigs, "error": "",
+            "cost": result.get("cost", 0), "model": result.get("model", "")}

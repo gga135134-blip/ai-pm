@@ -721,3 +721,97 @@ def test_asr_audio_public_and_traversal_guarded(tmp_path, monkeypatch):
     assert c.get("/media/asr-audio/abc.mp3").content == b"AUDIO"     # 公开可达
     assert c.get("/media/asr-audio/nope.mp3").status_code == 404
     assert c.get("/media/asr-audio/..%2f..%2fsecret").status_code == 404  # 穿越挡掉
+
+
+def _seed_reverse_content(cid="RVC1", pid="RTP2"):
+    async def go():
+        db = await get_db()
+        try:
+            await db.execute("DELETE FROM media_content WHERE id=?", (cid,))
+            await db.execute(
+                "INSERT INTO media_content (id,persona_id,title,stage,idea_source,script) "
+                "VALUES (?,?,?,'published','video_reverse',?)",
+                (cid, pid, "反向内容", "老板买了一堆AI工具还是用不起来，卡在哪"))
+            await db.commit()
+        finally:
+            await db.close()
+    asyncio.run(go())
+
+
+def test_content_detail_reverse_shows_lean_view():
+    _only_active_persona()
+    _seed_reverse_content()
+    html = _client().get("/media/content/RVC1").text
+    assert "反向补录" in html            # 精简视图标记
+    assert "AI 写脚本" not in html        # 创作台被砍
+
+
+def test_mine_route_calls_ai(monkeypatch):
+    _only_active_persona()
+    _seed_reverse_content()
+    import app.api.media as media_mod
+
+    async def fake_mine(db, pid, transcript, model="auto"):
+        return {"ok": True, "materials": [{"type": "story", "content": "一个真故事",
+                "brief": "b", "evidence": "e", "reason": "r"}],
+                "signatures": [{"content": "你要知道", "brief": "b", "evidence": "e",
+                "reason": "r"}], "error": "", "cost": 0, "model": "x"}
+    monkeypatch.setattr(media_mod, "mine_from_transcript", fake_mine)
+    r = _client().post("/media/content/RVC1/mine")
+    assert r.status_code == 200 and r.json()["ok"] is True
+    assert r.json()["materials"][0]["type"] == "story"
+    assert r.json()["signatures"][0]["content"] == "你要知道"
+
+
+def test_mine_adopt_material_writes_row():
+    _only_active_persona()
+    _seed_reverse_content()
+    _client().post("/media/content/RVC1/mine/adopt-material", data={
+        "type": "story", "detail": "一个真故事", "brief": "b"}, follow_redirects=False)
+
+    async def cnt():
+        db = await get_db()
+        try:
+            cur = await db.execute(
+                "SELECT type,source FROM media_material WHERE persona_id='RTP2' "
+                "AND detail='一个真故事'")
+            return [dict(x) for x in await cur.fetchall()]
+        finally:
+            await db.close()
+    rows = asyncio.run(cnt())
+    assert rows and rows[0]["source"] == "反向挖料" and rows[0]["type"] == "story"
+
+
+def test_published_at_saved():
+    _only_active_persona()
+    _seed_reverse_content()
+    _client().post("/media/content/RVC1/published-at",
+                   data={"published_at": "2024-10-21"}, follow_redirects=False)
+
+    async def get():
+        db = await get_db()
+        try:
+            cur = await db.execute("SELECT published_at FROM media_content WHERE id='RVC1'")
+            return (await cur.fetchone())["published_at"]
+        finally:
+            await db.close()
+    assert asyncio.run(get()) == "2024-10-21"
+
+
+def test_interview_adopt_accepts_reverse_mine_source():
+    _only_active_persona()
+    _client().post("/media/persona/RTP2/interview/adopt", data={
+        "dimension": "signature", "content": "你要知道", "source": "reverse_mine"},
+        follow_redirects=False)
+
+    async def get():
+        db = await get_db()
+        try:
+            cur = await db.execute(
+                "SELECT source FROM media_persona_trait WHERE persona_id='RTP2' "
+                "AND content='你要知道'")
+            return [dict(x) for x in await cur.fetchall()]
+        finally:
+            await db.close()
+    rows = asyncio.run(get())
+    assert rows and rows[0]["source"] == "reverse_mine"

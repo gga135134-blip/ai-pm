@@ -51,6 +51,46 @@
   </form>
   {% endif %}
 
+  {% if is_reverse %}
+  <div class="module">
+    <div class="mh"><span class="ttl" style="font-size:14px">🎬 反向补录 · 已发实况</span></div>
+    <div style="padding:0 4px">
+      {% if content.idea_reason %}
+      <div style="margin:6px 0"><a href="{{ content.idea_reason }}" target="_blank" style="color:var(--accent); font-size:13px">🔗 原视频链接</a></div>
+      {% endif %}
+      <form method="post" action="/media/content/{{ content.id }}/published-at" style="display:flex; gap:8px; align-items:center; margin:8px 0">
+        <label style="font-size:12.5px; color:var(--ink-3)">📅 发布时间</label>
+        <input type="date" name="published_at" value="{{ content.published_at or '' }}" style="padding:4px 8px">
+        <button class="btn" style="padding:4px 12px; font-size:12px">保存</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="module">
+    <div class="mh"><span class="ttl" style="font-size:14px">平台转写稿</span>
+      <span style="color:var(--ink-3); font-size:12px">· 可改错字</span></div>
+    <form method="post" action="/media/content/{{ content.id }}/script">
+      <textarea name="script" rows="10" style="width:100%; font-size:13px"
+                placeholder="平台转写">{{ content.script }}</textarea>
+      <button class="btn" style="margin-top:6px; padding:6px 14px; font-size:12.5px">保存转写稿</button>
+    </form>
+  </div>
+
+  <div class="module">
+    <div class="mh"><span class="ttl" style="font-size:14px">🔬 从转写稿挖精华</span>
+      <button onclick="mineEssence()" id="mine-btn" class="btn ai" style="padding:6px 12px; font-size:12px">{{ ic.icon('robot') }}挖精华</button></div>
+    <div id="mine-status" style="font-size:12.5px; color:var(--ai); min-height:18px; padding:0 4px"></div>
+    <div id="mine-materials"></div>
+    <div id="mine-signatures"></div>
+  </div>
+
+  <div class="module">
+    <div class="mh"><span class="ttl" style="font-size:14px">🔗 关联到我写过的内容</span></div>
+    <div style="padding:4px; font-size:12.5px; color:var(--ink-3)">（规划中）把这条平台实况关联到你当初写过的内容，喂功能B学改稿，让 AI 越来越懂你临场怎么改。</div>
+  </div>
+  {% endif %}
+
+  {% if not is_reverse %}
   <!-- ===== 二期 🅐：创作辅助（写稿前认知子流程，只在选题阶段展开）===== -->
   {% if content.stage == 'idea' %}
   <div class="module">
@@ -241,6 +281,7 @@
     {% endif %}
     </div>
   </div>
+  {% endif %}
 
   <!-- ===== 复盘 ===== -->
   <div class="module">
@@ -414,6 +455,7 @@ const CID = "{{ content.id }}";
 function _auth(msg){ const s=document.getElementById('authoring-status'); if(s){ s.style.display='block'; s.textContent=msg; } }
 async function _postJSON(url, body){ const r=await fetch(url,{method:'POST',body:body||null}); return await r.json(); }
 
+{% if not is_reverse %}
 async function interview(){
   _auth('AI 正在想问题…');
   const j = await _postJSON(`/media/content/${CID}/interview`);
@@ -456,6 +498,7 @@ function fillFromDraft(){
   const box=document.getElementById('script-box');
   if(cache && box){ box.value=cache.value; box.scrollIntoView({behavior:'smooth'}); _auth('已把 AI 草稿填进脚本框，改成你要念的话，保存即定稿。'); }
 }
+{% endif %}
 
 // ===== 带要求重写 / 复制正文（跟后端 clean_body 保持一致）=====
 async function rewrite(){
@@ -569,6 +612,66 @@ function renderSupply(e){
     sp.textContent=`[${x.material_type||''}] ${x.item}`;
     row.appendChild(b); row.appendChild(sp); box.appendChild(row);
   });
+}
+
+// ===== 反向补录：从转写稿挖精华 =====
+function escapeHtml(s){ const d=document.createElement('div'); d.textContent=s==null?'':s; return d.innerHTML; }
+
+async function mineEssence(){
+  const btn=document.getElementById('mine-btn');
+  const status=document.getElementById('mine-status');
+  const orig=btn.innerHTML;
+  btn.disabled=true; btn.textContent='挖料中…';
+  status.textContent='AI 正在从转写稿挖精华…';
+  try{
+    const r=await fetch('/media/content/{{ content.id }}/mine',{method:'POST'});
+    const d=await r.json();
+    if(!d.ok){ status.textContent='失败：'+(d.error||'未知错误'); btn.disabled=false; btn.innerHTML=orig; return; }
+    renderMine('mine-materials','内容素材（→原料库）', d.materials, 'material');
+    renderMine('mine-signatures','口头禅/记忆点（→人设）', d.signatures, 'signature');
+    status.textContent='挖出 内容料 '+d.materials.length+' 条、口头禅 '+d.signatures.length+' 条。逐条采纳。';
+    btn.disabled=false; btn.innerHTML=orig;
+  }catch(e){ status.textContent='请求失败：'+e; btn.disabled=false; btn.innerHTML=orig; }
+}
+
+function renderMine(elId, title, items, kind){
+  const box=document.getElementById(elId);
+  if(!items || !items.length){ box.innerHTML=''; return; }
+  let h='<div style="font-size:12.5px; color:var(--ink-2); margin:10px 4px 4px">'+title+'</div>';
+  items.forEach((it,i)=>{
+    const t = kind==='material' ? ('['+escapeHtml(it.type)+'] ') : '';
+    h+='<div class="card" style="padding:10px; margin:6px 0" id="'+kind+'-'+i+'">'
+      +'<div style="font-size:13px">'+t+escapeHtml(it.content)+'</div>'
+      +'<div style="font-size:11.5px; color:var(--ink-3); margin-top:4px">原文：'+escapeHtml(it.evidence)+'</div>'
+      +'<div style="font-size:11.5px; color:var(--ai); margin-top:2px">为什么值得留：'+escapeHtml(it.reason)+'</div>'
+      +'<div style="margin-top:6px"><button class="btn primary" style="padding:4px 12px; font-size:12px" '
+      +'onclick=\'adoptMine("'+kind+'",'+i+')\'>采纳</button> '
+      +'<button class="btn ghost" style="padding:4px 12px; font-size:12px" onclick=\'document.getElementById("'+kind+'-'+i+'").remove()\'>丢弃</button></div>'
+      +'</div>';
+  });
+  box.innerHTML=h;
+  box['_items']=items;
+}
+
+async function adoptMine(kind, i){
+  const items=document.getElementById(kind==='material'?'mine-materials':'mine-signatures')['_items'];
+  const it=items[i];
+  let url, fd=new FormData();
+  if(kind==='material'){
+    url='/media/content/{{ content.id }}/mine/adopt-material';
+    fd.append('type', it.type); fd.append('detail', it.content); fd.append('brief', it.brief||'');
+  }else{
+    url='/media/persona/{{ content.persona_id }}/interview/adopt';
+    fd.append('dimension','signature'); fd.append('content', it.content);
+    fd.append('brief', it.brief||''); fd.append('evidence', it.evidence||'');
+    fd.append('source','reverse_mine');
+  }
+  try{
+    const r=await fetch(url,{method:'POST', body:fd});
+    const d=await r.json().catch(()=>({ok:r.ok}));
+    const el=document.getElementById(kind+'-'+i);
+    if(d.ok && el){ el.style.opacity='.5'; el.querySelector('button').outerHTML='<span style="color:var(--success); font-size:12px">已采纳✓</span>'; }
+  }catch(e){}
 }
 </script>
 {% endblock %}
