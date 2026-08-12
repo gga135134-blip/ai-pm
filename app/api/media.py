@@ -1,9 +1,11 @@
 import json
 import logging
 import uuid
+from pathlib import Path as _Path
 from fastapi import APIRouter, Request, Form, UploadFile, File
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, FileResponse
 from app.database import get_db
+from app.services.media_reverse import reverse_ingest
 from app.services.media_metrics import recognize_screenshot, save_metrics
 from app.services.media_feishu_sync import sync_from_feishu
 from app.services.media_flow import (
@@ -25,6 +27,8 @@ from app.config import BASE_DIR
 log = logging.getLogger(__name__)
 
 router = APIRouter()
+
+ASR_PUBLIC_DIR = BASE_DIR / "data" / "asr_public"
 
 TRAIT_DIMENSIONS = {
     "positioning": "定位",
@@ -764,6 +768,42 @@ async def content_stage(cid: str, to: str = Form(...), back: str = Form("")):
         await db.close()
     target = "/media" if back == "board" else f"/media/content/{cid}"
     return RedirectResponse(target, status_code=302)
+
+
+@router.post("/media/reverse-ingest")
+async def media_reverse_ingest(request: Request, video_url: str = Form(...)):
+    """功能C：贴已发视频链接→转写→AI提选题→建 content。"""
+    url = video_url.strip()
+    if not url:
+        return JSONResponse({"ok": False, "error": "请填视频链接"})
+    cfg = (_load_config().get("douyin_asr") or {})
+    if not cfg.get("app_id") or not cfg.get("access_key"):
+        return JSONResponse({"ok": False, "error": "未配置豆包 ASR 凭证，去设置页填"})
+    db = await get_db()
+    try:
+        pid = await _first_persona_id(db)
+        if not pid:
+            return JSONResponse({"ok": False, "error": "请先创建人设"})
+        public_base = str(request.base_url).rstrip("/")
+        try:
+            result = await reverse_ingest(db, pid, url, cfg, public_base, ASR_PUBLIC_DIR)
+        except Exception as e:
+            log.exception("视频反向入库失败")
+            return JSONResponse({"ok": False, "error": str(e)})
+    finally:
+        await db.close()
+    return JSONResponse(result)
+
+
+@router.get("/media/asr-audio/{token}")
+async def media_asr_audio(token: str):
+    """公开免登录返回临时音频（供豆包 ASR 抓）。防目录穿越。"""
+    if "/" in token or "\\" in token or ".." in token:
+        return JSONResponse({"error": "bad token"}, status_code=404)
+    path = _Path(ASR_PUBLIC_DIR) / token
+    if not path.exists() or not path.is_file():
+        return JSONResponse({"error": "not found"}, status_code=404)
+    return FileResponse(str(path), media_type="audio/mpeg")
 
 
 @router.post("/media/topics/ai-recommend")

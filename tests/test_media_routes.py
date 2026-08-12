@@ -315,6 +315,7 @@ def _only_active_persona(pid="RTP2", phase="AI落地期"):
             await db.execute("DELETE FROM media_material WHERE persona_id=?", (pid,))
             await db.execute("DELETE FROM media_audience WHERE persona_id=?", (pid,))
             await db.execute("DELETE FROM media_anchor WHERE persona_id=?", (pid,))
+            await db.execute("DELETE FROM media_topic WHERE persona_id=?", (pid,))
             await db.execute("DELETE FROM media_content WHERE persona_id=?", (pid,))
             await db.execute("DELETE FROM media_persona WHERE id=?", (pid,))
             await db.execute(
@@ -681,3 +682,41 @@ def test_topics_tag_no_persona_returns_ok_false():
     r = _client().post("/media/topics/tag")
     assert r.status_code == 200
     assert r.json()["ok"] is False
+
+
+def test_reverse_ingest_no_creds_returns_ok_false(monkeypatch):
+    _only_active_persona()
+    # 桩掉 _load_config 让 douyin_asr 为空
+    import app.api.media as media_mod
+    monkeypatch.setattr(media_mod, "_load_config", lambda: {})
+    r = _client().post("/media/reverse-ingest", data={"video_url": "https://v.douyin.com/x/"})
+    assert r.status_code == 200
+    assert r.json()["ok"] is False
+
+
+def test_reverse_ingest_calls_orchestrator(monkeypatch):
+    _only_active_persona()
+    import app.api.media as media_mod
+    monkeypatch.setattr(media_mod, "_load_config",
+                        lambda: {"douyin_asr": {"app_id": "A", "access_key": "K"}})
+
+    async def fake_ingest(db, pid, url, cfg, public_base, audio_dir, model="auto"):
+        return {"ok": True, "content_id": "CX", "title": "标题", "error": ""}
+    monkeypatch.setattr(media_mod, "reverse_ingest", fake_ingest)
+
+    r = _client().post("/media/reverse-ingest", data={"video_url": "https://v.douyin.com/x/"})
+    assert r.status_code == 200 and r.json()["ok"] is True
+    assert r.json()["content_id"] == "CX"
+
+
+def test_asr_audio_public_and_traversal_guarded(tmp_path, monkeypatch):
+    import app.api.media as media_mod
+    monkeypatch.setattr(media_mod, "ASR_PUBLIC_DIR", tmp_path)
+    (tmp_path / "abc.mp3").write_bytes(b"AUDIO")
+    # 免登录 client（不塞 cookie）
+    from fastapi.testclient import TestClient
+    from app.main import app
+    c = TestClient(app)
+    assert c.get("/media/asr-audio/abc.mp3").content == b"AUDIO"     # 公开可达
+    assert c.get("/media/asr-audio/nope.mp3").status_code == 404
+    assert c.get("/media/asr-audio/..%2f..%2fsecret").status_code == 404  # 穿越挡掉
