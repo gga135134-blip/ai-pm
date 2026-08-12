@@ -777,7 +777,7 @@ async def media_reverse_ingest(request: Request, video_url: str = Form(...)):
     if not url:
         return JSONResponse({"ok": False, "error": "请填视频链接"})
     cfg = (_load_config().get("douyin_asr") or {})
-    if not cfg.get("app_id") or not cfg.get("access_key"):
+    if not cfg.get("api_key") and not (cfg.get("app_id") and cfg.get("access_key")):
         return JSONResponse({"ok": False, "error": "未配置豆包 ASR 凭证，去设置页填"})
     db = await get_db()
     try:

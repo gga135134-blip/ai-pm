@@ -300,10 +300,14 @@
     <!-- ============ 豆包 ASR 凭证（功能C 视频反向入库用）：独立表单 ============ -->
     <form method="post" action="/settings/asr" style="margin-top:16px">
       <h3 style="font-size:15px; margin-bottom:8px">豆包录音文件识别（视频反向入库用）</h3>
-      <label>App ID
+      <label>API Key（新版豆包语音「API Key」页复制，推荐）
+        <input name="douyin_asr_api_key" value="{{ config.douyin_asr.api_key }}" style="width:100%">
+        <span class="st-save-hint">填了 API Key 就用新版单串鉴权，下面 App ID / Access Key 可留空</span>
+      </label>
+      <label>App ID（老版鉴权，填了 API Key 可不填）
         <input name="douyin_asr_app_id" value="{{ config.douyin_asr.app_id }}" style="width:100%">
       </label>
-      <label>Access Key
+      <label>Access Key（老版鉴权，填了 API Key 可不填）
         <input name="douyin_asr_access_key" value="{{ config.douyin_asr.access_key }}" style="width:100%">
       </label>
       <label>Resource ID

@@ -27,10 +27,12 @@ def test_load_settings_has_asr_default(tmp_path, monkeypatch):
 def test_save_asr_creds_persists(tmp_path, monkeypatch):
     monkeypatch.setattr(st, "CONFIG_FILE", tmp_path / "s.json")
     _client().post("/settings/asr", data={
+        "douyin_asr_api_key": "APIKEY123",
         "douyin_asr_app_id": "APP123", "douyin_asr_access_key": "AK123",
         "douyin_asr_resource_id": "volc.bigasr.auc",
         "douyin_asr_public_base": "http://159.75.200.213:8000"}, follow_redirects=False)
     cfg = st.load_settings()
+    assert cfg["douyin_asr"]["api_key"] == "APIKEY123"
     assert cfg["douyin_asr"]["app_id"] == "APP123"
     assert cfg["douyin_asr"]["access_key"] == "AK123"
     assert cfg["douyin_asr"]["public_base"] == "http://159.75.200.213:8000"

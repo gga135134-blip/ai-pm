@@ -23,19 +23,24 @@ class ASRError(Exception):
 
 
 def _headers(cfg: dict, request_id: str) -> dict:
-    return {
-        "X-Api-App-Key": cfg.get("app_id", ""),
-        "X-Api-Access-Key": cfg.get("access_key", ""),
+    """按配置选鉴权方式：填了 api_key 走新版单串 X-Api-Key，否则老式 app_id+access_key。"""
+    h = {
         "X-Api-Resource-Id": cfg.get("resource_id") or "volc.bigasr.auc",
         "X-Api-Request-Id": request_id,
         "X-Api-Sequence": "-1",
         "Content-Type": "application/json",
     }
+    if cfg.get("api_key"):
+        h["X-Api-Key"] = cfg["api_key"]          # 新版豆包语音「API Key」单串鉴权
+    else:
+        h["X-Api-App-Key"] = cfg.get("app_id", "")
+        h["X-Api-Access-Key"] = cfg.get("access_key", "")
+    return h
 
 
 async def transcribe_url(audio_url: str, cfg: dict) -> str:
     """提交音频 URL → 轮询 → 返回转写全文。失败/超时抛 ASRError。"""
-    if not cfg.get("app_id") or not cfg.get("access_key"):
+    if not cfg.get("api_key") and not (cfg.get("app_id") and cfg.get("access_key")):
         raise ASRError("未配置豆包 ASR 凭证")
     base = (cfg.get("base_url") or _DEFAULT_BASE).rstrip("/")
     request_id = str(uuid.uuid4())
