@@ -27,7 +27,7 @@ async def reverse_ingest(db, persona_id: str, video_url: str, cfg: dict,
     try:
         # ① 抽音频到公开目录（文件名即随机 token）
         try:
-            audio_file = await fetch_audio(video_url, audio_dir, cookies_path)
+            audio_file, upload_date = await fetch_audio(video_url, audio_dir, cookies_path)
         except VideoFetchError as e:
             return {"ok": False, "content_id": "", "title": "", "error": str(e)}
 
