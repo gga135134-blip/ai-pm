@@ -125,3 +125,21 @@ def test_anchor_columns():
     cols = _cols("media_anchor")
     assert {"persona_id", "name", "type", "value_prop", "price_band",
             "path", "evidence", "source", "status"} <= cols
+
+
+def test_media_topic_has_tagging_columns():
+    import asyncio
+    from app.database import get_db, init_db
+
+    async def check():
+        await init_db()
+        db = await get_db()
+        try:
+            cur = await db.execute("PRAGMA table_info(media_topic)")
+            cols = {r["name"] for r in await cur.fetchall()}
+            return cols
+        finally:
+            await db.close()
+
+    cols = asyncio.run(check())
+    assert {"audience_ids", "anchor_ids", "dropped_drift_ids", "tagged"} <= cols

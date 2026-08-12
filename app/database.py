@@ -237,6 +237,10 @@ CREATE TABLE IF NOT EXISTS media_topic (
     decision_score REAL DEFAULT 0,
     decision_report TEXT DEFAULT '',
     related_trait_ids TEXT DEFAULT '[]',
+    audience_ids TEXT DEFAULT '[]',
+    anchor_ids TEXT DEFAULT '[]',
+    dropped_drift_ids TEXT DEFAULT '[]',
+    tagged INTEGER DEFAULT 0,
     status TEXT DEFAULT 'pool',
     adopted_content_id TEXT DEFAULT '',
     rejected_reason TEXT DEFAULT '',
@@ -477,6 +481,10 @@ MIGRATIONS = [
     "ALTER TABLE media_content ADD COLUMN revision_count INTEGER DEFAULT 0",
     "ALTER TABLE media_content ADD COLUMN finalized_at DATETIME",
     "ALTER TABLE media_material ADD COLUMN source TEXT DEFAULT ''",
+    "ALTER TABLE media_topic ADD COLUMN audience_ids TEXT DEFAULT '[]'",
+    "ALTER TABLE media_topic ADD COLUMN anchor_ids TEXT DEFAULT '[]'",
+    "ALTER TABLE media_topic ADD COLUMN dropped_drift_ids TEXT DEFAULT '[]'",
+    "ALTER TABLE media_topic ADD COLUMN tagged INTEGER DEFAULT 0",
 ]
 
 
