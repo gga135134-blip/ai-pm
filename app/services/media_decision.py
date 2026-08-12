@@ -131,8 +131,11 @@ def score_topic(topic: dict, ctx: dict, phase: str) -> dict:
     factors["fit"] = {"value": fit,
                       "note": "，".join(fit_bits) if fit_bits else "与定位/一贯人设关联弱"}
 
-    # ── B 类：纯计算重叠 ──
+    # ── B 类：受众/锚点/护栏。tagged 时读 AI 语义标，未标回落字面重叠 ──
     # ── audience_hit：优先 AI 语义标，没标回落字面重叠 ──
+    # 注意：tagged 命中给满额资产权重，未标回落给 overlap×权重（overlap≤1 通常更小）。
+    # 故混合池（部分老话题未补标）里未标话题会系统性偏低——用「先全池标注再排序」的
+    # 工作流规避（AI标注按钮一次补全 tagged=0 全部，recommend 产出即 tagged=1）。
     if tagged:
         hits = [aud_by_id[i] for i in aud_ids if i in aud_by_id]
         if hits:
@@ -240,7 +243,9 @@ def score_topic(topic: dict, ctx: dict, phase: str) -> dict:
     factors["gap"] = {"value": 0.0, "note": "⚙️ 内容缺口分析待补，此项未计"}
 
     # ── 归一化：正项均值 − 负项均值。正负各自归一，避免负项权重挤进正项分母
-    #    导致满分话题也上不去（C 类权重为 0，天然不进任何分母）。──
+    #    导致满分话题也上不去（C 类权重为 0，天然不进任何分母）。
+    #    注意：负项常驻分母——即使某负项 value=0（如未触发的 dropped_drift）其权重
+    #    仍占 neg_w，这是有意的（与 risk/fatigue/dup 一致），只影响绝对分不影响同质排序。──
     pos = ["fit", "heat", "audience_hit", "anchor_distance", "material_ready"]
     neg = ["risk", "fatigue", "dup_penalty", "dropped_drift"]
     pos_w = sum(W[k] for k in pos)
