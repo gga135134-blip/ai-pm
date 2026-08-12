@@ -663,3 +663,21 @@ def test_topics_rank_writes_scores():
     assert rows[0]["decision_score"] > rows[1]["decision_score"]
     assert "决策得分" in rows[0]["decision_report"]
     assert "未计" in rows[0]["decision_report"]      # C 类降级标注在
+
+
+def test_topics_tag_no_persona_returns_ok_false():
+    """无人设时 tag 路由不崩，返回 ok:false。"""
+    async def wipe():
+        db = await get_db()
+        try:
+            # 用 UPDATE 而非 DELETE：其它测试留下的关联行会让 DELETE 撞外键；
+            # 路由只认 status='active' 的人设，停用即等效于"无人设"。
+            await db.execute("UPDATE media_persona SET status='inactive'")
+            await db.commit()
+        finally:
+            await db.close()
+    asyncio.run(wipe())
+
+    r = _client().post("/media/topics/tag")
+    assert r.status_code == 200
+    assert r.json()["ok"] is False

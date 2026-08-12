@@ -11,7 +11,7 @@ from app.services.media_flow import (
     PERSONA_MODULES, PERSONA_MODULE_ORDER, completed_modules,
 )
 from app.services.media_ai import (
-    recommend_topics, write_script, generate_platform_copy, review_content,
+    recommend_topics, tag_topics, write_script, generate_platform_copy, review_content,
     interview_questions, extract_evidence, propose_angles,
     critique_draft, revise_draft,
     persona_interview_questions, persona_interview_extract,
@@ -783,6 +783,24 @@ async def topics_ai_recommend():
     return JSONResponse(result)
 
 
+@router.post("/media/topics/tag")
+async def topics_tag():
+    """一键给选题池未打标话题补受众/锚点/护栏标。"""
+    db = await get_db()
+    try:
+        pid = await _first_persona_id(db)
+        if not pid:
+            return JSONResponse({"ok": False, "error": "请先创建人设"})
+        try:
+            result = await tag_topics(db, pid)
+        except Exception as e:
+            log.exception("AI 标注失败")
+            return JSONResponse({"ok": False, "error": str(e)})
+    finally:
+        await db.close()
+    return JSONResponse(result)
+
+
 @router.post("/media/topics/rank")
 async def topics_rank():
     """一键给选题池全部 pool 话题打分，写 decision_score + decision_report。纯计算。"""
@@ -806,6 +824,9 @@ async def topics_rank():
             "AND status!='archived'", (pid,))
         anchors = [dict(r) for r in await cur.fetchall()]
         cur = await db.execute(
+            "SELECT * FROM media_anchor WHERE persona_id=? AND status='dropped'", (pid,))
+        dropped_anchors = [dict(r) for r in await cur.fetchall()]
+        cur = await db.execute(
             "SELECT * FROM media_material WHERE persona_id=? AND status='active'", (pid,))
         materials = [dict(r) for r in await cur.fetchall()]
         cur = await db.execute(
@@ -820,7 +841,8 @@ async def topics_rank():
             "SELECT * FROM media_topic WHERE persona_id=? AND status='pool'", (pid,))
         topics = [dict(r) for r in await cur.fetchall()]
 
-        ctx = build_decision_context(traits, audiences, anchors, materials, recent, history)
+        ctx = build_decision_context(traits, audiences, anchors, materials,
+                                     recent, history, dropped_anchors)
         ranked = rank_pool(topics, ctx, phase)
         for t in ranked:
             await db.execute(

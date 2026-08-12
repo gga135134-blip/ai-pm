@@ -26,6 +26,7 @@
   <form method="post" action="/media/topics/rank" style="display:inline">
     <button class="btn" style="margin-left:8px">🧮 决策排序</button>
   </form>
+  <button onclick="aiTag()" id="tag-btn" class="btn" style="margin-left:8px">🏷️ AI标注</button>
 </div>
 
 <div class="src-row">
@@ -122,6 +123,32 @@ async function aiRecommend() {
     const d = await r.json();
     if (d.ok) {
       status.textContent = '已加入 ' + d.count + ' 条，刷新中…';
+      location.reload();
+    } else {
+      status.textContent = '失败：' + (d.error || '未知错误');
+      btn.disabled = false;
+      btn.innerHTML = orig;
+    }
+  } catch (e) {
+    status.textContent = '请求失败：' + e;
+    btn.disabled = false;
+    btn.innerHTML = orig;
+  }
+}
+
+async function aiTag() {
+  const btn = document.getElementById('tag-btn');
+  const status = document.getElementById('ai-status');
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.textContent = '标注中…';
+  status.style.display = 'block';
+  status.textContent = 'AI 正在给未标话题打受众/锚点标…';
+  try {
+    const r = await fetch('/media/topics/tag', {method: 'POST'});
+    const d = await r.json();
+    if (d.ok) {
+      status.textContent = '已标注 ' + d.count + ' 条，刷新中…';
       location.reload();
     } else {
       status.textContent = '失败：' + (d.error || '未知错误');

@@ -32,8 +32,10 @@ RECOMMEND_SYSTEM = """你是资深自媒体选题策划。你的任务是基于�
 4. 只输出 JSON 数组，不要任何解释文字。
 
 输出格式：
-[{"title":"选题","puzzle":"核心谜题","reason":"为什么值得做","angle":"切入角度","heat":3,"fit_score":4}]
-heat 和 fit_score 都是 1-5 的整数。"""
+[{"title":"选题","puzzle":"核心谜题","reason":"为什么值得做","angle":"切入角度","heat":3,"fit_score":4,"audience_ids":[],"anchor_ids":[],"dropped_drift_ids":[]}]
+heat 和 fit_score 都是 1-5 的整数。
+audience_ids/anchor_ids 只能从下方「资产菜单」给的 id 里选，真命中才填、不沾留空。
+dropped_drift_ids 只在选题往「已放弃方向」飘时才填该 id，默认空。绝不编造 id。"""
 
 
 async def recommend_topics(db, persona_id: str, model: str = "auto") -> dict:
@@ -89,6 +91,8 @@ async def recommend_topics(db, persona_id: str, model: str = "auto") -> dict:
     if rejected:
         parts.append("已弃选题及原因（不要推同类）：\n" + "\n".join(
             f"- {r['title']}：{r['rejected_reason'] or '未说明'}" for r in rejected))
+    menu = await _build_asset_menu(db, persona_id)
+    parts.append("资产菜单（给选题打受众/锚点标用）：\n" + menu["menu"])
     parts.append("请推荐 5 个新选题。")
 
     prompt = "\n\n".join(parts)
@@ -120,11 +124,18 @@ async def recommend_topics(db, persona_id: str, model: str = "auto") -> dict:
         await db.execute(
             "INSERT INTO media_topic "
             "(id,persona_id,title,puzzle,source,reason,angle,heat,fit_score,"
-            " related_trait_ids) VALUES (?,?,?,?,'ai_rec',?,?,?,?,?)",
+            " related_trait_ids,audience_ids,anchor_ids,dropped_drift_ids,tagged) "
+            "VALUES (?,?,?,?,'ai_rec',?,?,?,?,?,?,?,?,1)",
             (str(uuid.uuid4()), persona_id, title, puzzle,
              _txt(it.get("reason")), _txt(it.get("angle")),
              _clamp(it.get("heat"), 3), _clamp(it.get("fit_score"), 3),
-             json.dumps(trait_ids, ensure_ascii=False)))
+             json.dumps(trait_ids, ensure_ascii=False),
+             json.dumps(_clean_ids(it.get("audience_ids"), menu["valid_aud"]),
+                        ensure_ascii=False),
+             json.dumps(_clean_ids(it.get("anchor_ids"), menu["valid_anc"]),
+                        ensure_ascii=False),
+             json.dumps(_clean_ids(it.get("dropped_drift_ids"), menu["valid_dropped"]),
+                        ensure_ascii=False)))
         count += 1
     await db.commit()
 
@@ -156,6 +167,129 @@ def _txt(value) -> str:
     if isinstance(value, (int, float)) and not isinstance(value, bool):
         return str(value)
     return ""
+
+
+def _clean_ids(raw, valid_set) -> list:
+    """把 AI 返回的 id 列表过滤成"只保留合法 id"。防 AI 编造 id / 返回错类型。
+
+    只保留：是字符串、在 valid_set 里、不重复的 id，顺序保持。非 list → []。
+    """
+    if not isinstance(raw, list):
+        return []
+    seen, out = set(), []
+    for x in raw:
+        if isinstance(x, str) and x in valid_set and x not in seen:
+            seen.add(x)
+            out.append(x)
+    return out
+
+
+async def _build_asset_menu(db, persona_id: str) -> dict:
+    """拼给 AI 打标用的资产菜单（受众/可标锚点/已放弃方向三段），并返回合法 id 集。
+
+    dropped 锚点单列进「已放弃方向」段，只供 dropped_drift 护栏反向查，不进可标集。
+    """
+    cur = await db.execute(
+        "SELECT id,segment,anxiety,language,pay_willingness FROM media_audience "
+        "WHERE persona_id=? AND status='active'", (persona_id,))
+    auds = [dict(r) for r in await cur.fetchall()]
+    cur = await db.execute(
+        "SELECT id,name,value_prop,status FROM media_anchor "
+        "WHERE persona_id=? AND status IN ('validating','proven')", (persona_id,))
+    anchors = [dict(r) for r in await cur.fetchall()]
+    cur = await db.execute(
+        "SELECT id,name,value_prop FROM media_anchor "
+        "WHERE persona_id=? AND status='dropped'", (persona_id,))
+    dropped = [dict(r) for r in await cur.fetchall()]
+
+    lines = []
+    if auds:
+        lines.append("【受众 segment】命中填进 audience_ids：")
+        for a in auds:
+            lines.append(f"- id={a['id']}｜{a['segment']}｜焦虑:{a['anxiety']}｜原话:{a['language']}")
+    if anchors:
+        lines.append("【生意锚点】服务填进 anchor_ids：")
+        for a in anchors:
+            lines.append(f"- id={a['id']}｜{a['name']}｜{a['value_prop']}")
+    if dropped:
+        lines.append("【⛔ 已放弃方向】话题若往这些方向飘才填进 dropped_drift_ids：")
+        for a in dropped:
+            lines.append(f"- id={a['id']}｜{a['name']}｜{a['value_prop']}")
+    menu = "\n".join(lines) if lines else "（当前无受众/锚点资产可标，三个 id 列都留空）"
+
+    return {
+        "menu": menu,
+        "valid_aud": {a["id"] for a in auds},
+        "valid_anc": {a["id"] for a in anchors},
+        "valid_dropped": {a["id"] for a in dropped},
+    }
+
+
+TAG_SYSTEM = """你是自媒体选题的资产标注员。给每个话题标注它命中的受众/锚点。
+
+铁律（必须全部满足）：
+1. 只能从给定的资产 id 里选，绝不编造 id。
+2. 真命中才填，不沾就留空数组 —— 不硬凑、不凑数。
+3. dropped_drift_ids 只在话题明显往「已放弃方向」飘时才填该 id，默认空。
+4. 每个话题都要在结果里出现，用它原样的 id 对应。
+5. 只输出 JSON 数组，不要任何解释文字。
+
+输出格式：
+[{"id":"话题原样id","audience_ids":[],"anchor_ids":[],"dropped_drift_ids":[]}]"""
+
+
+async def tag_topics(db, persona_id: str, model: str = "auto") -> dict:
+    """给选题池里未打标(tagged=0)的话题批量打受众/锚点/护栏标。人拍板前只写标，不改状态。"""
+    menu = await _build_asset_menu(db, persona_id)
+    cur = await db.execute(
+        "SELECT id,title,puzzle FROM media_topic "
+        "WHERE persona_id=? AND status='pool' AND tagged=0", (persona_id,))
+    topics = [dict(r) for r in await cur.fetchall()]
+    if not topics:
+        return {"ok": True, "count": 0, "cost": 0, "model": "", "error": ""}
+
+    tlist = "\n".join(
+        f"- id={t['id']}｜{t['title']}｜谜题:{t['puzzle']}" for t in topics)
+    prompt = (f"资产菜单：\n{menu['menu']}\n\n"
+              f"待标话题（{len(topics)} 个）：\n{tlist}\n\n"
+              "请为每个话题标注命中的资产 id，按输出格式返回。")
+
+    result = await ask_ai(prompt, model=model, task_type="media_topic",
+                          system_prompt=TAG_SYSTEM, json_mode=True)
+    resp = result.get("response", "")
+    if resp.startswith("[错误]") or resp.startswith("[费用保护]"):
+        return {"ok": False, "error": resp, "count": 0,
+                "cost": result.get("cost", 0), "model": result.get("model", "")}
+
+    items = extract_json(resp, expect="array")
+    if not items:
+        obj = extract_json(resp, expect="object")
+        items = obj.get("topics") or obj.get("data") or []
+
+    by_id = {t["id"]: t for t in topics}
+    count = 0
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        tid = _txt(it.get("id"))
+        if tid not in by_id:
+            continue  # 按 id 匹配，防错位；瞎编的 id 丢弃
+        aud = _clean_ids(it.get("audience_ids"), menu["valid_aud"])
+        anc = _clean_ids(it.get("anchor_ids"), menu["valid_anc"])
+        drift = _clean_ids(it.get("dropped_drift_ids"), menu["valid_dropped"])
+        await db.execute(
+            "UPDATE media_topic SET audience_ids=?, anchor_ids=?, "
+            "dropped_drift_ids=?, tagged=1 WHERE id=?",
+            (json.dumps(aud, ensure_ascii=False), json.dumps(anc, ensure_ascii=False),
+             json.dumps(drift, ensure_ascii=False), tid))
+        count += 1
+    await db.commit()
+
+    all_ids = list(menu["valid_aud"] | menu["valid_anc"] | menu["valid_dropped"])
+    await log_injection(db, "", "tag_topics", all_ids, result.get("tokens", 0))
+
+    return {"ok": True, "count": count, "cost": result.get("cost", 0),
+            "model": result.get("model", ""), "error": ""}
 
 
 # ─────────────── 二期 🅐：换脑审稿策略（纯函数）───────────────
