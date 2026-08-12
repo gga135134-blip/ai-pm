@@ -25,7 +25,7 @@ class ASRError(Exception):
 def _headers(cfg: dict, request_id: str) -> dict:
     """按配置选鉴权方式：填了 api_key 走新版单串 X-Api-Key，否则老式 app_id+access_key。"""
     h = {
-        "X-Api-Resource-Id": cfg.get("resource_id") or "volc.bigasr.auc",
+        "X-Api-Resource-Id": cfg.get("resource_id") or "volc.seedasr.auc",
         "X-Api-Request-Id": request_id,
         "X-Api-Sequence": "-1",
         "Content-Type": "application/json",

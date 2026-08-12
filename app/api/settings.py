@@ -22,7 +22,7 @@ def load_settings() -> dict:
         "feishu_webhook": "",
         "routes": {"code": "auto", "writing": "auto", "analysis": "auto", "review": "auto"},
         "feishu_media_map": {"app_token": "", "table_id": "", "fields": {}},
-        "douyin_asr": {"api_key": "", "app_id": "", "access_key": "", "resource_id": "volc.bigasr.auc", "public_base": ""},
+        "douyin_asr": {"api_key": "", "app_id": "", "access_key": "", "resource_id": "volc.seedasr.auc", "public_base": ""},
     }
     if CONFIG_FILE.exists():
         with open(CONFIG_FILE, "r", encoding="utf-8") as f:
@@ -213,14 +213,14 @@ async def settings_save_asr(
     douyin_asr_api_key: str = Form(""),
     douyin_asr_app_id: str = Form(""),
     douyin_asr_access_key: str = Form(""),
-    douyin_asr_resource_id: str = Form("volc.bigasr.auc"),
+    douyin_asr_resource_id: str = Form("volc.seedasr.auc"),
     douyin_asr_public_base: str = Form(""),
 ):
     save_settings({"douyin_asr": {
         "api_key": douyin_asr_api_key.strip(),
         "app_id": douyin_asr_app_id.strip(),
         "access_key": douyin_asr_access_key.strip(),
-        "resource_id": douyin_asr_resource_id.strip() or "volc.bigasr.auc",
+        "resource_id": douyin_asr_resource_id.strip() or "volc.seedasr.auc",
         "public_base": douyin_asr_public_base.strip(),
     }})
     return RedirectResponse("/settings?msg=豆包ASR凭证已保存", status_code=303)
