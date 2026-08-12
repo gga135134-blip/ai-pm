@@ -214,6 +214,73 @@ async def _build_asset_menu(db, persona_id: str) -> dict:
     }
 
 
+TAG_SYSTEM = """你是自媒体选题的资产标注员。给每个话题标注它命中的受众/锚点。
+
+铁律（必须全部满足）：
+1. 只能从给定的资产 id 里选，绝不编造 id。
+2. 真命中才填，不沾就留空数组 —— 不硬凑、不凑数。
+3. dropped_drift_ids 只在话题明显往「已放弃方向」飘时才填该 id，默认空。
+4. 每个话题都要在结果里出现，用它原样的 id 对应。
+5. 只输出 JSON 数组，不要任何解释文字。
+
+输出格式：
+[{"id":"话题原样id","audience_ids":[],"anchor_ids":[],"dropped_drift_ids":[]}]"""
+
+
+async def tag_topics(db, persona_id: str, model: str = "auto") -> dict:
+    """给选题池里未打标(tagged=0)的话题批量打受众/锚点/护栏标。人拍板前只写标，不改状态。"""
+    menu = await _build_asset_menu(db, persona_id)
+    cur = await db.execute(
+        "SELECT id,title,puzzle FROM media_topic "
+        "WHERE persona_id=? AND status='pool' AND tagged=0", (persona_id,))
+    topics = [dict(r) for r in await cur.fetchall()]
+    if not topics:
+        return {"ok": True, "count": 0, "cost": 0, "model": "", "error": ""}
+
+    tlist = "\n".join(
+        f"- id={t['id']}｜{t['title']}｜谜题:{t['puzzle']}" for t in topics)
+    prompt = (f"资产菜单：\n{menu['menu']}\n\n"
+              f"待标话题（{len(topics)} 个）：\n{tlist}\n\n"
+              "请为每个话题标注命中的资产 id，按输出格式返回。")
+
+    result = await ask_ai(prompt, model=model, task_type="media_topic",
+                          system_prompt=TAG_SYSTEM, json_mode=True)
+    resp = result.get("response", "")
+    if resp.startswith("[错误]") or resp.startswith("[费用保护]"):
+        return {"ok": False, "error": resp, "count": 0,
+                "cost": result.get("cost", 0), "model": result.get("model", "")}
+
+    items = extract_json(resp, expect="array")
+    if not items:
+        obj = extract_json(resp, expect="object")
+        items = obj.get("topics") or obj.get("data") or []
+
+    by_id = {t["id"]: t for t in topics}
+    count = 0
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        tid = _txt(it.get("id"))
+        if tid not in by_id:
+            continue  # 按 id 匹配，防错位；瞎编的 id 丢弃
+        aud = _clean_ids(it.get("audience_ids"), menu["valid_aud"])
+        anc = _clean_ids(it.get("anchor_ids"), menu["valid_anc"])
+        drift = _clean_ids(it.get("dropped_drift_ids"), menu["valid_dropped"])
+        await db.execute(
+            "UPDATE media_topic SET audience_ids=?, anchor_ids=?, "
+            "dropped_drift_ids=?, tagged=1 WHERE id=?",
+            (json.dumps(aud, ensure_ascii=False), json.dumps(anc, ensure_ascii=False),
+             json.dumps(drift, ensure_ascii=False), tid))
+        count += 1
+    await db.commit()
+
+    all_ids = list(menu["valid_aud"] | menu["valid_anc"] | menu["valid_dropped"])
+    await log_injection(db, "", "tag_topics", all_ids, result.get("tokens", 0))
+
+    return {"ok": True, "count": count, "cost": result.get("cost", 0),
+            "model": result.get("model", ""), "error": ""}
+
+
 # ─────────────── 二期 🅐：换脑审稿策略（纯函数）───────────────
 _PROVIDER_KEY = {
     "claude": "anthropic_api_key",
