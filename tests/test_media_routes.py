@@ -700,7 +700,8 @@ def test_reverse_ingest_calls_orchestrator(monkeypatch):
     monkeypatch.setattr(media_mod, "_load_config",
                         lambda: {"douyin_asr": {"app_id": "A", "access_key": "K"}})
 
-    async def fake_ingest(db, pid, url, cfg, public_base, audio_dir, model="auto"):
+    async def fake_ingest(db, pid, url, cfg, public_base, audio_dir, model="auto",
+                          cookies_path=None):
         return {"ok": True, "content_id": "CX", "title": "标题", "error": ""}
     monkeypatch.setattr(media_mod, "reverse_ingest", fake_ingest)
 

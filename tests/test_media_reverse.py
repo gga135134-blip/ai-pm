@@ -41,7 +41,7 @@ def _seed_persona(pid="REVP", with_account=True):
 
 
 def _patch(monkeypatch, audio_ok=True, asr_text="老板买AI工具用不起来", extract=None):
-    async def fake_fetch(url, out_dir):
+    async def fake_fetch(url, out_dir, cookies_path=None):
         if not audio_ok:
             raise VideoFetchError("拿不到")
         p = Path(out_dir) / "a.mp3"
