@@ -47,13 +47,22 @@ async def transcribe_url(audio_url: str, cfg: dict) -> str:
     submit_body = {
         "user": {"uid": "ai-pm"},
         "audio": {"url": audio_url, "format": "mp3"},
-        "request": {"model_name": "bigmodel"},
+        "request": {
+            "model_name": "bigmodel",
+            "model_version": "400",
+            "enable_itn": True,
+            "enable_punc": True,
+            "show_utterances": True,
+        },
     }
     async with httpx.AsyncClient(timeout=30) as client:
         r = await client.post(f"{base}/submit", headers=_headers(cfg, request_id),
                               json=submit_body)
         if r.headers.get("X-Api-Status-Code") != _STATUS_DONE:
-            raise ASRError(f"提交转写任务失败（{r.headers.get('X-Api-Status-Code')}）")
+            code = r.headers.get("X-Api-Status-Code")
+            msg = r.headers.get("X-Api-Message") or (r.text or "")[:200]
+            log.warning("ASR submit 失败 code=%s msg=%s", code, msg)
+            raise ASRError(f"提交转写任务失败（{code}：{msg}）")
 
         for _ in range(_MAX_POLLS):
             await asyncio.sleep(_POLL_INTERVAL)
@@ -64,7 +73,9 @@ async def transcribe_url(audio_url: str, cfg: dict) -> str:
                 return _extract_text(q.json())
             if status in _STATUS_PROCESSING:
                 continue
-            raise ASRError(f"转写失败（{status}）")
+            msg = q.headers.get("X-Api-Message") or (q.text or "")[:200]
+            log.warning("ASR query 失败 code=%s msg=%s", status, msg)
+            raise ASRError(f"转写失败（{status}：{msg}）")
     raise ASRError("转写超时")
 
 

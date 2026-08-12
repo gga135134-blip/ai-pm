@@ -36,10 +36,11 @@ def test_transcribe_api_key_only_passes_cred_check(monkeypatch):
 
 
 class _Resp:
-    def __init__(self, status_code=200, headers=None, json_body=None):
+    def __init__(self, status_code=200, headers=None, json_body=None, text=""):
         self.status_code = status_code
         self.headers = headers or {}
         self._json = json_body or {}
+        self.text = text
 
     def json(self):
         return self._json
