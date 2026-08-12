@@ -158,6 +158,21 @@ def _txt(value) -> str:
     return ""
 
 
+def _clean_ids(raw, valid_set) -> list:
+    """把 AI 返回的 id 列表过滤成"只保留合法 id"。防 AI 编造 id / 返回错类型。
+
+    只保留：是字符串、在 valid_set 里、不重复的 id，顺序保持。非 list → []。
+    """
+    if not isinstance(raw, list):
+        return []
+    seen, out = set(), []
+    for x in raw:
+        if isinstance(x, str) and x in valid_set and x not in seen:
+            seen.add(x)
+            out.append(x)
+    return out
+
+
 # ─────────────── 二期 🅐：换脑审稿策略（纯函数）───────────────
 _PROVIDER_KEY = {
     "claude": "anthropic_api_key",
