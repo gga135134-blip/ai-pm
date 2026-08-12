@@ -10,6 +10,7 @@ log = logging.getLogger(__name__)
 
 _TIMEOUT = 120  # 秒，防挂起
 _URL_RE = re.compile(r"https?://[^\s]+")
+_DATE_RE = re.compile(r"UPLOADDATE:(\d{8})")
 
 
 class VideoFetchError(Exception):
@@ -28,9 +29,10 @@ def first_url(text: str) -> str:
     return m.group(0) if m else text.strip()
 
 
-async def fetch_audio(url: str, out_dir: Path, cookies_path: Path = None) -> Path:
-    """用 yt-dlp 把 url 的音频抽成 mp3 到 out_dir/<uuid>.mp3，返回路径。
+async def fetch_audio(url: str, out_dir: Path, cookies_path: Path = None) -> tuple[Path, str | None]:
+    """用 yt-dlp 把 url 的音频抽成 mp3 到 out_dir/<uuid>.mp3，返回 (路径, 发布日期)。
 
+    返回 (音频路径, 发布日期字符串或 None)。发布日期为 'YYYY-MM-DD' 格式或 None（无法获取时）。
     失败（yt-dlp 非零退出 / 超时 / 没产出文件）抛 VideoFetchError。
     cookies_path：可选 Netscape 格式 cookie 文件（抖音等防爬站需要），存在才带上。
     """
@@ -42,7 +44,8 @@ async def fetch_audio(url: str, out_dir: Path, cookies_path: Path = None) -> Pat
     # 绕开 systemd PATH 不含 venv/bin 导致裸命令 yt-dlp 找不到的坑。
     # -x 抽音频，--audio-format mp3，-o 固定输出名（%(ext)s 会被替换成 mp3）
     args = [sys.executable, "-m", "yt_dlp", "-x", "--audio-format", "mp3",
-            "--no-playlist", "-o", str(out_dir / f"{name}.%(ext)s")]
+            "--no-playlist", "--no-simulate", "--print", "UPLOADDATE:%(upload_date)s",
+            "-o", str(out_dir / f"{name}.%(ext)s")]
     if cookies_path and Path(cookies_path).exists():
         args += ["--cookies", str(cookies_path)]
     args.append(url)
@@ -50,7 +53,7 @@ async def fetch_audio(url: str, out_dir: Path, cookies_path: Path = None) -> Pat
         proc = await asyncio.create_subprocess_exec(
             *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         try:
-            _out, err = await asyncio.wait_for(proc.communicate(), timeout=_TIMEOUT)
+            out, err = await asyncio.wait_for(proc.communicate(), timeout=_TIMEOUT)
         except asyncio.TimeoutError:
             proc.kill()
             raise VideoFetchError("拿不到视频音频（下载超时）")
@@ -69,4 +72,9 @@ async def fetch_audio(url: str, out_dir: Path, cookies_path: Path = None) -> Pat
         raise VideoFetchError("拿不到视频音频（平台可能防爬或链接失效）")
     if not target.exists():
         raise VideoFetchError("拿不到视频音频（未生成音频文件）")
-    return target
+    upload_date = None
+    m = _DATE_RE.search((out or b"").decode("utf-8", "ignore"))
+    if m:
+        d = m.group(1)  # YYYYMMDD
+        upload_date = f"{d[:4]}-{d[4:6]}-{d[6:]}"
+    return target, upload_date

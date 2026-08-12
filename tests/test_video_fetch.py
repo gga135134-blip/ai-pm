@@ -21,28 +21,40 @@ def test_first_url_passthrough_and_empty():
 
 
 class _FakeProc:
-    def __init__(self, returncode, made_file=None, stderr=b"err"):
+    def __init__(self, returncode, made_file=None, stderr=b"err", stdout=b"out"):
         self.returncode = returncode
         self._made = made_file
         self._stderr = stderr
+        self._stdout = stdout
 
     async def communicate(self):
         if self._made:
             self._made.write_bytes(b"fake-audio")
-        return (b"out", self._stderr)
+        return (self._stdout, self._stderr)
 
 
 def test_fetch_audio_success(tmp_path, monkeypatch):
     async def fake_exec(*args, **kwargs):
         # yt-dlp 输出模板决定文件名；模拟它产出一个 mp3
         out = tmp_path / "aud.mp3"
-        return _FakeProc(0, made_file=out)
+        return _FakeProc(0, made_file=out, stdout=b"UPLOADDATE:20241021\n")
 
     monkeypatch.setattr(video_fetch.asyncio, "create_subprocess_exec", fake_exec)
     # 让 fetch_audio 用固定文件名，便于断言（见实现：out_dir/<uuid>.mp3）
     monkeypatch.setattr(video_fetch.uuid, "uuid4", lambda: "aud")
-    p = asyncio.run(fetch_audio("https://v.douyin.com/xxx/", tmp_path))
+    p, upload_date = asyncio.run(fetch_audio("https://v.douyin.com/xxx/", tmp_path))
     assert p.exists() and p.suffix == ".mp3"
+    assert upload_date == "2024-10-21"
+
+
+def test_fetch_audio_no_upload_date_returns_none(tmp_path, monkeypatch):
+    async def fake_exec(*args, **kwargs):
+        out = tmp_path / "aud.mp3"
+        return _FakeProc(0, made_file=out, stdout=b"no date here")
+    monkeypatch.setattr(video_fetch.asyncio, "create_subprocess_exec", fake_exec)
+    monkeypatch.setattr(video_fetch.uuid, "uuid4", lambda: "aud")
+    p, upload_date = asyncio.run(fetch_audio("https://x/", tmp_path))
+    assert p.exists() and upload_date is None
 
 
 def test_fetch_audio_nonzero_raises(tmp_path, monkeypatch):
