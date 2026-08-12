@@ -297,6 +297,25 @@
         </div>
     </div>
 
+    <!-- ============ 豆包 ASR 凭证（功能C 视频反向入库用）：独立表单 ============ -->
+    <form method="post" action="/settings/asr" style="margin-top:16px">
+      <h3 style="font-size:15px; margin-bottom:8px">豆包录音文件识别（视频反向入库用）</h3>
+      <label>App ID
+        <input name="douyin_asr_app_id" value="{{ config.douyin_asr.app_id }}" style="width:100%">
+      </label>
+      <label>Access Key
+        <input name="douyin_asr_access_key" value="{{ config.douyin_asr.access_key }}" style="width:100%">
+      </label>
+      <label>Resource ID
+        <input name="douyin_asr_resource_id" value="{{ config.douyin_asr.resource_id }}" style="width:100%">
+      </label>
+      <label>公网地址
+        <input name="douyin_asr_public_base" value="{{ config.douyin_asr.public_base }}" style="width:100%">
+        <span class="st-save-hint">公网地址（豆包回抓音频用，如 http://159.75.200.213:8000，留空则用当前访问地址）</span>
+      </label>
+      <button class="btn primary" style="margin-top:8px">保存豆包 ASR</button>
+    </form>
+
     <!-- ============ 自媒体 · 换脑审稿策略：独立表单 ============ -->
     <div class="st-card">
         <div class="mh">

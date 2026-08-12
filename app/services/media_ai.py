@@ -1356,3 +1356,41 @@ async def revise_draft(db, content_id: str, model: str = "auto") -> dict:
     await log_injection(db, content_id, "revise_draft", [], result.get("tokens", 0))
     return {"ok": True, "script": resp, "revision_count": new_count, "error": "",
             "cost": result.get("cost", 0), "model": result.get("model", "")}
+
+
+# ─────────────── 功能C 三叶服务：从稿提选题 ───────────────
+
+EXTRACT_SYSTEM = """你是自媒体选题分析师。给你一段口播视频的转写文字，你要提炼出：
+1. title：这条视频的选题标题（≤20 字，点出主题）
+2. puzzle：核心谜题（受众想解开的那个疑问，带钩子；提炼不出就给空串）
+3. topic_fingerprint：3-6 个用顿号分隔的主题标签（供查重，如"AI落地、中小企业、避坑"）
+
+只输出 JSON 对象，不要任何解释：
+{"title":"...","puzzle":"...","topic_fingerprint":"..."}"""
+
+
+async def extract_from_transcript(transcript: str, model: str = "auto") -> dict:
+    """从视频转写稿提「标题+谜题+话题指纹」。
+
+    提取失败返回不含 title 的 dict（调用方据 title 缺失走 fallback）。
+    不持 db、不记 log_injection；成本由编排器 reverse_ingest 统一记（带 _cost/_tokens 出去）。
+    """
+    snippet = (transcript or "").strip()[:6000]  # 控成本，前 6000 字够判主题
+    if not snippet:
+        return {}
+    result = await ask_ai(f"转写文字：\n{snippet}", model=model,
+                          task_type="media_topic", system_prompt=EXTRACT_SYSTEM,
+                          json_mode=True)
+    meta = {"_cost": result.get("cost", 0), "_tokens": result.get("tokens", 0)}
+    resp = result.get("response", "")
+    if resp.startswith("[错误]") or resp.startswith("[费用保护]"):
+        return meta
+    obj = extract_json(resp, expect="object")
+    if not isinstance(obj, dict) or not obj:
+        return meta
+    return {
+        "title": _txt(obj.get("title")),
+        "puzzle": _txt(obj.get("puzzle")),
+        "topic_fingerprint": _txt(obj.get("topic_fingerprint")),
+        **meta,
+    }

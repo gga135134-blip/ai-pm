@@ -54,7 +54,8 @@ class _AuthMiddleware:
             return
         path = scope.get("path", "")
         # /s/<token> 是公开的只读笔记分享页，无需登录
-        if path.startswith("/static") or path.startswith("/s/") or path in _PUBLIC:
+        if (path.startswith("/static") or path.startswith("/s/")
+                or path.startswith("/media/asr-audio/") or path in _PUBLIC):
             await self.app(scope, receive, send)
             return
         request = Request(scope)
