@@ -1,5 +1,22 @@
 """media 打标 helper 的纯函数/异步测试。"""
-from app.services.media_ai import _clean_ids
+import asyncio
+
+import pytest
+
+from app.database import get_db, init_db
+import app.database as _db_mod
+from app.services.media_ai import _clean_ids, _build_asset_menu
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _db_ready(tmp_path_factory):
+    """异步 DB 测试隔离到临时库：不污染用户真实 aipm.db，也不与其它测试抢 WAL 锁。"""
+    tmp = tmp_path_factory.mktemp("media_tagging_db") / "test.db"
+    orig = _db_mod.DB_PATH
+    _db_mod.DB_PATH = tmp
+    asyncio.run(init_db())
+    yield
+    _db_mod.DB_PATH = orig
 
 
 def test_clean_ids_keeps_valid_drops_bogus():
@@ -18,17 +35,9 @@ def test_clean_ids_non_list_returns_empty():
 
 
 def test_build_asset_menu_lists_assets_and_valid_ids():
-    import asyncio
-    from app.database import get_db, init_db
-    from app.services.media_ai import _build_asset_menu
-
     async def run():
-        await init_db()
         db = await get_db()
         try:
-            await db.execute("DELETE FROM media_anchor WHERE persona_id='MENUP'")
-            await db.execute("DELETE FROM media_audience WHERE persona_id='MENUP'")
-            await db.execute("DELETE FROM media_persona WHERE id='MENUP'")
             await db.execute(
                 "INSERT INTO media_persona (id,name,one_liner,current_phase) "
                 "VALUES ('MENUP','测试人设','一句话','涨粉')")
