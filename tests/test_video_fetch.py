@@ -60,6 +60,36 @@ def test_fetch_audio_ytdlp_missing_raises_distinct_error(tmp_path, monkeypatch):
         asyncio.run(fetch_audio("https://x/", tmp_path))
 
 
+def test_fetch_audio_adds_cookies_when_file_exists(tmp_path, monkeypatch):
+    cookies = tmp_path / "c.txt"
+    cookies.write_text("# netscape cookies")
+    seen = {}
+
+    async def fake_exec(*args, **kwargs):
+        seen["args"] = args
+        out = tmp_path / "aud.mp3"
+        return _FakeProc(0, made_file=out)
+
+    monkeypatch.setattr(video_fetch.asyncio, "create_subprocess_exec", fake_exec)
+    monkeypatch.setattr(video_fetch.uuid, "uuid4", lambda: "aud")
+    asyncio.run(fetch_audio("https://v.douyin.com/x/", tmp_path, cookies))
+    assert "--cookies" in seen["args"] and str(cookies) in seen["args"]
+
+
+def test_fetch_audio_no_cookies_when_path_missing(tmp_path, monkeypatch):
+    seen = {}
+
+    async def fake_exec(*args, **kwargs):
+        seen["args"] = args
+        out = tmp_path / "aud.mp3"
+        return _FakeProc(0, made_file=out)
+
+    monkeypatch.setattr(video_fetch.asyncio, "create_subprocess_exec", fake_exec)
+    monkeypatch.setattr(video_fetch.uuid, "uuid4", lambda: "aud")
+    asyncio.run(fetch_audio("https://x/", tmp_path, tmp_path / "nope.txt"))
+    assert "--cookies" not in seen["args"]
+
+
 def test_fetch_audio_no_output_file_raises(tmp_path, monkeypatch):
     async def fake_exec(*args, **kwargs):
         return _FakeProc(0)  # 退出 0 但没产文件

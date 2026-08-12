@@ -13,10 +13,11 @@ log = logging.getLogger(__name__)
 
 async def reverse_ingest(db, persona_id: str, video_url: str, cfg: dict,
                          public_base: str, audio_dir: Path,
-                         model: str = "auto") -> dict:
+                         model: str = "auto", cookies_path: Path = None) -> dict:
     """串 ①抽音频 ②托管 ③ASR ④提选题 ⑤建content+publish ⑥清理。
 
-    cfg=豆包凭证；public_base=对外可达前缀；audio_dir=公开音频目录。
+    cfg=豆包凭证；public_base=对外可达前缀；audio_dir=公开音频目录；
+    cookies_path=可选抖音 cookie 文件（防爬用，存在才带）。
     fetch/asr 硬失败不建行；extract 失败建 fallback 行（稿不丢）。
     返回 {ok, content_id, title, error}。
     """
@@ -25,7 +26,7 @@ async def reverse_ingest(db, persona_id: str, video_url: str, cfg: dict,
     try:
         # ① 抽音频到公开目录（文件名即随机 token）
         try:
-            audio_file = await fetch_audio(video_url, audio_dir)
+            audio_file = await fetch_audio(video_url, audio_dir, cookies_path)
         except VideoFetchError as e:
             return {"ok": False, "content_id": "", "title": "", "error": str(e)}
 

@@ -785,8 +785,11 @@ async def media_reverse_ingest(request: Request, video_url: str = Form(...)):
         if not pid:
             return JSONResponse({"ok": False, "error": "请先创建人设"})
         public_base = (cfg.get("public_base") or str(request.base_url)).rstrip("/")
+        cookies_file = BASE_DIR / "data" / "douyin_cookies.txt"
+        cookies_path = cookies_file if cookies_file.exists() else None
         try:
-            result = await reverse_ingest(db, pid, url, cfg, public_base, ASR_PUBLIC_DIR)
+            result = await reverse_ingest(db, pid, url, cfg, public_base,
+                                          ASR_PUBLIC_DIR, cookies_path=cookies_path)
         except Exception as e:
             log.exception("视频反向入库失败")
             return JSONResponse({"ok": False, "error": "视频反向入库出错，请查看服务器日志"})

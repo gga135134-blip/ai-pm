@@ -14,11 +14,11 @@ class VideoFetchError(Exception):
     """拿不到视频音频（平台防爬、链接失效、yt-dlp 出错）。"""
 
 
-async def fetch_audio(url: str, out_dir: Path) -> Path:
+async def fetch_audio(url: str, out_dir: Path, cookies_path: Path = None) -> Path:
     """用 yt-dlp 把 url 的音频抽成 mp3 到 out_dir/<uuid>.mp3，返回路径。
 
     失败（yt-dlp 非零退出 / 超时 / 没产出文件）抛 VideoFetchError。
-    一期不带 cookie，尽力而为。
+    cookies_path：可选 Netscape 格式 cookie 文件（抖音等防爬站需要），存在才带上。
     """
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -28,7 +28,10 @@ async def fetch_audio(url: str, out_dir: Path) -> Path:
     # 绕开 systemd PATH 不含 venv/bin 导致裸命令 yt-dlp 找不到的坑。
     # -x 抽音频，--audio-format mp3，-o 固定输出名（%(ext)s 会被替换成 mp3）
     args = [sys.executable, "-m", "yt_dlp", "-x", "--audio-format", "mp3",
-            "--no-playlist", "-o", str(out_dir / f"{name}.%(ext)s"), url]
+            "--no-playlist", "-o", str(out_dir / f"{name}.%(ext)s")]
+    if cookies_path and Path(cookies_path).exists():
+        args += ["--cookies", str(cookies_path)]
+    args.append(url)
     try:
         proc = await asyncio.create_subprocess_exec(
             *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
@@ -46,6 +49,9 @@ async def fetch_audio(url: str, out_dir: Path) -> Path:
             raise VideoFetchError("服务器未安装 yt-dlp（在 ai-pm 的 venv 里 pip install yt-dlp）")
         if b"ffmpeg" in err_lower or b"ffprobe" in err_lower:
             raise VideoFetchError("服务器缺 ffmpeg（yt-dlp 抽音频需要它，请安装 ffmpeg）")
+        if b"cookies" in err_lower:
+            raise VideoFetchError(
+                "抖音需要 cookie：导出浏览器 cookie 存到服务器 data/douyin_cookies.txt")
         raise VideoFetchError("拿不到视频音频（平台可能防爬或链接失效）")
     if not target.exists():
         raise VideoFetchError("拿不到视频音频（未生成音频文件）")
