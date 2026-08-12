@@ -1,6 +1,7 @@
 """链接→音频：用 yt-dlp 抽已发视频的音频。脆弱环节隔离在此，可换解析源。"""
 import asyncio
 import logging
+import re
 import sys
 import uuid
 from pathlib import Path
@@ -8,10 +9,23 @@ from pathlib import Path
 log = logging.getLogger(__name__)
 
 _TIMEOUT = 120  # 秒，防挂起
+_URL_RE = re.compile(r"https?://[^\s]+")
 
 
 class VideoFetchError(Exception):
     """拿不到视频音频（平台防爬、链接失效、yt-dlp 出错）。"""
+
+
+def first_url(text: str) -> str:
+    """从粘贴的分享文案里抠出第一个 http(s) 链接。
+
+    抖音复制出来是一大段文案（如 "2.38 复制打开抖音…【…】 https://v.douyin.com/xxx/ :1pm…"），
+    这里正则提第一个链接（到空白为止，自然甩掉后面的防爬乱码）。找不到就原样返回去空白。
+    """
+    if not text:
+        return ""
+    m = _URL_RE.search(text)
+    return m.group(0) if m else text.strip()
 
 
 async def fetch_audio(url: str, out_dir: Path, cookies_path: Path = None) -> Path:

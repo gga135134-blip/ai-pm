@@ -5,7 +5,19 @@ from pathlib import Path
 import pytest
 
 from app.services import video_fetch
-from app.services.video_fetch import fetch_audio, VideoFetchError
+from app.services.video_fetch import fetch_audio, VideoFetchError, first_url
+
+
+def test_first_url_extracts_from_douyin_share_blurb():
+    blurb = ("2.38 复制打开抖音，看看【自由职业架构师｜嘉姐的作品】建立个人DNA库 "
+             "https://v.douyin.com/zcaUD-q2YMo/ :1pm 10/21 FHi:/ s@e.BG")
+    assert first_url(blurb) == "https://v.douyin.com/zcaUD-q2YMo/"
+
+
+def test_first_url_passthrough_and_empty():
+    assert first_url("https://v.douyin.com/abc/") == "https://v.douyin.com/abc/"
+    assert first_url("  没有链接的文本  ") == "没有链接的文本"
+    assert first_url("") == ""
 
 
 class _FakeProc:

@@ -3,7 +3,7 @@ import logging
 import uuid
 from pathlib import Path
 
-from app.services.video_fetch import fetch_audio, VideoFetchError
+from app.services.video_fetch import fetch_audio, VideoFetchError, first_url
 from app.services.asr_client import transcribe_url, ASRError
 from app.services.media_ai import extract_from_transcript
 from app.services.media_context import log_injection
@@ -23,6 +23,7 @@ async def reverse_ingest(db, persona_id: str, video_url: str, cfg: dict,
     """
     audio_dir = Path(audio_dir)
     audio_file = None
+    video_url = first_url(video_url)  # 支持直接贴整段抖音分享文案，自动抠出链接
     try:
         # ① 抽音频到公开目录（文件名即随机 token）
         try:
