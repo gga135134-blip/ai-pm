@@ -39,12 +39,15 @@
 |---|---|---|
 | `audience_ids` | `TEXT DEFAULT '[]'` | 命中的 `media_audience.id` 列表（JSON 数组字符串） |
 | `anchor_ids` | `TEXT DEFAULT '[]'` | 服务的 `media_anchor.id` 列表（JSON 数组字符串） |
+| `dropped_drift_ids` | `TEXT DEFAULT '[]'` | **护栏位**：飘向了哪些已放弃（`dropped`）锚点的 id 列表（JSON） |
 | `tagged` | `INTEGER DEFAULT 0` | 是否已被 AI 标注过。**关键防呆位** |
 
 **为什么需要 `tagged`**：空列表 `[]` 有两种截然不同的含义，决策引擎行为必须区分：
 
 - `tagged=1` 且 `audience_ids=[]` → AI 看过了，判定这话题**确实不沾任何受众** → `audience_hit` 记 0（诚实，不回落）。
 - `tagged=0` 且 `audience_ids=[]` → 这话题**从没被标过**（老话题/刚手动加的） → 回落到字面重叠（别冤枉它）。
+
+**为什么需要 `dropped_drift_ids`（护栏）**：放弃一门生意是花大代价、长周期验证换来的血泪教训——这条教训值得被用起来，而不是删掉。所以 `dropped` 锚点**不参与"贴正标"**（不会去"服务"一门死生意），但会被 AI 拿来**反向查**：某话题若又往某个已放弃方向飘，就记下来。决策引擎据此在报告里竖红旗 + 给负分（不硬拦，人拍板）。类比现有 `dup_penalty` 的 "flop 警告"——死掉的生意就是生意版的"扑街过"。
 
 ---
 
@@ -54,21 +57,22 @@
 
 - `_build_asset_menu(db, persona_id)` → 返回：
   - 受众列表（`id, segment, who, anxiety, language, pay_willingness`，`status='active'`）
-  - 锚点列表（`id, name, type, value_prop, status`，只取 `status IN ('validating','proven')`——`dropped` 的锚点是已放弃的生意方向，不该再往上标）
-  - 拼好的"资产菜单"文本（供塞进提示词，每条带 id）
-  - 合法 id 集合（`valid_aud_ids`, `valid_anc_ids`）
+  - **可标锚点**列表（`id, name, type, value_prop, status`，只取 `status IN ('validating','proven')`——供"贴正标"）
+  - **已放弃锚点**列表（`id, name, value_prop`，`status='dropped'`——供"护栏反向查"）
+  - 拼好的"资产菜单"文本（供塞进提示词，可标资产与"⛔ 已放弃方向"两段分开列，每条带 id）
+  - 合法 id 集合（`valid_aud_ids`, `valid_anc_ids`, `valid_dropped_ids`）
 - `_clean_ids(raw, valid_set)` → 把 AI 返回的 id 列表过滤成"只保留合法 id"的列表（纯函数，可单测）。
 
 ### 4.2 推选题路径（零额外成本）
 
 改 `recommend_topics`：
 
-1. 调 `_build_asset_menu`，把资产菜单塞进推选题提示词。
-2. `RECOMMEND_SYSTEM` 输出格式加 `"audience_ids":[...],"anchor_ids":[...]`，并说明：只能从给定的资产 id 里选，命中就填 id，不沾就留空数组；诚实不硬凑。
-3. 入库时对每个话题 `_clean_ids` 校验两个 id 列表，存入 `audience_ids`/`anchor_ids`，置 `tagged=1`。
+1. 调 `_build_asset_menu`，把资产菜单（含"⛔ 已放弃方向"段）塞进推选题提示词。
+2. `RECOMMEND_SYSTEM` 输出格式加 `"audience_ids":[...],"anchor_ids":[...],"dropped_drift_ids":[...]`，并说明：正标只能从可标资产 id 里选，命中就填、不沾留空；`dropped_drift_ids` 只在话题明显往某"已放弃方向"飘时才填该 id（默认空）；诚实不硬凑。
+3. 入库时对每个话题 `_clean_ids` 分别校验三个 id 列表（各用对应合法集合），存入 `audience_ids`/`anchor_ids`/`dropped_drift_ids`，置 `tagged=1`。
 4. 同一次 AI 调用完成推选题 + 打标，不额外花钱。
 
-**边界**：人设零受众/零锚点 → 菜单为空，提示词说明"当前无资产可标"，AI 返回空数组即可，不崩。
+**边界**：人设零受众/零锚点 → 菜单为空，提示词说明"当前无资产可标"，AI 返回空数组即可，不崩。零 `dropped` 锚点 → "已放弃方向"段省略，`dropped_drift_ids` 恒空。
 
 ### 4.3 补标路径
 
@@ -76,8 +80,8 @@
 
 1. 调 `_build_asset_menu`。
 2. 查该人设 `status='pool'` 且 `tagged=0` 的话题（title + puzzle）。无则直接返回 count=0。
-3. 走 `TAG_SYSTEM`（诚实红线：只标真命中、不硬凑、只返回给定 id、只输出 JSON）。提示词给资产菜单 + 待标话题列表，要求返回 `[{topic 标识, audience_ids, anchor_ids}]`。
-4. 解析 + `_clean_ids` 校验，逐条 `UPDATE media_topic SET audience_ids=?, anchor_ids=?, tagged=1`。
+3. 走 `TAG_SYSTEM`（诚实红线：只标真命中、不硬凑、只返回给定 id、只输出 JSON）。提示词给资产菜单（含"⛔ 已放弃方向"段）+ 待标话题列表，要求返回 `[{"id":topic.id, "audience_ids":[...], "anchor_ids":[...], "dropped_drift_ids":[...]}]`。
+4. 解析 + `_clean_ids` 三列各自校验，按 `id` 匹配话题，逐条 `UPDATE media_topic SET audience_ids=?, anchor_ids=?, dropped_drift_ids=?, tagged=1`。
 5. `log_injection` 记成本。返回 `{ok, count, cost, model, error}`。
 
 **话题标识对应**：提示词里给话题带上稳定序号或 id，让 AI 回填时能对上。倾向传 topic.id 让 AI 原样带回，回填时按 id 匹配（防错位）。
@@ -88,7 +92,7 @@
 
 - **新增** `POST /media/topics/tag`：调 `tag_topics(db, persona_id, model)`，返回 count/cost 的 JSON。try/except 兜底防前端崩。
 - **选题页** `media_topics.html`：在「🧮 决策排序」按钮旁加「🏷️ AI标注」按钮 + AJAX（调 `/media/topics/tag`，完成后刷新/提示 N 条已标）。沿用现有 finesse 类与 escapeHtml 惯例，**不把 SVG 图标塞进 JS 字符串**（避开已知 `<script>` 崩坑）。
-- **rank 路由**：加载话题时对 `audience_ids`/`anchor_ids` 做 `json.loads`，带上 `tagged` 字段，一并放进传给引擎的话题 dict。
+- **rank 路由**：加载话题时对 `audience_ids`/`anchor_ids`/`dropped_drift_ids` 做 `json.loads`，带上 `tagged` 字段，一并放进传给引擎的话题 dict。
 
 ---
 
@@ -105,9 +109,19 @@
 - **tagged 且有命中**：`value = max(命中锚点的状态权重)`，状态权重 `proven→1.0 / validating→0.7 / dropped→0.3`。note：`AI判定服务锚点'name'（proven）`。
 - **tagged 但空**：`value = 0`，note：`AI判定离生意锚点较远`。
 - **未标**：回落现有重叠逻辑。
+- 说明：正标锚点只会是 validating/proven（菜单已排除 dropped），但 `dropped→0.3` 权重保留作兜底——防"话题标完之后锚点才被放弃"的时间差场景。
+
+### dropped_drift（**新增负向因子** = 护栏）
+- **tagged 且 `dropped_drift_ids` 非空**：`value = 1.0`（撞上就满负），note：`⚠️ 往已放弃方向'name'飘 —— 当初花大代价才验证它不行，真做想清楚`。命中多个取任一或列出。
+- **tagged 但空 / 未标**：`value = 0`，无警告。
+- 与 `risk`、`fatigue`、`dup_penalty` 同属负向因子（进 `neg` 列参与归一化）。**只报告 + 扣分，不硬拦**（人拍板，沿袭决策引擎既有哲学）。
+
+### 权重（`WEIGHTS` 三套预设各加一项）
+- `dropped_drift` 加入三个阶段的权重字典。初值：冷启动/涨粉 `2`，转化 `3`（转化期飘回死生意代价更大）。可后续 L2 复盘迭代。
+- 归一化：`dropped_drift` 进 `neg` 列（与 risk/fatigue/dup_penalty 一起算负项均值），`neg_w` 分母相应变大。这是有意的打分变化。
 
 ### 兼容处理
-- 引擎读 `topic.get("audience_ids")` / `anchor_ids` 时容错：既接受已解析的 list，也接受 JSON 字符串（防调用方忘了解析）。
+- 引擎读 `topic.get("audience_ids")` / `anchor_ids` / `dropped_drift_ids` 时容错：既接受已解析的 list，也接受 JSON 字符串（防调用方忘了解析）。
 - 引擎读 `topic.get("tagged")`，缺省当 0（老调用方/老数据无缝）。
 - `fit`、`material_ready`、`risk`、`fatigue`、`dup_penalty`、C 类三项**一律不动**。
 
@@ -122,6 +136,7 @@
   - tagged 但空 → audience_hit=0（不回落）
   - 未标话题 → 回落字面重叠（老行为不变）
   - anchor 状态权重（proven > validating > dropped）
+  - **dropped_drift 非空 → 负分 + 报告红旗警告；空/未标 → 不扣分**
   - id→dict 查找 + audience_ids 传 JSON 字符串时的容错
 - `_clean_ids` 过滤瞎编 id 的纯函数测（合法保留、非法丢弃、空输入）。
 
@@ -136,12 +151,12 @@
 
 | 文件 | 改动 |
 |---|---|
-| `app/database.py` | `MIGRATIONS` +3 列（audience_ids / anchor_ids / tagged） |
-| `app/services/media_ai.py` | `_build_asset_menu` / `_clean_ids` 新 helper；`recommend_topics` 折入打标；`RECOMMEND_SYSTEM` 输出格式加两 id 字段；新 `tag_topics` + `TAG_SYSTEM` |
-| `app/services/media_decision.py` | `score_topic` 的 audience_hit / anchor_distance 三分支；id→dict 映射；容错解析 |
-| `app/api/media.py` | 新 `POST /media/topics/tag`；rank 路由解析两 id 列 + tagged |
+| `app/database.py` | `MIGRATIONS` +4 列（audience_ids / anchor_ids / dropped_drift_ids / tagged） |
+| `app/services/media_ai.py` | `_build_asset_menu`（含已放弃锚点段）/ `_clean_ids` 新 helper；`recommend_topics` 折入打标；`RECOMMEND_SYSTEM` 输出格式加三 id 字段；新 `tag_topics` + `TAG_SYSTEM` |
+| `app/services/media_decision.py` | `score_topic` 的 audience_hit / anchor_distance 三分支；新 `dropped_drift` 负向因子；`WEIGHTS` 三套各加一项；id→dict 映射；容错解析 |
+| `app/api/media.py` | 新 `POST /media/topics/tag`；rank 路由解析三 id 列 + tagged |
 | `app/templates/media_topics.html` | 「🏷️ AI标注」按钮 + AJAX（不塞 SVG 进 JS） |
-| `tests/test_media_decision.py` | +6 左右纯函数测 |
+| `tests/test_media_decision.py` | +7 左右纯函数测 |
 | `tests/test_media_routes.py` | +1 路由测 |
 
 ---
