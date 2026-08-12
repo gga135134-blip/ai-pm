@@ -32,8 +32,10 @@ RECOMMEND_SYSTEM = """你是资深自媒体选题策划。你的任务是基于�
 4. 只输出 JSON 数组，不要任何解释文字。
 
 输出格式：
-[{"title":"选题","puzzle":"核心谜题","reason":"为什么值得做","angle":"切入角度","heat":3,"fit_score":4}]
-heat 和 fit_score 都是 1-5 的整数。"""
+[{"title":"选题","puzzle":"核心谜题","reason":"为什么值得做","angle":"切入角度","heat":3,"fit_score":4,"audience_ids":[],"anchor_ids":[],"dropped_drift_ids":[]}]
+heat 和 fit_score 都是 1-5 的整数。
+audience_ids/anchor_ids 只能从下方「资产菜单」给的 id 里选，真命中才填、不沾留空。
+dropped_drift_ids 只在选题往「已放弃方向」飘时才填该 id，默认空。绝不编造 id。"""
 
 
 async def recommend_topics(db, persona_id: str, model: str = "auto") -> dict:
@@ -89,6 +91,8 @@ async def recommend_topics(db, persona_id: str, model: str = "auto") -> dict:
     if rejected:
         parts.append("已弃选题及原因（不要推同类）：\n" + "\n".join(
             f"- {r['title']}：{r['rejected_reason'] or '未说明'}" for r in rejected))
+    menu = await _build_asset_menu(db, persona_id)
+    parts.append("资产菜单（给选题打受众/锚点标用）：\n" + menu["menu"])
     parts.append("请推荐 5 个新选题。")
 
     prompt = "\n\n".join(parts)
@@ -120,11 +124,18 @@ async def recommend_topics(db, persona_id: str, model: str = "auto") -> dict:
         await db.execute(
             "INSERT INTO media_topic "
             "(id,persona_id,title,puzzle,source,reason,angle,heat,fit_score,"
-            " related_trait_ids) VALUES (?,?,?,?,'ai_rec',?,?,?,?,?)",
+            " related_trait_ids,audience_ids,anchor_ids,dropped_drift_ids,tagged) "
+            "VALUES (?,?,?,?,'ai_rec',?,?,?,?,?,?,?,?,1)",
             (str(uuid.uuid4()), persona_id, title, puzzle,
              _txt(it.get("reason")), _txt(it.get("angle")),
              _clamp(it.get("heat"), 3), _clamp(it.get("fit_score"), 3),
-             json.dumps(trait_ids, ensure_ascii=False)))
+             json.dumps(trait_ids, ensure_ascii=False),
+             json.dumps(_clean_ids(it.get("audience_ids"), menu["valid_aud"]),
+                        ensure_ascii=False),
+             json.dumps(_clean_ids(it.get("anchor_ids"), menu["valid_anc"]),
+                        ensure_ascii=False),
+             json.dumps(_clean_ids(it.get("dropped_drift_ids"), menu["valid_dropped"]),
+                        ensure_ascii=False)))
         count += 1
     await db.commit()
 
