@@ -18,6 +18,7 @@ from app.services.media_ai import (
     critique_draft, revise_draft,
     persona_interview_questions, persona_interview_extract,
     learn_edit_style, draft_audience_segments, draft_anchors,
+    mine_from_transcript,
 )
 from app.services.media_flow import finalize_updates, clean_body
 from app.services.media_decision import build_decision_context, rank_pool
@@ -213,7 +214,7 @@ async def persona_interview_adopt(pid: str, dimension: str = Form(...),
                                   phase_tag: str = Form(""),
                                   source: str = Form("interview")):
     """人拍板：把一条候选条目写进注册表。source 区分来源（interview / learned_edit）。"""
-    src = source if source in ("interview", "learned_edit") else "interview"
+    src = source if source in ("interview", "learned_edit", "reverse_mine") else "interview"
     db = await get_db()
     try:
         await db.execute(
@@ -980,7 +981,65 @@ async def content_detail(request: Request, cid: str):
                  "stage_labels": STAGE_LABELS,
                  "angles": angles, "evidence": evidence,
                  "latest_review": latest_review,
+                 "is_reverse": content.get("idea_source") == "video_reverse",
                  "next_stage": next_stage(content["stage"])})
+
+
+@router.post("/media/content/{cid}/mine")
+async def content_mine(cid: str):
+    """从转写稿挖两桶精华候选（不写库）。"""
+    db = await get_db()
+    try:
+        cur = await db.execute("SELECT persona_id,script FROM media_content WHERE id=?", (cid,))
+        row = await cur.fetchone()
+        if not row:
+            return JSONResponse({"ok": False, "error": "内容不存在"})
+        try:
+            result = await mine_from_transcript(db, row["persona_id"], row["script"] or "")
+        except Exception as e:
+            log.exception("挖精华失败")
+            return JSONResponse({"ok": False, "error": str(e)})
+    finally:
+        await db.close()
+    return JSONResponse(result)
+
+
+@router.post("/media/content/{cid}/mine/adopt-material")
+async def content_mine_adopt_material(cid: str, type: str = Form("story"),
+                                      detail: str = Form(...), brief: str = Form("")):
+    """采纳一条挖出的内容料 → 写原料库（source=反向挖料）。"""
+    mtype = type if type in MATERIAL_TYPES else "story"
+    detail = detail.strip()
+    if not detail:
+        return JSONResponse({"ok": False, "error": "空内容"})
+    db = await get_db()
+    try:
+        cur = await db.execute("SELECT persona_id FROM media_content WHERE id=?", (cid,))
+        row = await cur.fetchone()
+        if not row:
+            return JSONResponse({"ok": False, "error": "内容不存在"})
+        await db.execute(
+            "INSERT INTO media_material "
+            "(id,persona_id,type,title,detail,brief,source) VALUES (?,?,?,?,?,?,?)",
+            (str(uuid.uuid4()), row["persona_id"], mtype, detail[:40], detail,
+             (brief.strip() or detail)[:30], "反向挖料"))
+        await db.commit()
+    finally:
+        await db.close()
+    return JSONResponse({"ok": True})
+
+
+@router.post("/media/content/{cid}/published-at")
+async def content_published_at(cid: str, published_at: str = Form("")):
+    """存/改真实视频发布时间。"""
+    db = await get_db()
+    try:
+        await db.execute("UPDATE media_content SET published_at=? WHERE id=?",
+                         (published_at.strip() or None, cid))
+        await db.commit()
+    finally:
+        await db.close()
+    return RedirectResponse(f"/media/content/{cid}", status_code=303)
 
 
 @router.post("/media/content/{cid}/script")
