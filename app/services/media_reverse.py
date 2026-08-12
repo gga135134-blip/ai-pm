@@ -55,8 +55,10 @@ async def reverse_ingest(db, persona_id: str, video_url: str, cfg: dict,
         await db.execute(
             "INSERT INTO media_content "
             "(id,persona_id,title,puzzle,stage,idea_source,idea_reason,script,"
-            " topic_fingerprint) VALUES (?,?,?,?,'published','video_reverse',?,?,?)",
-            (content_id, persona_id, title, puzzle, video_url, transcript, fingerprint))
+            " topic_fingerprint,published_at) "
+            "VALUES (?,?,?,?,'published','video_reverse',?,?,?,?)",
+            (content_id, persona_id, title, puzzle, video_url, transcript,
+             fingerprint, upload_date))
 
         # 挂 publish 到该人设第一个 account；没号则只建 content
         cur = await db.execute(
@@ -67,8 +69,8 @@ async def reverse_ingest(db, persona_id: str, video_url: str, cfg: dict,
             await db.execute(
                 "INSERT INTO media_publish "
                 "(id,content_id,account_id,post_url,published_at,status) "
-                "VALUES (?,?,?,?,CURRENT_TIMESTAMP,'published')",
-                (str(uuid.uuid4()), content_id, acc["id"], video_url))
+                "VALUES (?,?,?,?,?,'published')",
+                (str(uuid.uuid4()), content_id, acc["id"], video_url, upload_date))
         await db.commit()
         return {"ok": True, "content_id": content_id, "title": title, "error": ""}
     finally:

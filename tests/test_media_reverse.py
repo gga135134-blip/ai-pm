@@ -40,14 +40,15 @@ def _seed_persona(pid="REVP", with_account=True):
     asyncio.run(go())
 
 
-def _patch(monkeypatch, audio_ok=True, asr_text="老板买AI工具用不起来", extract=None):
+def _patch(monkeypatch, audio_ok=True, asr_text="老板买AI工具用不起来", extract=None,
+           upload_date="2024-10-21"):
     async def fake_fetch(url, out_dir, cookies_path=None):
         if not audio_ok:
             raise VideoFetchError("拿不到")
         p = Path(out_dir) / "a.mp3"
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_bytes(b"x")
-        return p
+        return p, upload_date
     async def fake_asr(audio_url, cfg):
         if asr_text is None:
             raise ASRError("转写失败")
@@ -78,8 +79,8 @@ def _content_rows(pid):
         db = await get_db()
         try:
             cur = await db.execute(
-                "SELECT stage,idea_source,title,script,topic_fingerprint FROM media_content "
-                "WHERE persona_id=?", (pid,))
+                "SELECT stage,idea_source,title,script,topic_fingerprint,published_at "
+                "FROM media_content WHERE persona_id=?", (pid,))
             return [dict(r) for r in await cur.fetchall()]
         finally:
             await db.close()
@@ -97,6 +98,15 @@ def test_success_creates_published_content_and_publish(tmp_path, monkeypatch):
     assert rows[0]["idea_source"] == "video_reverse"
     assert rows[0]["script"] == "老板买AI工具用不起来"
     assert rows[0]["topic_fingerprint"] == "AI落地"
+    assert rows[0]["published_at"] == "2024-10-21"
+
+
+def test_no_upload_date_leaves_published_at_null(tmp_path, monkeypatch):
+    _seed_persona("REVP7")
+    _patch(monkeypatch, upload_date=None)
+    _run("REVP7", tmp_path)
+    rows = _content_rows("REVP7")
+    assert rows[0]["published_at"] is None
 
 
 def test_audio_dir_cleaned_after_success(tmp_path, monkeypatch):
