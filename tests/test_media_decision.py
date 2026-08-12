@@ -5,10 +5,11 @@ from app.services.media_decision import (
 
 
 def _ctx(traits=None, audiences=None, anchors=None, materials=None,
-         recent=None, history=None):
+         recent=None, history=None, dropped_anchors=None):
     return build_decision_context(
         traits or [], audiences or [], anchors or [],
-        materials or [], recent or [], history or [])
+        materials or [], recent or [], history or [],
+        dropped_anchors or [])
 
 
 def test_overlap_identical_and_disjoint():
@@ -118,3 +119,84 @@ def test_rank_pool_sorts_desc():
     assert ranked[0]["id"] == "T2" and ranked[1]["id"] == "T1"
     assert ranked[0]["decision_score"] >= ranked[1]["decision_score"]
     assert isinstance(ranked[0]["decision_report"], str) and ranked[0]["decision_report"]
+
+
+def test_audience_hit_tagged_uses_pay_willingness_not_overlap():
+    """打了标的话题：audience_hit 用命中 segment 的付费意愿，不看字面重叠。"""
+    seg = {"id": "S1", "segment": "焦虑老板", "anxiety": "完全不相关的焦虑词",
+           "language": "毫不沾边", "pay_willingness": 5}
+    t = {"title": "养花种草日常", "puzzle": "", "tagged": 1,
+         "audience_ids": ["S1"], "anchor_ids": [], "dropped_drift_ids": []}
+    res = score_topic(t, _ctx(audiences=[seg]), "涨粉")
+    # 字面毫不相关，但因为 AI 标了命中 → 付费意愿5 → 5/5 = 1.0
+    assert res["factors"]["audience_hit"]["value"] == 1.0
+    assert "命中" in res["factors"]["audience_hit"]["note"]
+
+
+def test_audience_hit_tagged_empty_scores_zero_no_fallback():
+    """打了标但命中空 = AI 判定不沾受众 → 0，不回落字面重叠。"""
+    seg = {"id": "S1", "segment": "焦虑老板", "anxiety": "中小企业AI落地难",
+           "language": "能落地不", "pay_willingness": 5}
+    t = {"title": "中小企业AI落地难题", "puzzle": "", "tagged": 1,
+         "audience_ids": [], "anchor_ids": [], "dropped_drift_ids": []}
+    res = score_topic(t, _ctx(audiences=[seg]), "涨粉")
+    assert res["factors"]["audience_hit"]["value"] == 0.0
+
+
+def test_audience_hit_untagged_falls_back_to_overlap():
+    """没打标（tagged 缺省）→ 回落字面重叠，老行为不变。"""
+    seg = {"id": "S1", "segment": "焦虑老板", "anxiety": "中小企业AI落地难",
+           "language": "能落地不", "pay_willingness": 5}
+    t = {"title": "中小企业AI落地难", "puzzle": ""}   # 无 tagged
+    res = score_topic(t, _ctx(audiences=[seg]), "涨粉")
+    assert res["factors"]["audience_hit"]["value"] > 0   # 字面重叠命中
+
+
+def test_anchor_distance_tagged_status_weight():
+    """打标锚点按状态给权重：proven 1.0 > validating 0.7。"""
+    proven = {"id": "A1", "name": "训练营", "value_prop": "x", "status": "proven"}
+    validating = {"id": "A2", "name": "咨询", "value_prop": "y", "status": "validating"}
+    t = {"title": "无关", "puzzle": "", "tagged": 1, "audience_ids": [],
+         "anchor_ids": ["A1", "A2"], "dropped_drift_ids": []}
+    res = score_topic(t, _ctx(anchors=[proven, validating]), "转化")
+    assert res["factors"]["anchor_distance"]["value"] == 1.0   # 取最高 proven
+
+
+def test_dropped_drift_flags_and_penalizes():
+    """飘向已放弃方向 → dropped_drift=1.0 + 报告红旗 + 拉低总分。"""
+    dead = {"id": "D1", "name": "微商带货", "value_prop": "z", "status": "dropped"}
+    t_drift = {"title": "无关", "puzzle": "", "tagged": 1, "audience_ids": [],
+               "anchor_ids": [], "dropped_drift_ids": ["D1"]}
+    t_clean = {"title": "无关", "puzzle": "", "tagged": 1, "audience_ids": [],
+               "anchor_ids": [], "dropped_drift_ids": []}
+    ctx = _ctx(dropped_anchors=[dead])
+    r_drift = score_topic(t_drift, ctx, "转化")
+    r_clean = score_topic(t_clean, ctx, "转化")
+    assert r_drift["factors"]["dropped_drift"]["value"] == 1.0
+    assert "已放弃方向" in r_drift["factors"]["dropped_drift"]["note"]
+    assert "微商带货" in r_drift["report"]
+    assert r_drift["score"] < r_clean["score"]       # 护栏拉低分
+
+
+def test_dropped_drift_absent_when_clean():
+    t = {"title": "无关", "puzzle": "", "tagged": 1, "audience_ids": [],
+         "anchor_ids": [], "dropped_drift_ids": []}
+    res = score_topic(t, _ctx(), "涨粉")
+    assert res["factors"]["dropped_drift"]["value"] == 0.0
+
+
+def test_id_columns_accept_json_string():
+    """容错：id 列是 JSON 字符串（route 忘了解析）也能正确处理。"""
+    import json as _json
+    seg = {"id": "S1", "segment": "焦虑老板", "anxiety": "x", "language": "y",
+           "pay_willingness": 4}
+    t = {"title": "无关", "puzzle": "", "tagged": 1,
+         "audience_ids": _json.dumps(["S1"]), "anchor_ids": "[]",
+         "dropped_drift_ids": "[]"}
+    res = score_topic(t, _ctx(audiences=[seg]), "涨粉")
+    assert res["factors"]["audience_hit"]["value"] == 0.8   # 4/5
+
+
+def test_build_context_carries_dropped_anchors():
+    ctx = build_decision_context([], [], [], [], [], [], dropped_anchors=[{"id": "D1"}])
+    assert ctx["dropped_anchors"] == [{"id": "D1"}]
