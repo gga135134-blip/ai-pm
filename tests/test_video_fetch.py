@@ -9,14 +9,15 @@ from app.services.video_fetch import fetch_audio, VideoFetchError
 
 
 class _FakeProc:
-    def __init__(self, returncode, made_file=None):
+    def __init__(self, returncode, made_file=None, stderr=b"err"):
         self.returncode = returncode
         self._made = made_file
+        self._stderr = stderr
 
     async def communicate(self):
         if self._made:
             self._made.write_bytes(b"fake-audio")
-        return (b"out", b"err")
+        return (b"out", self._stderr)
 
 
 def test_fetch_audio_success(tmp_path, monkeypatch):
@@ -38,6 +39,15 @@ def test_fetch_audio_nonzero_raises(tmp_path, monkeypatch):
     monkeypatch.setattr(video_fetch.asyncio, "create_subprocess_exec", fake_exec)
     monkeypatch.setattr(video_fetch.uuid, "uuid4", lambda: "aud")
     with pytest.raises(VideoFetchError):
+        asyncio.run(fetch_audio("https://bad/", tmp_path))
+
+
+def test_fetch_audio_ffmpeg_missing_raises_distinct_error(tmp_path, monkeypatch):
+    async def fake_exec(*args, **kwargs):
+        return _FakeProc(1, stderr=b"ERROR: ffmpeg not found in PATH")
+    monkeypatch.setattr(video_fetch.asyncio, "create_subprocess_exec", fake_exec)
+    monkeypatch.setattr(video_fetch.uuid, "uuid4", lambda: "aud")
+    with pytest.raises(VideoFetchError, match="ffmpeg"):
         asyncio.run(fetch_audio("https://bad/", tmp_path))
 
 

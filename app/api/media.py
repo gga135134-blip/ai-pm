@@ -784,12 +784,12 @@ async def media_reverse_ingest(request: Request, video_url: str = Form(...)):
         pid = await _first_persona_id(db)
         if not pid:
             return JSONResponse({"ok": False, "error": "请先创建人设"})
-        public_base = str(request.base_url).rstrip("/")
+        public_base = (cfg.get("public_base") or str(request.base_url)).rstrip("/")
         try:
             result = await reverse_ingest(db, pid, url, cfg, public_base, ASR_PUBLIC_DIR)
         except Exception as e:
             log.exception("视频反向入库失败")
-            return JSONResponse({"ok": False, "error": str(e)})
+            return JSONResponse({"ok": False, "error": "视频反向入库出错，请查看服务器日志"})
     finally:
         await db.close()
     return JSONResponse(result)

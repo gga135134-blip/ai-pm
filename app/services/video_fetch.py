@@ -38,6 +38,9 @@ async def fetch_audio(url: str, out_dir: Path) -> Path:
         raise VideoFetchError("服务器未安装 yt-dlp（pip install yt-dlp）")
     if proc.returncode != 0:
         log.warning("yt-dlp 失败 rc=%s err=%s", proc.returncode, (err or b"")[:500])
+        err_lower = (err or b"").lower()
+        if b"ffmpeg" in err_lower or b"ffprobe" in err_lower:
+            raise VideoFetchError("服务器缺 ffmpeg（yt-dlp 抽音频需要它，请安装 ffmpeg）")
         raise VideoFetchError("拿不到视频音频（平台可能防爬或链接失效）")
     if not target.exists():
         raise VideoFetchError("拿不到视频音频（未生成音频文件）")
