@@ -668,8 +668,9 @@ async function adoptMine(kind, i){
   }
   try{
     const r=await fetch(url,{method:'POST', body:fd});
+    const d=await r.json().catch(()=>({ok:r.ok}));
     const el=document.getElementById(kind+'-'+i);
-    if(r.ok && el){ el.style.opacity='.5'; el.querySelector('button').outerHTML='<span style="color:var(--success); font-size:12px">已采纳✓</span>'; }
+    if(d.ok && el){ el.style.opacity='.5'; el.querySelector('button').outerHTML='<span style="color:var(--success); font-size:12px">已采纳✓</span>'; }
   }catch(e){}
 }
 </script>
