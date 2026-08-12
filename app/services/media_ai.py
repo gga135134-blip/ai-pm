@@ -173,6 +173,47 @@ def _clean_ids(raw, valid_set) -> list:
     return out
 
 
+async def _build_asset_menu(db, persona_id: str) -> dict:
+    """拼给 AI 打标用的资产菜单（受众/可标锚点/已放弃方向三段），并返回合法 id 集。
+
+    dropped 锚点单列进「已放弃方向」段，只供 dropped_drift 护栏反向查，不进可标集。
+    """
+    cur = await db.execute(
+        "SELECT id,segment,anxiety,language,pay_willingness FROM media_audience "
+        "WHERE persona_id=? AND status='active'", (persona_id,))
+    auds = [dict(r) for r in await cur.fetchall()]
+    cur = await db.execute(
+        "SELECT id,name,value_prop,status FROM media_anchor "
+        "WHERE persona_id=? AND status IN ('validating','proven')", (persona_id,))
+    anchors = [dict(r) for r in await cur.fetchall()]
+    cur = await db.execute(
+        "SELECT id,name,value_prop FROM media_anchor "
+        "WHERE persona_id=? AND status='dropped'", (persona_id,))
+    dropped = [dict(r) for r in await cur.fetchall()]
+
+    lines = []
+    if auds:
+        lines.append("【受众 segment】命中填进 audience_ids：")
+        for a in auds:
+            lines.append(f"- id={a['id']}｜{a['segment']}｜焦虑:{a['anxiety']}｜原话:{a['language']}")
+    if anchors:
+        lines.append("【生意锚点】服务填进 anchor_ids：")
+        for a in anchors:
+            lines.append(f"- id={a['id']}｜{a['name']}｜{a['value_prop']}")
+    if dropped:
+        lines.append("【⛔ 已放弃方向】话题若往这些方向飘才填进 dropped_drift_ids：")
+        for a in dropped:
+            lines.append(f"- id={a['id']}｜{a['name']}｜{a['value_prop']}")
+    menu = "\n".join(lines) if lines else "（当前无受众/锚点资产可标，三个 id 列都留空）"
+
+    return {
+        "menu": menu,
+        "valid_aud": {a["id"] for a in auds},
+        "valid_anc": {a["id"] for a in anchors},
+        "valid_dropped": {a["id"] for a in dropped},
+    }
+
+
 # ─────────────── 二期 🅐：换脑审稿策略（纯函数）───────────────
 _PROVIDER_KEY = {
     "claude": "anthropic_api_key",
