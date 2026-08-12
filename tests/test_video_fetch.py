@@ -51,6 +51,15 @@ def test_fetch_audio_ffmpeg_missing_raises_distinct_error(tmp_path, monkeypatch)
         asyncio.run(fetch_audio("https://bad/", tmp_path))
 
 
+def test_fetch_audio_ytdlp_missing_raises_distinct_error(tmp_path, monkeypatch):
+    async def fake_exec(*args, **kwargs):
+        return _FakeProc(1, stderr=b"/usr/bin/python: No module named yt_dlp")
+    monkeypatch.setattr(video_fetch.asyncio, "create_subprocess_exec", fake_exec)
+    monkeypatch.setattr(video_fetch.uuid, "uuid4", lambda: "aud")
+    with pytest.raises(VideoFetchError, match="yt-dlp"):
+        asyncio.run(fetch_audio("https://x/", tmp_path))
+
+
 def test_fetch_audio_no_output_file_raises(tmp_path, monkeypatch):
     async def fake_exec(*args, **kwargs):
         return _FakeProc(0)  # 退出 0 但没产文件
