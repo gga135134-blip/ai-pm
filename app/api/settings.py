@@ -22,6 +22,7 @@ def load_settings() -> dict:
         "feishu_webhook": "",
         "routes": {"code": "auto", "writing": "auto", "analysis": "auto", "review": "auto"},
         "feishu_media_map": {"app_token": "", "table_id": "", "fields": {}},
+        "douyin_asr": {"app_id": "", "access_key": "", "resource_id": "volc.bigasr.auc"},
     }
     if CONFIG_FILE.exists():
         with open(CONFIG_FILE, "r", encoding="utf-8") as f:
@@ -205,3 +206,17 @@ async def test_feishu(request: Request):
         return JSONResponse({"ok": False, "error": f"连接失败: {e}"})
     columns = list(records[0]["fields"].keys()) if records else []
     return JSONResponse({"ok": True, "count": len(records), "columns": columns})
+
+
+@router.post("/settings/asr")
+async def settings_save_asr(
+    douyin_asr_app_id: str = Form(""),
+    douyin_asr_access_key: str = Form(""),
+    douyin_asr_resource_id: str = Form("volc.bigasr.auc"),
+):
+    save_settings({"douyin_asr": {
+        "app_id": douyin_asr_app_id.strip(),
+        "access_key": douyin_asr_access_key.strip(),
+        "resource_id": douyin_asr_resource_id.strip() or "volc.bigasr.auc",
+    }})
+    return RedirectResponse("/settings?msg=豆包ASR凭证已保存", status_code=303)
