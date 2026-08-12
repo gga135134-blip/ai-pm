@@ -266,6 +266,7 @@ CREATE TABLE IF NOT EXISTS media_content (
     outcome TEXT DEFAULT '',
     archived_status TEXT DEFAULT '',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    published_at DATETIME,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (persona_id) REFERENCES media_persona(id)
 );
@@ -485,6 +486,7 @@ MIGRATIONS = [
     "ALTER TABLE media_topic ADD COLUMN anchor_ids TEXT DEFAULT '[]'",
     "ALTER TABLE media_topic ADD COLUMN dropped_drift_ids TEXT DEFAULT '[]'",
     "ALTER TABLE media_topic ADD COLUMN tagged INTEGER DEFAULT 0",
+    "ALTER TABLE media_content ADD COLUMN published_at DATETIME",
 ]
 
 

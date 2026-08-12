@@ -143,3 +143,18 @@ def test_media_topic_has_tagging_columns():
 
     cols = asyncio.run(check())
     assert {"audience_ids", "anchor_ids", "dropped_drift_ids", "tagged"} <= cols
+
+
+def test_media_content_has_published_at():
+    import asyncio
+    from app.database import get_db, init_db
+
+    async def check():
+        await init_db()
+        db = await get_db()
+        try:
+            cur = await db.execute("PRAGMA table_info(media_content)")
+            return {r["name"] for r in await cur.fetchall()}
+        finally:
+            await db.close()
+    assert "published_at" in asyncio.run(check())
