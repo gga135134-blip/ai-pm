@@ -98,3 +98,34 @@ def test_adopt_trait_whitelist_accepts_l2_review():
         finally:
             await db.close()
     asyncio.run(check())
+
+
+def test_delete_route_removes_cycle_and_redirects():
+    _seed_persona("LPDEL")          # 独立 persona，避免与他测的 cycle 引用冲突
+    cid = str(uuid.uuid4())
+
+    async def seed():
+        db = await get_db()
+        try:
+            await db.execute(
+                "INSERT INTO media_review_cycle (id,persona_id,seq,content_ids,"
+                "period_end) VALUES (?,?,?,?,datetime('now'))",
+                (cid, "LPDEL", 9, json.dumps(["x"])))
+            await db.commit()
+        finally:
+            await db.close()
+    asyncio.run(seed())
+
+    r = _client().post(f"/media/review-cycle/{cid}/delete", follow_redirects=False)
+    assert r.status_code in (302, 303)
+    assert r.headers["location"] == "/media/persona"
+
+    async def check():
+        db = await get_db()
+        try:
+            cur = await db.execute(
+                "SELECT COUNT(*) n FROM media_review_cycle WHERE id=?", (cid,))
+            assert (await cur.fetchone())["n"] == 0
+        finally:
+            await db.close()
+    asyncio.run(check())

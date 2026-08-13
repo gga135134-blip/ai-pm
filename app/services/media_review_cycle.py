@@ -229,6 +229,18 @@ async def list_cycles(db, persona_id: str) -> list:
     return out
 
 
+async def delete_cycle(db, cycle_id: str) -> bool:
+    """删除一轮周期复盘。删后其 content_ids 自动脱离已复盘并集，
+    这些内容重新进入下一轮可复盘池（跑坏的试错轮不会永久消费内容）。"""
+    cur = await db.execute(
+        "SELECT id FROM media_review_cycle WHERE id=?", (cycle_id,))
+    if not await cur.fetchone():
+        return False
+    await db.execute("DELETE FROM media_review_cycle WHERE id=?", (cycle_id,))
+    await db.commit()
+    return True
+
+
 async def get_cycle(db, cycle_id: str):
     cur = await db.execute(
         "SELECT * FROM media_review_cycle WHERE id=?", (cycle_id,))
