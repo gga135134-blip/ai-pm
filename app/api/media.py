@@ -134,6 +134,7 @@ async def persona_detail(request: Request, pid: str):
         learnable_count = (await cur.fetchone())["n"]
 
         l2_cycles = await list_cycles(db, pid) if persona else []
+        l3_reviews = await list_phase_reviews(db, pid) if persona else []
     finally:
         await db.close()
 
@@ -150,7 +151,8 @@ async def persona_detail(request: Request, pid: str):
                  "accounts": accounts, "dimensions": TRAIT_DIMENSIONS,
                  "platforms": PLATFORMS, "archived": archived,
                  "done_count": len(done_modules), "module_total": len(PERSONA_MODULE_ORDER),
-                 "learnable_count": learnable_count, "l2_cycles": l2_cycles})
+                 "learnable_count": learnable_count, "l2_cycles": l2_cycles,
+                 "l3_reviews": l3_reviews})
 
 
 @router.post("/media/persona/{pid}/trait")
