@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% import "_icons.html" as ic %}
+{% block title %}L3 阶段复盘 #{{ rev.seq }}{% endblock %}
+{% block topbar %}
+<span class="crumb"><a href="/media" style="color:inherit;text-decoration:none">自媒体</a> {{ ic.icon('chevron') }} <b>阶段复盘 #{{ rev.seq }}</b></span>
+{% endblock %}
+{% block content %}
+<div style="max-width:820px; margin:0 auto">
+  <p style="font-size:13px"><a href="/media/persona" style="color:var(--ink-3)">← 人设</a></p>
+  <h2 style="margin-bottom:4px">第 {{ rev.seq }} 轮阶段复盘（L3）</h2>
+  <p style="color:var(--ink-3); font-size:13px; margin-bottom:16px">
+    当前阶段 {{ rev.phase_from }} · 纳入 {{ rev.l2_cycle_ids|length }} 轮 L2
+    · 成本 ${{ '%.4f'|format(rev.cost or 0) }} · {{ rev.model }}
+  </p>
+
+  <div class="module">
+    <div class="mh"><span class="ttl">🧭 阶段建议</span></div>
+    <div class="inner">
+      {% if rev.phase_reco == 'advance' and rev.phase_to %}
+      <p style="font-size:14px; margin-bottom:8px"><b>建议：进入「{{ rev.phase_to }}」阶段</b></p>
+      <p style="font-size:13px; color:var(--ink-3); margin-bottom:10px">{{ rev.phase_reason }}</p>
+      <form method="post" action="/media/phase-review/{{ rev.id }}/apply-phase"
+            onsubmit="return confirm('确认把人设切换到「{{ rev.phase_to }}」阶段？这会改变 AI 给选题打分的权重。')">
+        <button type="submit" class="btn primary">✅ 应用切换到 {{ rev.phase_to }} 阶段</button>
+      </form>
+      {% else %}
+      <p style="font-size:14px"><b>建议：原地（暂不进阶段）</b></p>
+      <p style="font-size:13px; color:var(--ink-3)">{{ rev.phase_reason }}</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="module" style="margin-top:12px">
+    <div class="mh"><span class="ttl">📶 阶段退出信号</span></div>
+    <div class="inner">
+      {% for s in rev.phase_signals %}
+      <div style="display:flex; justify-content:space-between; font-size:13px; padding:4px 0; border-bottom:1px solid var(--border)">
+        <span>{{ s.signal }}</span>
+        <span>实际 {{ s.value }} / 参考 {{ s.ref }}
+          <b style="color:{{ 'var(--up)' if s.met else 'var(--ink-3)' }}">{{ '达标' if s.met else '未达' }}</b></span>
+      </div>
+      {% else %}<div class="empty" style="text-align:left; padding:0">终点阶段，无退出信号</div>{% endfor %}
+    </div>
+  </div>
+
+  <div class="module" style="margin-top:12px">
+    <div class="mh"><span class="ttl">📈 各 L2 轮趋势</span></div>
+    <div class="inner">
+      {% for p in rev.metrics_trend.series %}
+      <div style="font-size:13px; padding:3px 0">第{{ p.seq }}轮 L2：均值播放 {{ p.avg_views }}，新增粉 {{ p.avg_new_fans }}，爆款 {{ p.hit_count }}</div>
+      {% else %}<div class="empty" style="text-align:left; padding:0">无趋势数据</div>{% endfor %}
+    </div>
+  </div>
+
+  <div class="module" style="margin-top:12px">
+    <div class="mh"><span class="ttl">🎯 人设条目策展（人拍板）</span></div>
+    <div class="inner">
+      {% for a in rev.trait_actions %}
+      <div style="border:1px solid var(--border); border-radius:8px; padding:10px; margin-bottom:8px">
+        <div style="font-size:13.5px"><b>[{{ a.action == 'archive' and '归档' or '晋升' }}]</b> [{{ a.dimension }}] {{ a.content }}</div>
+        <div style="font-size:12px; color:var(--ink-3); margin:4px 0">依据：{{ a.evidence }}｜{{ a.reason }}</div>
+        <form method="post" action="/media/phase-review/{{ rev.id }}/apply-trait" style="display:inline">
+          <input type="hidden" name="trait_id" value="{{ a.trait_id }}">
+          <input type="hidden" name="action" value="{{ a.action }}">
+          <button type="submit" class="btn" style="font-size:12.5px;
+            {% if a.action == 'archive' %}color:var(--down); border-color:var(--down){% endif %}">
+            {{ a.action == 'archive' and '归档这条' or '晋升这条' }}</button>
+        </form>
+      </div>
+      {% else %}<div class="empty" style="text-align:left; padding:0">这轮没提策展动作</div>{% endfor %}
+    </div>
+  </div>
+
+  <form method="post" action="/media/phase-review/{{ rev.id }}/delete"
+        onsubmit="return confirm('删除第 {{ rev.seq }} 轮阶段复盘？')" style="margin-top:16px">
+    <button type="submit" class="btn" style="font-size:12.5px; color:var(--down); border-color:var(--down)">🗑 删除这轮</button>
+  </form>
+</div>
+{% endblock %}
