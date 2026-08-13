@@ -109,3 +109,45 @@ def test_illegal_phase_to_falls_back_to_stay(monkeypatch):
         finally:
             await db.close()
     asyncio.run(go())
+
+
+def test_anchor_actions_validated_and_not_auto_applied(monkeypatch):
+    fake = {
+        "phase_reco": "stay", "phase_to": "", "phase_reason": "原地",
+        "trait_actions": [],
+        "anchor_actions": [
+            {"anchor_id": "AN-REAL", "action": "to_proven",
+             "observation": "6条选题在靠", "reason": "attention强"},
+            {"anchor_id": "AN-DROP", "action": "to_proven",       # dropped锚点未加载→过滤
+             "observation": "x", "reason": "y"},
+            {"anchor_id": "AN-FAKE", "action": "to_proven"},       # 瞎编id→过滤
+            {"anchor_id": "AN-REAL", "action": "bogus"},           # 非法action→过滤
+        ],
+    }
+
+    async def stub(prompt, model="auto", task_type="", system_prompt="", json_mode=False):
+        return {"response": json.dumps(fake), "model": "deepseek", "tokens": 10, "cost": 0}
+    monkeypatch.setattr(pr, "ask_ai", stub)
+
+    async def go():
+        db = await make_db()
+        try:
+            await _seed_persona_phase(db, "P1", "涨粉")
+            await db.execute(
+                "INSERT INTO media_anchor (id,persona_id,name,type,status) "
+                "VALUES ('AN-REAL','P1','陪跑营','service','validating')")
+            await db.execute(
+                "INSERT INTO media_anchor (id,persona_id,name,type,status) "
+                "VALUES ('AN-DROP','P1','旧带货','带货','dropped')")
+            for i in range(3):
+                await _seed_l2(db, "P1", f"c{i}", i + 1)
+            res = await pr.run_l3_review(db, "P1")
+            row = await pr.get_phase_review(db, res["review_id"])
+            acts = row["anchor_actions"]
+            assert len(acts) == 1 and acts[0]["anchor_id"] == "AN-REAL"   # 只剩合法
+            assert acts[0]["name"] == "陪跑营" and acts[0]["from_status"] == "validating"
+            cur = await db.execute("SELECT status FROM media_anchor WHERE id='AN-REAL'")
+            assert (await cur.fetchone())["status"] == "validating"       # 未自动改
+        finally:
+            await db.close()
+    asyncio.run(go())
