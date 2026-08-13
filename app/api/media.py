@@ -22,7 +22,8 @@ from app.services.media_ai import (
 )
 from app.services.media_flow import finalize_updates, clean_body
 from app.services.media_decision import build_decision_context, rank_pool
-from app.services.media_review_cycle import run_l2_cycle, list_cycles, get_cycle
+from app.services.media_review_cycle import (
+    run_l2_cycle, list_cycles, get_cycle, delete_cycle)
 from app.services.ai_router import _load_config
 from app.config import BASE_DIR
 
@@ -1374,6 +1375,17 @@ async def review_cycle_detail(cid: str, request: Request):
     if not cyc:
         return RedirectResponse("/media/persona", status_code=302)
     return _tpl(request, "media_review_cycle.html", {"cyc": cyc})
+
+
+@router.post("/media/review-cycle/{cid}/delete")
+async def review_cycle_delete(cid: str):
+    """删除一轮周期复盘（跑坏的试错轮）。删后其纳入内容回到可复盘池。"""
+    db = await get_db()
+    try:
+        await delete_cycle(db, cid)
+    finally:
+        await db.close()
+    return RedirectResponse("/media/persona", status_code=302)
 
 
 @router.post("/media/content/{cid}/ai-review")

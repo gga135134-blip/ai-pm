@@ -14,6 +14,13 @@
     · 成本 ${{ '%.4f'|format(cyc.cost or 0) }} · {{ cyc.model }}
   </p>
 
+  <form method="post" action="/media/review-cycle/{{ cyc.id }}/delete"
+        onsubmit="return confirm('删除第 {{ cyc.seq }} 轮周期复盘？纳入的 {{ cyc.metrics_summary.content_count }} 条内容会重新回到可复盘池。')"
+        style="margin-bottom:16px">
+    <button type="submit" class="btn"
+      style="font-size:12.5px; color:var(--down); border-color:var(--down)">🗑 删除这轮</button>
+  </form>
+
   <div class="module">
     <div class="mh"><span class="ttl">📊 汇总</span></div>
     <div class="inner" style="font-size:13.5px">
