@@ -64,12 +64,14 @@ CREATE TABLE IF NOT EXISTS media_playbook (
 
 ---
 
-## 5. 进料：反向补录「批量粘文本」入口
+## 5. 进料：反向补录「上传 TXT / 粘文本」入口（带预览）
 
-- 反向补录页加一个「粘文本批量入库」入口：一个 textarea，用户粘多条老文案，**用分隔线切分**（如空行分隔或 `---` 分隔），每段建一条 media_content：
-  - `stage='published'`，`idea_source='legacy_text'`，`script=该段全文`，`title=` 该段首句截断（或"老文案 N"），`is_winner=0`，`published_at` 留空（老内容日期未知，可后编辑）。
-- **不走 ASR、不走 yt-dlp**——文本已有，直接建行。一次粘多条一次建多条（"全部入库"省时间）。
-- 路由 `POST /media/reverse/paste-text`（body=多条文本）→ 切分建行 → 返回建了几条。
+- 反向补录页加「批量导入老文案」入口：**上传 TXT 文件**（复用知识库现有文件上传底子）**或**直接粘进 textarea。
+- **切分（序号为主）**：识别以序号开头的行（正则 `^\s*\d+\s*[.、)）]\s*` 认 `1.`/`2、`/`3)`/`4）`），每个序号段 = 一条文案；无序号则回落**空行分隔**。空段忽略。
+  - **防误切**：正文内的"1. 2. 3."列表可能被误切 → 加**导入预览**：切完先返回"切成 N 段"+ 每段首句，用户确认再真入库（切歪可换空行分隔/手动调）。
+- 确认后每段建一条 media_content：`stage='published'`，`idea_source='legacy_text'`，`script=该段全文`，`title=` 该段首句截断（或"老文案 N"），`is_winner=0`，`published_at` 留空（老内容日期未知，可后编辑）。
+- **不走 ASR、不走 yt-dlp**——文本已有，直接建行。一个文件/一次粘 → 一次建 N 条（"全部入库"省时间）。
+- 路由：`POST /media/reverse/paste-text/preview`（文本或上传 → 切分 → 返回段落列表预览，不写库）+ `POST /media/reverse/paste-text/commit`（确认的段落 → 建行 → 返回建了几条）。切分纯函数 `split_legacy_scripts(text) -> list[str]` 可单测。
 
 **`is_reverse` 判定扩展**：`content_detail`（media.py:993）现在 `is_reverse = idea_source == 'video_reverse'`，**改成 `idea_source in ('video_reverse','legacy_text')`**——让 legacy_text 内容也走反向精简视图 + 挖精华（复用功能C 的反向视图）。
 
@@ -158,6 +160,6 @@ CREATE TABLE IF NOT EXISTS media_playbook (
 
 ## 13. 开放问题 / 留后
 
-- **粘文本切分符**：默认空行 or `---`？实施时定一个明确的、并在输入框提示。
+- ~~粘文本切分符~~【已定 §5：上传 TXT/粘文本 → 按序号切（回落空行）+ 预览确认再入库】。
 - **打法 status 升级**（validating→proven）：本轮纯手动；以后可接真实复用数据/L2 印证自动建议。
 - **winner 与 media_case hit 的关系**：is_winner 是手动老内容标记；media_case.hit 是有 metrics 的自动判定。两者独立不冲突，决策引擎/L2 各用各的。
