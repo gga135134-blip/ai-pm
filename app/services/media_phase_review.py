@@ -27,6 +27,23 @@ def _next_phase(phase_from: str):
     return PHASE_ORDER[i + 1] if i + 1 < len(PHASE_ORDER) else None
 
 
+def count_topics_serving(anchor_id: str, topics: list) -> int:
+    """近期有几条选题在往这个锚点靠（media_topic.anchor_ids 含 anchor_id）。
+
+    anchor_ids 可能是 DB 原样的 JSON 字符串，也可能已解析成 list。
+    """
+    n = 0
+    for t in topics:
+        raw = t.get("anchor_ids")
+        try:
+            ids = json.loads(raw) if isinstance(raw, str) else (raw or [])
+        except Exception:
+            ids = []
+        if anchor_id in ids:
+            n += 1
+    return n
+
+
 def summarize_trend(l2: list) -> dict:
     series = []
     for c in l2:
@@ -122,12 +139,21 @@ trait 策展（只对给定的现有注册表，不造新——造新是 L2 的�
 - promote：被近几轮 L2 规律反复印证，值得提置信。
 - 每条给 trait_id（必须来自给定清单）+ action(archive/promote) + evidence + reason。
 
+锚点策展（只对给定的验证中/已跑通锚点，不碰已放弃，不造新——造锚点是锚点页的活）：
+- 你看不到真实成交/转化，只能看 attention 弱信号（多少选题在靠）+ 锚点定义。
+  别假装判定生意成败——给定性观察 + 建议，明说最终成没成要人按真实成交确认。
+- to_proven：attention 信号强、方向清晰，建议人确认成交后标为已跑通。
+- to_dropped：长期没选题在靠、方向明显偏了，建议放弃。
+- keep：没到火候，只给观察不推动作。每类 ≤3。
+- 每条给 anchor_id（必来自清单）+ action(to_proven/to_dropped/keep)+observation+reason。
+
 只输出严格 JSON：
 {"phase_reco":"advance|stay","phase_to":"","phase_reason":"",
- "trait_actions":[{"trait_id":"","action":"archive|promote","evidence":"","reason":""}]}"""
+ "trait_actions":[{"trait_id":"","action":"archive|promote","evidence":"","reason":""}],
+ "anchor_actions":[{"anchor_id":"","action":"to_proven|to_dropped|keep","observation":"","reason":""}]}"""
 
 
-def _build_l3_prompt(phase_from, next_phase, signals, l2, traits):
+def _build_l3_prompt(phase_from, next_phase, signals, l2, traits, anchors):
     parts = [f"【当前阶段】{phase_from}（下一阶段：{next_phase or '已是终点，只可 stay'}）"]
     parts.append("【阶段退出信号·实际数据】")
     for s in signals:
@@ -145,7 +171,14 @@ def _build_l3_prompt(phase_from, next_phase, signals, l2, traits):
     for t in traits:
         parts.append(f"- trait_id={t['id']}｜[{t['dimension']}] {t['content']}"
                      f"（置信 {t['confidence']}）")
-    parts.append("请判断阶段是否该进化，并对现有条目给策展动作。")
+    parts.append("【当前生意锚点（只在这些里给 to_proven/to_dropped/keep，"
+                 "不碰已放弃的，不造新）】")
+    for a in anchors:
+        parts.append(f"- anchor_id={a['id']}｜{a['name']}（{a['type']}，"
+                     f"当前{a['status']}）：近期 {a['serving_count']} 条选题在靠")
+    if not anchors:
+        parts.append("（暂无验证中/已跑通的锚点）")
+    parts.append("请判断阶段是否该进化，并对现有条目/锚点给策展动作。")
     return "\n".join(parts)
 
 
@@ -174,7 +207,19 @@ async def run_l3_review(db, persona_id: str, model: str = "auto",
     traits = [dict(r) for r in await cur.fetchall()]
     active_ids = {t["id"] for t in traits}
 
-    prompt = _build_l3_prompt(phase_from, next_phase, signals, l2, traits)
+    # 锚点策展：只加载 validating/proven（不碰 dropped），算 attention 弱信号
+    cur = await db.execute(
+        "SELECT id, name, type, status FROM media_anchor "
+        "WHERE persona_id=? AND status IN ('validating','proven')", (persona_id,))
+    anchors = [dict(r) for r in await cur.fetchall()]
+    active_anchor_ids = {a["id"] for a in anchors}
+    cur = await db.execute(
+        "SELECT anchor_ids FROM media_topic WHERE persona_id=?", (persona_id,))
+    topics = [dict(r) for r in await cur.fetchall()]
+    for a in anchors:
+        a["serving_count"] = count_topics_serving(a["id"], topics)
+
+    prompt = _build_l3_prompt(phase_from, next_phase, signals, l2, traits, anchors)
     result = await ask_ai(prompt, model=model, task_type="media_phase_review",
                           system_prompt=L3_SYSTEM, json_mode=True)
     resp = result.get("response", "")
@@ -208,19 +253,35 @@ async def run_l3_review(db, persona_id: str, model: str = "auto",
                 "content": t.get("content", ""), "action": a.get("action"),
                 "evidence": a.get("evidence", ""), "reason": a.get("reason", "")})
 
+    # 校验锚点动作：anchor_id 必须在 active(validating/proven) 集合、action 白名单
+    anchor_actions = []
+    for a in (obj.get("anchor_actions") or []):
+        if not isinstance(a, dict):
+            continue
+        aid = a.get("anchor_id")
+        if aid in active_anchor_ids and a.get("action") in (
+                "to_proven", "to_dropped", "keep"):
+            anc = next((x for x in anchors if x["id"] == aid), {})
+            anchor_actions.append({
+                "anchor_id": aid, "name": anc.get("name", ""),
+                "type": anc.get("type", ""), "from_status": anc.get("status", ""),
+                "action": a.get("action"), "observation": a.get("observation", ""),
+                "reason": a.get("reason", "")})
+
     seq = (prev["seq"] + 1) if prev else 1
     rid = str(uuid.uuid4())
     await db.execute(
         "INSERT INTO media_phase_review "
         "(id,persona_id,seq,phase_from,l2_cycle_ids,metrics_trend,phase_signals,"
-        " phase_reco,phase_to,phase_reason,trait_actions,cost,model) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        " phase_reco,phase_to,phase_reason,trait_actions,anchor_actions,cost,model) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (rid, persona_id, seq, phase_from,
          json.dumps([c["id"] for c in l2], ensure_ascii=False),
          json.dumps(trend, ensure_ascii=False),
          json.dumps(signals, ensure_ascii=False),
          phase_reco, phase_to_final, obj.get("phase_reason", ""),
          json.dumps(trait_actions, ensure_ascii=False),
+         json.dumps(anchor_actions, ensure_ascii=False),
          result.get("cost", 0), result.get("model", "")))
     await db.commit()
     await log_injection(db, "", "media_phase_review",
@@ -229,7 +290,8 @@ async def run_l3_review(db, persona_id: str, model: str = "auto",
             "cost": result.get("cost", 0), "model": result.get("model", "")}
 
 
-_JSON_FIELDS = ("l2_cycle_ids", "metrics_trend", "phase_signals", "trait_actions")
+_JSON_FIELDS = ("l2_cycle_ids", "metrics_trend", "phase_signals", "trait_actions",
+                "anchor_actions")
 
 
 async def list_phase_reviews(db, persona_id: str) -> list:

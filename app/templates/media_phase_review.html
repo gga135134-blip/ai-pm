@@ -71,6 +71,35 @@
     </div>
   </div>
 
+  <div class="module" style="margin-top:12px">
+    <div class="mh"><span class="ttl">🎯 锚点策展（人拍板 · 你按真实成交确认）</span></div>
+    <div class="inner">
+      {% for a in rev.anchor_actions %}
+      <div style="border:1px solid var(--border); border-radius:8px; padding:10px; margin-bottom:8px">
+        <div style="font-size:13.5px"><b>{{ a.name }}</b>（{{ a.type }}，当前 {{ a.from_status }}）</div>
+        <div style="font-size:12px; color:var(--ink-3); margin:4px 0">观察：{{ a.observation }}｜{{ a.reason }}</div>
+        {% if a.action == 'to_proven' %}
+        <form method="post" action="/media/phase-review/{{ rev.id }}/apply-anchor" style="display:inline"
+              onsubmit="return confirm('把「{{ a.name }}」标为已跑通？请先确认真实成交。')">
+          <input type="hidden" name="anchor_id" value="{{ a.anchor_id }}">
+          <input type="hidden" name="target_status" value="proven">
+          <button type="submit" class="btn" style="font-size:12.5px; color:var(--up); border-color:var(--up)">标为已跑通</button>
+        </form>
+        {% elif a.action == 'to_dropped' %}
+        <form method="post" action="/media/phase-review/{{ rev.id }}/apply-anchor" style="display:inline"
+              onsubmit="return confirm('把「{{ a.name }}」标为已放弃？放弃是重决策。')">
+          <input type="hidden" name="anchor_id" value="{{ a.anchor_id }}">
+          <input type="hidden" name="target_status" value="dropped">
+          <button type="submit" class="btn" style="font-size:12.5px; color:var(--down); border-color:var(--down)">标为已放弃</button>
+        </form>
+        {% else %}
+        <span style="font-size:12px; color:var(--ink-3)">（保持观察，暂不动）</span>
+        {% endif %}
+      </div>
+      {% else %}<div class="empty" style="text-align:left; padding:0">这轮没提锚点动作</div>{% endfor %}
+    </div>
+  </div>
+
   <form method="post" action="/media/phase-review/{{ rev.id }}/delete"
         onsubmit="return confirm('删除第 {{ rev.seq }} 轮阶段复盘？')" style="margin-top:16px">
     <button type="submit" class="btn" style="font-size:12.5px; color:var(--down); border-color:var(--down)">🗑 删除这轮</button>

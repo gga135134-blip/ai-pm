@@ -120,3 +120,81 @@ async def _run_seed(pid, phase, rid, phase_to):
         await _seed(db, pid, phase, rid, phase_to)
     finally:
         await db.close()
+
+
+def test_apply_anchor_to_proven_and_reject_illegal():
+    pid, rid = "ANP1", str(uuid.uuid4())
+    aid = "ANC1"
+    asyncio.run(_run_seed(pid, "涨粉", rid, "转化"))
+
+    async def seed_anchor():
+        db = await get_db()
+        try:
+            await db.execute(
+                "INSERT INTO media_anchor (id,persona_id,name,type,status) "
+                "VALUES (?,?, '陪跑营','service','validating')", (aid, pid))
+            await db.commit()
+        finally:
+            await db.close()
+    asyncio.run(seed_anchor())
+
+    _client().post(f"/media/phase-review/{rid}/apply-anchor",
+                   data={"anchor_id": aid, "target_status": "proven"},
+                   follow_redirects=False)
+
+    async def check1():
+        db = await get_db()
+        try:
+            cur = await db.execute("SELECT status FROM media_anchor WHERE id=?", (aid,))
+            assert (await cur.fetchone())["status"] == "proven"
+        finally:
+            await db.close()
+    asyncio.run(check1())
+
+    # 非法目标 validating → 不改（保持 proven）
+    _client().post(f"/media/phase-review/{rid}/apply-anchor",
+                   data={"anchor_id": aid, "target_status": "validating"},
+                   follow_redirects=False)
+
+    async def check2():
+        db = await get_db()
+        try:
+            cur = await db.execute("SELECT status FROM media_anchor WHERE id=?", (aid,))
+            assert (await cur.fetchone())["status"] == "proven"
+        finally:
+            await db.close()
+    asyncio.run(check2())
+
+
+def test_apply_anchor_rejects_cross_persona():
+    pid, rid = "ANP2", str(uuid.uuid4())
+    asyncio.run(_run_seed(pid, "涨粉", rid, "转化"))
+    other = "ANC-OTHER"
+
+    async def seed_other():
+        db = await get_db()
+        try:
+            await db.execute("DELETE FROM media_persona WHERE id='OTHERP'")
+            await db.execute(
+                "INSERT INTO media_persona (id,name,one_liner,current_phase,status) "
+                "VALUES ('OTHERP','x','y','涨粉','active')")
+            await db.execute(
+                "INSERT INTO media_anchor (id,persona_id,name,type,status) "
+                "VALUES (?, 'OTHERP','别人的','service','validating')", (other,))
+            await db.commit()
+        finally:
+            await db.close()
+    asyncio.run(seed_other())
+
+    _client().post(f"/media/phase-review/{rid}/apply-anchor",
+                   data={"anchor_id": other, "target_status": "proven"},
+                   follow_redirects=False)
+
+    async def check():
+        db = await get_db()
+        try:
+            cur = await db.execute("SELECT status FROM media_anchor WHERE id=?", (other,))
+            assert (await cur.fetchone())["status"] == "validating"
+        finally:
+            await db.close()
+    asyncio.run(check())
