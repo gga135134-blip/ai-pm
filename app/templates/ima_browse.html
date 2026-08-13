@@ -73,7 +73,7 @@ async function addKB() {
     var msg = document.getElementById('add-kb-msg');
     var raw = urlInput.value.trim();
     if (!raw) { msg.textContent = '请粘贴分享链接'; msg.className = 'ima-msg err'; return; }
-    btn.textContent = '添加中…'; btn.disabled = true; msg.textContent = ''; msg.className = 'ima-msg';
+    var orig = btn.innerHTML; btn.textContent = '添加中…'; btn.disabled = true; msg.textContent = ''; msg.className = 'ima-msg';
     try {
         var r = await fetch('/notes/ima/add-kb', {
             method: 'POST',
@@ -93,7 +93,7 @@ async function addKB() {
     } catch(e) {
         msg.textContent = String(e); msg.className = 'ima-msg err';
     }
-    btn.innerHTML = '{{ ic.icon("plus") }}添加'; btn.disabled = false;
+    btn.innerHTML = orig; btn.disabled = false;
 }
 
 async function loadSavedKBs() {
