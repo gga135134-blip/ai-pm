@@ -24,6 +24,8 @@ from app.services.media_flow import finalize_updates, clean_body
 from app.services.media_decision import build_decision_context, rank_pool
 from app.services.media_review_cycle import (
     run_l2_cycle, list_cycles, get_cycle, delete_cycle)
+from app.services.media_phase_review import (
+    run_l3_review, list_phase_reviews, get_phase_review)
 from app.services.ai_router import _load_config
 from app.config import BASE_DIR
 
@@ -1383,6 +1385,43 @@ async def review_cycle_delete(cid: str):
     db = await get_db()
     try:
         await delete_cycle(db, cid)
+    finally:
+        await db.close()
+    return RedirectResponse("/media/persona", status_code=302)
+
+
+@router.post("/media/persona/{pid}/l3-review")
+async def persona_l3_review(pid: str, force: int = Form(0)):
+    db = await get_db()
+    try:
+        try:
+            result = await run_l3_review(db, pid, force=bool(force))
+        except Exception as e:
+            log.exception("L3 阶段复盘失败")
+            return JSONResponse({"ok": False, "error": str(e)})
+    finally:
+        await db.close()
+    return JSONResponse(result)
+
+
+@router.get("/media/phase-review/{rid}", response_class=HTMLResponse)
+async def phase_review_detail(rid: str, request: Request):
+    db = await get_db()
+    try:
+        rev = await get_phase_review(db, rid)
+    finally:
+        await db.close()
+    if not rev:
+        return RedirectResponse("/media/persona", status_code=302)
+    return _tpl(request, "media_phase_review.html", {"rev": rev})
+
+
+@router.post("/media/phase-review/{rid}/delete")
+async def phase_review_delete(rid: str):
+    db = await get_db()
+    try:
+        await db.execute("DELETE FROM media_phase_review WHERE id=?", (rid,))
+        await db.commit()
     finally:
         await db.close()
     return RedirectResponse("/media/persona", status_code=302)

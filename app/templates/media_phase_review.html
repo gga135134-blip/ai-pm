@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{# Task-4 placeholder: minimal detail page to satisfy the route test.
+   Full L3 阶段复盘 report page is built in Task 6 — replace this file then. #}
+{% block title %}L3 阶段复盘 #{{ rev.seq }}{% endblock %}
+{% block content %}
+<div style="max-width:820px; margin:0 auto">
+  <p style="font-size:13px"><a href="/media/persona" style="color:var(--ink-3)">← 人设</a></p>
+  <h2 style="margin-bottom:4px">第 {{ rev.seq }} 轮阶段复盘（L3）</h2>
+  <p style="color:var(--ink-3); font-size:13px">{{ rev.phase_reason }}</p>
+</div>
+{% endblock %}
