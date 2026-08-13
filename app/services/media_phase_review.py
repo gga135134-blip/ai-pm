@@ -27,6 +27,23 @@ def _next_phase(phase_from: str):
     return PHASE_ORDER[i + 1] if i + 1 < len(PHASE_ORDER) else None
 
 
+def count_topics_serving(anchor_id: str, topics: list) -> int:
+    """近期有几条选题在往这个锚点靠（media_topic.anchor_ids 含 anchor_id）。
+
+    anchor_ids 可能是 DB 原样的 JSON 字符串，也可能已解析成 list。
+    """
+    n = 0
+    for t in topics:
+        raw = t.get("anchor_ids")
+        try:
+            ids = json.loads(raw) if isinstance(raw, str) else (raw or [])
+        except Exception:
+            ids = []
+        if anchor_id in ids:
+            n += 1
+    return n
+
+
 def summarize_trend(l2: list) -> dict:
     series = []
     for c in l2:

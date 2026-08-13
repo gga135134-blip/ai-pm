@@ -528,6 +528,7 @@ MIGRATIONS = [
     "ALTER TABLE media_topic ADD COLUMN dropped_drift_ids TEXT DEFAULT '[]'",
     "ALTER TABLE media_topic ADD COLUMN tagged INTEGER DEFAULT 0",
     "ALTER TABLE media_content ADD COLUMN published_at DATETIME",
+    "ALTER TABLE media_phase_review ADD COLUMN anchor_actions TEXT DEFAULT '[]'",
 ]
 
 

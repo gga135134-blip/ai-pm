@@ -83,3 +83,26 @@ def test_gather_l2_since_only_after_last_l3():
         finally:
             await db.close()
     asyncio.run(go())
+
+
+def test_count_topics_serving():
+    topics = [
+        {"anchor_ids": '["a1","a2"]'},      # JSON 字符串形式（DB 原样）
+        {"anchor_ids": ["a1"]},             # list 形式
+        {"anchor_ids": '[]'},
+        {"anchor_ids": None},
+    ]
+    assert pr.count_topics_serving("a1", topics) == 2
+    assert pr.count_topics_serving("a2", topics) == 1
+    assert pr.count_topics_serving("zzz", topics) == 0
+
+
+def test_phase_review_has_anchor_actions_column():
+    async def go():
+        db = await make_db()
+        try:
+            cur = await db.execute("PRAGMA table_info(media_phase_review)")
+            return {r["name"] for r in await cur.fetchall()}
+        finally:
+            await db.close()
+    assert "anchor_actions" in asyncio.run(go())
