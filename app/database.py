@@ -465,6 +465,25 @@ CREATE TABLE IF NOT EXISTS media_review_cycle (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (persona_id) REFERENCES media_persona(id)
 );
+
+CREATE TABLE IF NOT EXISTS media_phase_review (
+    id TEXT PRIMARY KEY,
+    persona_id TEXT NOT NULL,
+    seq INTEGER DEFAULT 1,
+    phase_from TEXT DEFAULT '',
+    l2_cycle_ids TEXT DEFAULT '[]',
+    metrics_trend TEXT DEFAULT '{}',
+    phase_signals TEXT DEFAULT '[]',
+    phase_reco TEXT DEFAULT 'stay',
+    phase_to TEXT DEFAULT '',
+    phase_reason TEXT DEFAULT '',
+    trait_actions TEXT DEFAULT '[]',
+    cost REAL DEFAULT 0,
+    model TEXT DEFAULT '',
+    generated_by TEXT DEFAULT 'ai',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (persona_id) REFERENCES media_persona(id)
+);
 """
 
 
