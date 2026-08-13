@@ -1470,6 +1470,27 @@ async def phase_review_apply_trait(rid: str, trait_id: str = Form(...),
     return RedirectResponse(f"/media/phase-review/{rid}", status_code=302)
 
 
+@router.post("/media/phase-review/{rid}/apply-anchor")
+async def phase_review_apply_anchor(rid: str, anchor_id: str = Form(...),
+                                    target_status: str = Form(...)):
+    """人拍板：把锚点标为已跑通/已放弃。目标只能 proven/dropped，校验锚点归属。"""
+    db = await get_db()
+    try:
+        rev = await get_phase_review(db, rid)
+        if rev and target_status in ("proven", "dropped"):
+            cur = await db.execute(
+                "SELECT id FROM media_anchor WHERE id=? AND persona_id=?",
+                (anchor_id, rev["persona_id"]))
+            if await cur.fetchone():
+                await db.execute(
+                    "UPDATE media_anchor SET status=? WHERE id=?",
+                    (target_status, anchor_id))
+                await db.commit()
+    finally:
+        await db.close()
+    return RedirectResponse(f"/media/phase-review/{rid}", status_code=302)
+
+
 @router.post("/media/phase-review/{rid}/delete")
 async def phase_review_delete(rid: str):
     db = await get_db()
