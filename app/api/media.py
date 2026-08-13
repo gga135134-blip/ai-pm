@@ -25,7 +25,7 @@ from app.services.media_decision import build_decision_context, rank_pool
 from app.services.media_review_cycle import (
     run_l2_cycle, list_cycles, get_cycle, delete_cycle)
 from app.services.media_phase_review import (
-    run_l3_review, list_phase_reviews, get_phase_review)
+    run_l3_review, list_phase_reviews, get_phase_review, _next_phase)
 from app.services.ai_router import _load_config
 from app.config import BASE_DIR
 
@@ -1414,6 +1414,58 @@ async def phase_review_detail(rid: str, request: Request):
     if not rev:
         return RedirectResponse("/media/persona", status_code=302)
     return _tpl(request, "media_phase_review.html", {"rev": rev})
+
+
+@router.post("/media/phase-review/{rid}/apply-phase")
+async def phase_review_apply_phase(rid: str):
+    """人拍板：把建议的阶段切换真正写进 persona。仅当目标是当前阶段的下一个。"""
+    db = await get_db()
+    try:
+        rev = await get_phase_review(db, rid)
+        if rev:
+            cur = await db.execute(
+                "SELECT current_phase FROM media_persona WHERE id=?",
+                (rev["persona_id"],))
+            prow = await cur.fetchone()
+            cur_phase = prow["current_phase"] if prow else ""
+            target = rev.get("phase_to") or ""
+            if target and target == _next_phase(cur_phase):
+                await db.execute(
+                    "UPDATE media_persona SET current_phase=? WHERE id=?",
+                    (target, rev["persona_id"]))
+                await db.commit()
+    finally:
+        await db.close()
+    return RedirectResponse(f"/media/phase-review/{rid}", status_code=302)
+
+
+@router.post("/media/phase-review/{rid}/apply-trait")
+async def phase_review_apply_trait(rid: str, trait_id: str = Form(...),
+                                   action: str = Form(...)):
+    """人拍板：归档/晋升一条人设条目。"""
+    db = await get_db()
+    try:
+        rev = await get_phase_review(db, rid)
+        if rev and action in ("archive", "promote"):
+            # 校验 trait 属于该 review 的 persona
+            cur = await db.execute(
+                "SELECT confidence FROM media_persona_trait "
+                "WHERE id=? AND persona_id=?", (trait_id, rev["persona_id"]))
+            trow = await cur.fetchone()
+            if trow:
+                if action == "archive":
+                    await db.execute(
+                        "UPDATE media_persona_trait SET status='archived' WHERE id=?",
+                        (trait_id,))
+                else:
+                    newc = min(5, (trow["confidence"] or 3) + 1)
+                    await db.execute(
+                        "UPDATE media_persona_trait SET confidence=? WHERE id=?",
+                        (newc, trait_id))
+                await db.commit()
+    finally:
+        await db.close()
+    return RedirectResponse(f"/media/phase-review/{rid}", status_code=302)
 
 
 @router.post("/media/phase-review/{rid}/delete")
