@@ -22,6 +22,7 @@ from app.services.media_ai import (
 )
 from app.services.media_flow import finalize_updates, clean_body
 from app.services.media_decision import build_decision_context, rank_pool
+from app.services.media_review_cycle import run_l2_cycle, list_cycles, get_cycle
 from app.services.ai_router import _load_config
 from app.config import BASE_DIR
 
@@ -128,6 +129,8 @@ async def persona_detail(request: Request, pid: str):
             "AND authoring_stage='finalized' AND ai_draft != '' "
             "AND script != '' AND script != ai_draft", (pid,))
         learnable_count = (await cur.fetchone())["n"]
+
+        l2_cycles = await list_cycles(db, pid) if persona else []
     finally:
         await db.close()
 
@@ -144,7 +147,7 @@ async def persona_detail(request: Request, pid: str):
                  "accounts": accounts, "dimensions": TRAIT_DIMENSIONS,
                  "platforms": PLATFORMS, "archived": archived,
                  "done_count": len(done_modules), "module_total": len(PERSONA_MODULE_ORDER),
-                 "learnable_count": learnable_count})
+                 "learnable_count": learnable_count, "l2_cycles": l2_cycles})
 
 
 @router.post("/media/persona/{pid}/trait")
@@ -214,7 +217,8 @@ async def persona_interview_adopt(pid: str, dimension: str = Form(...),
                                   phase_tag: str = Form(""),
                                   source: str = Form("interview")):
     """人拍板：把一条候选条目写进注册表。source 区分来源（interview / learned_edit）。"""
-    src = source if source in ("interview", "learned_edit", "reverse_mine") else "interview"
+    src = source if source in ("interview", "learned_edit", "reverse_mine",
+                               "l2_review") else "interview"
     db = await get_db()
     try:
         await db.execute(
@@ -1345,6 +1349,32 @@ async def publish_save(cid: str, aid: str, publish_text: str = Form(""),
 
 
 # ─────────────── 复盘 ───────────────
+
+@router.post("/media/persona/{pid}/l2-review")
+async def persona_l2_review(pid: str, force: int = Form(0)):
+    db = await get_db()
+    try:
+        try:
+            result = await run_l2_cycle(db, pid, force=bool(force))
+        except Exception as e:
+            log.exception("L2 周期复盘失败")
+            return JSONResponse({"ok": False, "error": str(e)})
+    finally:
+        await db.close()
+    return JSONResponse(result)
+
+
+@router.get("/media/review-cycle/{cid}", response_class=HTMLResponse)
+async def review_cycle_detail(cid: str, request: Request):
+    db = await get_db()
+    try:
+        cyc = await get_cycle(db, cid)
+    finally:
+        await db.close()
+    if not cyc:
+        return RedirectResponse("/media/persona", status_code=302)
+    return _tpl(request, "media_review_cycle.html", {"cyc": cyc})
+
 
 @router.post("/media/content/{cid}/ai-review")
 async def content_ai_review(cid: str):

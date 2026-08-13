@@ -443,6 +443,28 @@ CREATE TABLE IF NOT EXISTS media_anchor (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (persona_id) REFERENCES media_persona(id)
 );
+
+CREATE TABLE IF NOT EXISTS media_review_cycle (
+    id TEXT PRIMARY KEY,
+    persona_id TEXT NOT NULL,
+    level TEXT DEFAULT 'L2',
+    seq INTEGER DEFAULT 1,
+    period_start DATETIME,
+    period_end DATETIME,
+    content_ids TEXT DEFAULT '[]',
+    metrics_summary TEXT DEFAULT '{}',
+    patterns TEXT DEFAULT '[]',
+    hypotheses TEXT DEFAULT '[]',
+    hypotheses_tested TEXT DEFAULT '[]',
+    proposed_traits TEXT DEFAULT '[]',
+    proposed_audience TEXT DEFAULT '[]',
+    advisory TEXT DEFAULT '{}',
+    cost REAL DEFAULT 0,
+    model TEXT DEFAULT '',
+    generated_by TEXT DEFAULT 'ai',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (persona_id) REFERENCES media_persona(id)
+);
 """
 
 
