@@ -205,12 +205,12 @@
                   style="font-family:var(--mono); min-height:420px; line-height:1.7; resize:vertical">{{ content.script }}</textarea>
         <div class="field" style="margin-top:10px">
           <label class="label">剪辑要点</label>
-          <input name="edit_note" value="{{ content.edit_note }}" class="input w-full">
+          <input name="edit_note" id="edit-note-box" value="{{ content.edit_note }}" class="input w-full">
         </div>
-        <div class="field">
-          <label class="label">封面思路</label>
-          <input name="cover_idea" value="{{ content.cover_idea }}" class="input w-full">
-        </div>
+        {# 封面思路的可编辑框已移到「三平台发布」区（封面是发布物料）。
+           但后端 /script 的 cover_idea 默认空值会覆盖，所以这里留一个隐藏镜像，
+           保存脚本时把发布区的当前值带上，避免被清空。 #}
+        <input type="hidden" name="cover_idea" id="cover-mirror" value="{{ content.cover_idea }}">
         <button class="btn primary">保存脚本</button>
       </form>
     </div>
@@ -220,6 +220,20 @@
   <div class="module">
     <div class="mh"><span class="ttl" style="font-size:14px">三平台发布</span></div>
     <div class="inner">
+    {# 封面是发布物料，放在发布区。独立表单提交，提交前用 JS 把脚本/剪辑要点的当前值
+       同步进隐藏字段，否则后端会用空值覆盖它们 #}
+    <form method="post" action="/media/content/{{ content.id }}/script" onsubmit="syncBeforeCoverSave(this)"
+          class="field" style="margin-bottom:14px">
+      <input type="hidden" name="script" value="">
+      <input type="hidden" name="edit_note" value="">
+      <label class="label">封面思路</label>
+      <div style="display:flex; gap:8px">
+        <input name="cover_idea" id="cover-box" value="{{ content.cover_idea }}" class="input" style="flex:1"
+               placeholder="封面怎么呈现（各平台尺寸/风格不同，先记一版思路）">
+        <button class="btn">保存</button>
+      </div>
+    </form>
+
     {% if not accounts %}
       <div class="empty" style="text-align:left; padding:0">
         还没有平台账号，<a href="/media/persona/{{ persona.id }}" style="color:var(--accent)">先去人设档案添加</a>。
@@ -361,6 +375,23 @@
 </div>
 
 <script>
+/* 封面思路与脚本共用后端 /script 接口，两个表单互相把对方的当前值带上，谁都不会覆盖谁 */
+function syncBeforeCoverSave(form){
+  var s = document.getElementById('script-box');
+  var e = document.getElementById('edit-note-box');
+  form.querySelector('input[name=script]').value = s ? s.value : '';
+  form.querySelector('input[name=edit_note]').value = e ? e.value : '';
+}
+/* 保存脚本时，把发布区封面框的当前值同步进隐藏镜像 */
+document.addEventListener('DOMContentLoaded', function(){
+  var box = document.getElementById('cover-box');
+  var mirror = document.getElementById('cover-mirror');
+  if(box && mirror){
+    box.addEventListener('input', function(){ mirror.value = box.value; });
+    mirror.value = box.value;
+  }
+});
+
 /* 体系库存量填进「可注入」说明。注意：这是 AI 可取用的池子大小，
    后端未暴露单次调用实际注入了哪几条，不能把存量说成本次注入。 */
 fetch('/media/ui/steps').then(function(r){ return r.json(); }).then(function(d){
