@@ -1,20 +1,27 @@
 {% extends "base.html" %}
 {% import "_icons.html" as ic %}
 {% block title %}自媒体 · 人设总览{% endblock %}
+{% block topbar %}
+<span class="crumb"><b>自媒体</b></span>
+{% endblock %}
 {% block content %}
 <style>
   #np-overlay{ display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:50; align-items:center; justify-content:center; padding:16px; }
   #np-overlay.open{ display:flex; }
   #np-overlay .panel{ background:var(--bg); border:1px solid var(--border); border-radius:var(--r); box-shadow:var(--shadow-lg); padding:18px; width:100%; max-width:420px; }
-  .pcard{ display:block; border:1px solid var(--border); border-radius:var(--r); padding:16px 18px; margin-bottom:12px; background:var(--panel); text-decoration:none; color:inherit; }
+  .pcard{ display:block; border:1px solid var(--border); border-radius:var(--r); padding:16px 18px; margin-bottom:12px; background:var(--bg); text-decoration:none; color:inherit; }
   .pcard:hover{ border-color:var(--accent); }
   .pcard .nm{ font-size:17px; font-weight:600; }
   .pcard .meta{ font-size:13px; color:var(--ink-3); margin-top:6px; display:flex; gap:14px; flex-wrap:wrap; }
 </style>
 <div style="max-width:720px; margin:0 auto">
-  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px">
-    <h2 style="margin:0">人设总览</h2>
-    <button onclick="document.getElementById('np-overlay').classList.add('open')" class="btn primary" style="padding:6px 14px; font-size:13px">＋ 新建人设</button>
+  {# 这是「还没选人设」的门，不挂步骤条——没有人设上下文，步骤条无从谈起 #}
+  <h1 class="pname" style="margin:0 0 5px">人设总览</h1>
+  <p style="font-size:13px;color:var(--ink-3);line-height:1.6;margin:0 0 18px;max-width:620px">
+    选一个人设进工作区，或新建一个。进去之后，选题 → 内容 → 发布 → 复盘 这条主线都在这个人设的上下文里。
+  </p>
+  <div style="display:flex; justify-content:flex-end; margin-bottom:14px">
+    <button onclick="document.getElementById('np-overlay').classList.add('open')" class="btn primary">{{ ic.icon('plus') }}新建人设</button>
   </div>
   {% for p in personas %}
   <a class="pcard" href="/media/persona/{{ p.id }}/enter">
@@ -26,7 +33,14 @@
       {% else %}<span style="color:var(--ink-3)">未绑账号</span>{% endif %}
     </div>
   </a>
-  {% else %}<div class="empty">还没有人设，点右上「＋ 新建人设」开始。</div>{% endfor %}
+  {% else %}
+  <div class="empty" style="padding:40px 12px">
+    <div style="color:var(--ink-3);margin-bottom:10px;display:flex;justify-content:center;font-size:28px">{{ ic.icon('robot') }}</div>
+    <p style="color:var(--ink-2);font-size:14px;margin:0 0 4px">还没有人设</p>
+    <p style="color:var(--ink-3);font-size:12.5px;margin:0 0 14px">人设是这一切的起点——先建一个，再往里填内容和体系。</p>
+    <button onclick="document.getElementById('np-overlay').classList.add('open')" class="btn primary">{{ ic.icon('plus') }}建第一个人设</button>
+  </div>
+  {% endfor %}
 </div>
 <div id="np-overlay" onclick="if(event.target===this) this.classList.remove('open')">
   <div class="panel">

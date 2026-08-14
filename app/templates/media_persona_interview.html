@@ -1,8 +1,9 @@
 {% extends "base.html" %}
+{% import "_icons.html" as ic %}
+{% import "_media_shell.html" as shell %}
 {% block title %}人设访谈{% endblock %}
 {% block topbar %}
-<span class="crumb"><a href="/media" style="color:inherit;text-decoration:none">自媒体</a> ·
-  <a href="/media/persona/{{ persona.id }}" style="color:inherit;text-decoration:none">人设档案</a> · <b>访谈梳理</b></span>
+<span class="crumb"><a href="/media" style="color:inherit;text-decoration:none">自媒体</a> {{ ic.icon('chevron') }} 体系库 {{ ic.icon('chevron') }} <b>人设</b></span>
 {% endblock %}
 {% block content %}
 <style>
@@ -14,6 +15,8 @@
 </style>
 
 <div style="margin-bottom:16px">
+  {{ shell.media_shell('lib') }}
+
   <div class="pname" style="margin-bottom:8px">人设访谈 · {{ persona.name if persona else '' }}</div>
   <div style="font-size:12.5px; color:var(--ink-3)">一个模块一坐：AI 出题 → 你一次答完 → AI 提炼 → 你逐条拍板。可随时中断续做。</div>
 </div>
@@ -72,7 +75,9 @@ async function extract(mod){
   const d = await r.json();
   if(!d.ok){ alert(d.error||'提炼失败'); return; }
   const box = c.querySelector('.candidates'); box.innerHTML='';
-  if(!(d.traits||[]).length){ box.innerHTML='<div class="empty">AI 没从回答里提炼出条目（可能答得太少）。</div>'; return; }
+  if(!(d.traits||[]).length){ box.innerHTML='<div class="empty">AI 没从回答里提炼出条目（可能答得太少）。
+  {{ shell.step_nav(back={'href':'/media/board','label':'内容看板'}) }}
+</div>'; return; }
   d.traits.forEach(t=>box.appendChild(candidate(t)));
 }
 

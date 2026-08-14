@@ -1,0 +1,116 @@
+{% import "_icons.html" as ic %}
+
+{#- 自媒体工作流外壳：人设条 + 体系库面板 + 主线步骤条。
+    current: topic|content|publish|review|lib（lib = 体系库页，不高亮主线步）
+    persona: 人设 dict（可空）；persona_id: 没有 persona 对象时传 id
+    步骤的完成度/存量由 /media/ui/steps 前端填充（各页 context 数据不齐，见 spec §3.2） -#}
+{% macro media_shell(current, persona=None, persona_id=None) -%}
+{% set steps = [
+   ('topic','1 · 选题','/media/topics'),
+   ('content','2 · 内容','/media/board'),
+   ('publish','3 · 发布','/media/board?view=publish'),
+   ('review','4 · 复盘','/media/review')
+] %}
+<div class="pbar">
+  {% if persona %}
+    <span class="who">{{ persona.name }}</span>
+    {% if persona.current_phase %}<span class="pill run">{{ persona.current_phase }} 期</span>{% endif %}
+  {% else %}
+    <span class="who">当前人设</span>
+  {% endif %}
+  <span class="acc" id="ms-acc"></span>
+  <span class="sp"></span>
+  <span class="lib" onclick="msToggleLibs()">{{ ic.icon('kanban') }}体系库<span class="gap" id="ms-gap" style="display:none"></span></span>
+  <a class="sw" href="/media">切换人设 {{ ic.icon('chevron') }}</a>
+</div>
+
+<div class="libpanel" id="ms-libs">
+  <div class="lh">{{ ic.icon('kanban') }}体系库
+    <span style="flex:1"></span>
+    <button class="iconbtn" onclick="msToggleLibs()" aria-label="关闭">{{ ic.icon('x') }}</button>
+  </div>
+  <div class="libgrid">
+    <a class="libcard" href="/media/persona"><div class="rn">{{ ic.icon('robot') }}人设</div><div class="rs" data-lib="persona">—</div></a>
+    <a class="libcard" href="/media/audience"><div class="rn">{{ ic.icon('eye') }}受众</div><div class="rs" data-lib="audience">—</div></a>
+    <a class="libcard" href="/media/anchor"><div class="rn">{{ ic.icon('dollar') }}生意锚点</div><div class="rs" data-lib="anchor">—</div></a>
+    <a class="libcard" href="/media/materials"><div class="rn">{{ ic.icon('folder') }}原料库</div><div class="rs" data-lib="material">—</div></a>
+    <a class="libcard" href="/media/playbook"><div class="rn">{{ ic.icon('tag') }}打法库</div><div class="rs" data-lib="playbook">—</div></a>
+    <a class="libcard" href="/media/legacy"><div class="rn">{{ ic.icon('doc') }}老文案</div><div class="rs" data-lib="legacy">—</div></a>
+  </div>
+
+  {# 只留「批量导入老文案」——它喂的是老文案库/打法库，属于体系。
+     飞书同步 / 未对上的数据 / 视频反向入库 三个是数据回填，已移到复盘页。
+     浮层定义在看板页，所以带 ?tool= 跳过去自动打开 #}
+  <div class="lh" style="margin:16px 0 10px; font-size:12.5px; color:var(--ink-3)">
+    {{ ic.icon('arrow-down') }}导入
+  </div>
+  <div class="libgrid">
+    <a class="libcard" href="/media/board?tool=legacy"><div class="rn">{{ ic.icon('doc') }}批量导入老文案</div><div class="rs">粘贴历史稿子</div></a>
+  </div>
+</div>
+
+<div class="rail" id="ms-rail">
+  {% for key, label, href in steps %}
+  <a class="step {% if key == current %}now{% else %}todo{% endif %}" data-step="{{ key }}" href="{{ href }}">
+    <span class="n" data-n>{% if key == current %}{{ ic.icon('clock') }}进行中{% else %}未开始{% endif %}</span>
+    <span class="t">{{ label }}</span>
+    <span class="c" data-c></span>
+  </a>
+  {% endfor %}
+</div>
+
+<script>
+function msToggleLibs(){ document.getElementById('ms-libs').classList.toggle('open'); }
+(function(){
+  var CUR = '{{ current }}';
+  fetch('/media/ui/steps').then(function(r){ return r.json(); }).then(function(d){
+    if(!d || !d.ok) return;
+    /* 步骤状态 */
+    document.querySelectorAll('#ms-rail .step').forEach(function(el){
+      var k = el.dataset.step, s = d.steps[k];
+      if(!s) return;
+      var cEl = el.querySelector('[data-c]');
+      cEl.textContent = s.label || '';
+      if(k === CUR) return;                       /* 当前步保持 now，不被覆盖 */
+      var n = el.querySelector('[data-n]');
+      if(s.locked){
+        el.classList.remove('todo'); el.classList.add('locked');
+        el.setAttribute('title', s.reason || '');
+        n.textContent = '不可用';
+        cEl.textContent = s.reason || s.label || '';
+      } else if(s.done){
+        el.classList.remove('todo'); el.classList.add('done');
+        n.textContent = '已完成';
+      }
+    });
+    /* 体系库存量 + 缺口点 */
+    document.querySelectorAll('#ms-libs [data-lib]').forEach(function(el){
+      var v = d.libs[el.dataset.lib];
+      if(v === undefined) return;
+      el.textContent = v ? (v + ' 条') : '还没沉淀，去建一条';
+      if(!v) el.classList.add('empty');
+    });
+    if(d.libs_empty && d.libs_empty.length){
+      document.getElementById('ms-gap').style.display = 'block';
+    }
+  }).catch(function(){});
+})();
+</script>
+{%- endmacro %}
+
+{#- 底部步骤导航。back/next 传 {'href':..., 'label':...}；
+    next_disabled 为真时按钮禁用并在下方用 --warn 说明 reason -#}
+{% macro step_nav(back=None, next=None, next_disabled=False, reason='') -%}
+<div class="stepnav">
+  {% if back %}<a class="btn ghost" href="{{ back.href }}">{{ ic.icon('chevron', 'flip') }}回{{ back.label }}</a>{% endif %}
+  <span class="sp"></span>
+  {% if next %}
+    {% if next_disabled %}
+      <button class="btn primary" disabled>下一步：{{ next.label }}</button>
+    {% else %}
+      <a class="btn primary" href="{{ next.href }}">下一步：{{ next.label }} {{ ic.icon('chevron') }}</a>
+    {% endif %}
+  {% endif %}
+  {% if next_disabled and reason %}<span class="why">{{ reason }}</span>{% endif %}
+</div>
+{%- endmacro %}
