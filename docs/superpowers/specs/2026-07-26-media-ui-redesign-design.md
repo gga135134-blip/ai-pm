@@ -206,6 +206,47 @@
 
 ---
 
+## 10.B 改哪儿 —— 自媒体模块维护地图
+
+### 纯 UI 改动（不碰后端，随时可改）
+
+| 想改什么 | 去哪 |
+|---|---|
+| 步骤条 / 人设条 / 体系库面板 / 底部步骤导航 —— **改一处生效全站 14 页** | `app/templates/_media_shell.html` |
+| 组件样式（`.step` `.pbar` `.rail` `.libpanel` `.stepnav` `.inj`） | `app/templates/base.html`，搜「自媒体工作流组件」 |
+| 步骤完成状态、体系库存量的取数 | `app/api/media_ui.py`（只读，不含业务逻辑） |
+| 单个页面的内容 | 对应的 `app/templates/media_*.html` |
+
+### 「每平台独立的标题 / #标签 / 封面」——必须动后端，三处
+
+**为什么现在做不了：** `media_content.title` 只有一个（且存的是**选题名**，不是发布标题）、`cover_idea` 只有一个、`#标签` 无独立字段。只有 `media_publish.publish_text` 是按平台分的。判断标准见 §10.A：**每平台不一样的东西，就该挂在 `media_publish` 上。**
+
+1. **加字段** —— `app/database.py` 的 `MIGRATIONS` 列表（约 511 行）末尾追加（该列表幂等、启动自动执行）：
+   ```
+   "ALTER TABLE media_publish ADD COLUMN publish_title TEXT DEFAULT ''",
+   "ALTER TABLE media_publish ADD COLUMN hashtags TEXT DEFAULT ''",
+   "ALTER TABLE media_publish ADD COLUMN cover_idea TEXT DEFAULT ''",
+   ```
+2. **存 / 读 / 生成**
+   - `app/api/media.py`：`media_publish` 的 INSERT/UPDATE（约 1481–1488 行）接入新字段
+   - `app/services/media_ai.py::generate_platform_copy()`（约 962 行）：按平台分别产出标题与标签
+3. **界面** —— `app/templates/media_content.html` 的「三平台发布」区，每个平台卡里加对应输入框
+
+**顺带可清理：** 届时 `media_content.cover_idea` 的隐藏镜像机制（见下）可以删掉，改为每平台各自的封面字段。
+
+### 已知的临时机制（改后端时可一并清理）
+
+| 机制 | 位置 | 为什么这么做 |
+|---|---|---|
+| 封面思路「双表单互带值」 | `media_content.html` 的 `syncBeforeCoverSave()` + `#cover-mirror` | 后端 `/media/content/{cid}/script` 的签名是 `cover_idea: str = Form("")`，默认空值。把输入框移出脚本表单后，保存脚本会清空封面思路。不能改后端，故让两个表单互相携带对方当前值 |
+| `?tool=reverse\|legacy` 回跳 | `_media_shell.html`、`media_review_home.html` → `media_board.html` | 两个导入浮层定义在看板页；入口移走后靠 URL 参数跳回并自动打开。浮层就地搬家后即可删除 |
+
+### ⚠️ 协作提醒
+
+本轮全程绕开 `app/api/media.py` 与 `app/services/media_*.py`（另一窗口在做功能开发）。**动这两处之前先确认那条线已停**，否则会冲突。
+
+---
+
 ## 11. 不在本轮范围
 
 - 后端逻辑、路由、数据模型（另一窗口）
