@@ -5,6 +5,7 @@ from pathlib import Path as _Path
 from fastapi import APIRouter, Request, Form, UploadFile, File
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, FileResponse
 from app.database import get_db
+from app.services.media_overview import persona_overview
 from app.services.media_reverse import reverse_ingest
 from app.services.media_metrics import recognize_screenshot, save_metrics
 from app.services.media_feishu_sync import sync_from_feishu
@@ -74,6 +75,16 @@ async def _first_persona_id(db) -> str | None:
     return row["id"] if row else None
 
 
+async def _current_persona_id(request, db) -> str | None:
+    """当前人设：读 cookie media_persona→校验存在→回落第一个 active。"""
+    pid = request.cookies.get("media_persona")
+    if pid:
+        cur = await db.execute("SELECT id FROM media_persona WHERE id=?", (pid,))
+        if await cur.fetchone():
+            return pid
+    return await _first_persona_id(db)
+
+
 # ─────────────── 人设 ───────────────
 
 @router.get("/media/persona", response_class=HTMLResponse)
@@ -81,7 +92,7 @@ async def persona_home(request: Request):
     """没有人设时引导创建，有则跳到第一个人设档案。"""
     db = await get_db()
     try:
-        pid = await _first_persona_id(db)
+        pid = await _current_persona_id(request, db)
     finally:
         await db.close()
     if pid:
@@ -104,7 +115,26 @@ async def persona_create(name: str = Form(...), one_liner: str = Form(""),
         await db.commit()
     finally:
         await db.close()
-    return RedirectResponse(f"/media/persona/{pid}", status_code=302)
+    resp = RedirectResponse("/media/board", status_code=302)
+    resp.set_cookie("media_persona", pid, max_age=31536000, httponly=True, samesite="lax")
+    return resp
+
+
+@router.get("/media/persona/{pid}/enter")
+async def persona_enter(pid: str):
+    """选中人设：设 cookie 后进它的看板。无效 pid 回总览。"""
+    db = await get_db()
+    try:
+        cur = await db.execute("SELECT id FROM media_persona WHERE id=?", (pid,))
+        ok = await cur.fetchone() is not None
+    finally:
+        await db.close()
+    if not ok:
+        return RedirectResponse("/media", status_code=302)
+    resp = RedirectResponse("/media/board", status_code=302)
+    resp.set_cookie("media_persona", pid, max_age=31536000,
+                    httponly=True, samesite="lax")
+    return resp
 
 
 @router.get("/media/persona/{pid}", response_class=HTMLResponse)
@@ -322,7 +352,7 @@ async def materials_home(request: Request):
     brief / use_count / 来源，用旧的（use_count≥阈值）标灰提示补新料。spec §3.3。"""
     db = await get_db()
     try:
-        pid = await _first_persona_id(db)
+        pid = await _current_persona_id(request, db)
         persona = None
         materials = []
         if pid:
@@ -330,7 +360,7 @@ async def materials_home(request: Request):
             row = await cur.fetchone()
             persona = dict(row) if row else None
             cur = await db.execute(
-                "SELECT * FROM media_material WHERE persona_id=? AND status='active' "
+                "SELECT * FROM media_material WHERE (persona_id=? OR scope='shared') AND status='active' "
                 "ORDER BY use_count ASC, created_at DESC", (pid,))
             materials = [dict(r) for r in await cur.fetchall()]
     finally:
@@ -396,7 +426,7 @@ async def audience_home(request: Request):
     """受众画像查看页：segment 卡片，按付费意愿降序（值钱的靠前）。"""
     db = await get_db()
     try:
-        pid = await _first_persona_id(db)
+        pid = await _current_persona_id(request, db)
         persona = None
         segments = []
         if pid:
@@ -440,11 +470,11 @@ async def audience_create(persona_id: str = Form(...), segment: str = Form(...),
 
 
 @router.post("/media/audience/draft")
-async def audience_draft(answers: str = Form("")):
+async def audience_draft(request: Request, answers: str = Form("")):
     """AI 起草受众画像候选（不写库）。"""
     db = await get_db()
     try:
-        pid = await _first_persona_id(db)
+        pid = await _current_persona_id(request, db)
         if not pid:
             return JSONResponse({"ok": False, "error": "先建人设", "segments": []})
         try:
@@ -508,7 +538,7 @@ async def anchor_home(request: Request):
     """生意锚点查看页：按 status 分组 proven→validating→dropped。"""
     db = await get_db()
     try:
-        pid = await _first_persona_id(db)
+        pid = await _current_persona_id(request, db)
         persona = None
         anchors = []
         if pid:
@@ -555,10 +585,10 @@ async def anchor_create(persona_id: str = Form(...), name: str = Form(...),
 
 
 @router.post("/media/anchor/draft")
-async def anchor_draft(answers: str = Form("")):
+async def anchor_draft(request: Request, answers: str = Form("")):
     db = await get_db()
     try:
-        pid = await _first_persona_id(db)
+        pid = await _current_persona_id(request, db)
         if not pid:
             return JSONResponse({"ok": False, "error": "先建人设", "anchors": []})
         try:
@@ -614,7 +644,7 @@ TOPIC_SOURCES = {
 async def topics_home(request: Request, source: str = ""):
     db = await get_db()
     try:
-        pid = await _first_persona_id(db)
+        pid = await _current_persona_id(request, db)
         if not pid:
             return RedirectResponse("/media/persona", status_code=302)
         sql = ("SELECT * FROM media_topic WHERE persona_id=? AND status='pool'")
@@ -701,13 +731,28 @@ async def topic_reject(tid: str, rejected_reason: str = Form("")):
     return RedirectResponse("/media/topics", status_code=302)
 
 
+# ─────────────── 人设总览 ───────────────
+
+@router.get("/media/overview", response_class=HTMLResponse)
+@router.get("/media", response_class=HTMLResponse)
+async def media_overview_page(request: Request):
+    db = await get_db()
+    try:
+        rows = await persona_overview(db)
+    finally:
+        await db.close()
+    if not rows:
+        return RedirectResponse("/media/persona", status_code=302)   # 零人设→引导建
+    return _tpl(request, "media_overview.html", {"personas": rows})
+
+
 # ─────────────── 内容看板 ───────────────
 
-@router.get("/media", response_class=HTMLResponse)
+@router.get("/media/board", response_class=HTMLResponse)
 async def board(request: Request):
     db = await get_db()
     try:
-        pid = await _first_persona_id(db)
+        pid = await _current_persona_id(request, db)
         if not pid:
             return RedirectResponse("/media/persona", status_code=302)
         cur = await db.execute("SELECT * FROM media_persona WHERE id=?", (pid,))
@@ -793,7 +838,7 @@ async def media_reverse_ingest(request: Request, video_url: str = Form(...)):
         return JSONResponse({"ok": False, "error": "未配置豆包 ASR 凭证，去设置页填"})
     db = await get_db()
     try:
-        pid = await _first_persona_id(db)
+        pid = await _current_persona_id(request, db)
         if not pid:
             return JSONResponse({"ok": False, "error": "请先创建人设"})
         public_base = (cfg.get("public_base") or str(request.base_url)).rstrip("/")
@@ -855,7 +900,7 @@ async def legacy_mark_winner(content_ids: list[str] = Form([]),
 async def legacy_home(request: Request):
     db = await get_db()
     try:
-        pid = await _first_persona_id(db)
+        pid = await _current_persona_id(request, db)
         rows = []
         if pid:
             cur = await db.execute(
@@ -872,8 +917,7 @@ async def legacy_home(request: Request):
 async def playbook_home(request: Request):
     db = await get_db()
     try:
-        pid = await _first_persona_id(db)
-        pbs = await list_playbooks(db, pid) if pid else []
+        pbs = await list_playbooks(db)
     finally:
         await db.close()
     return _tpl(request, "media_playbook.html", {"playbooks": pbs})
@@ -903,10 +947,10 @@ async def media_asr_audio(token: str):
 
 
 @router.post("/media/topics/ai-recommend")
-async def topics_ai_recommend():
+async def topics_ai_recommend(request: Request):
     db = await get_db()
     try:
-        pid = await _first_persona_id(db)
+        pid = await _current_persona_id(request, db)
         if not pid:
             return JSONResponse({"ok": False, "error": "请先创建人设"})
         try:
@@ -920,11 +964,11 @@ async def topics_ai_recommend():
 
 
 @router.post("/media/topics/tag")
-async def topics_tag():
+async def topics_tag(request: Request):
     """一键给选题池未打标话题补受众/锚点/护栏标。"""
     db = await get_db()
     try:
-        pid = await _first_persona_id(db)
+        pid = await _current_persona_id(request, db)
         if not pid:
             return JSONResponse({"ok": False, "error": "请先创建人设"})
         try:
@@ -938,11 +982,11 @@ async def topics_tag():
 
 
 @router.post("/media/topics/rank")
-async def topics_rank():
+async def topics_rank(request: Request):
     """一键给选题池全部 pool 话题打分，写 decision_score + decision_report。纯计算。"""
     db = await get_db()
     try:
-        pid = await _first_persona_id(db)
+        pid = await _current_persona_id(request, db)
         if not pid:
             return RedirectResponse("/media/topics", status_code=302)
         cur = await db.execute("SELECT current_phase FROM media_persona WHERE id=?", (pid,))
@@ -963,7 +1007,7 @@ async def topics_rank():
             "SELECT * FROM media_anchor WHERE persona_id=? AND status='dropped'", (pid,))
         dropped_anchors = [dict(r) for r in await cur.fetchall()]
         cur = await db.execute(
-            "SELECT * FROM media_material WHERE persona_id=? AND status='active'", (pid,))
+            "SELECT * FROM media_material WHERE (persona_id=? OR scope='shared') AND status='active'", (pid,))
         materials = [dict(r) for r in await cur.fetchall()]
         cur = await db.execute(
             "SELECT title, brief FROM media_content WHERE persona_id=? "
@@ -1091,8 +1135,8 @@ async def content_mine(cid: str):
             result = await mine_from_transcript(db, row["persona_id"], row["script"] or "")
             if row["is_winner"]:
                 cur = await db.execute(
-                    "SELECT name FROM media_playbook WHERE persona_id=? "
-                    "AND status IN ('validating','proven')", (row["persona_id"],))
+                    "SELECT name FROM media_playbook "
+                    "WHERE status IN ('validating','proven')")
                 names = [r["name"] for r in await cur.fetchall()]
                 st = await mine_structure(db, row["persona_id"], row["script"] or "", names)
                 result["playbook_candidate"] = st.get("playbook") if st.get("ok") else None
@@ -1146,8 +1190,8 @@ async def content_mine_adopt_playbook(cid: str, name: str = Form(...),
         merged = False
         if similar_to.strip():
             cur = await db.execute(
-                "SELECT id,evidence FROM media_playbook WHERE persona_id=? AND name=?",
-                (pid, similar_to.strip()))
+                "SELECT id,evidence FROM media_playbook WHERE name=?",
+                (similar_to.strip(),))
             ex = await cur.fetchone()
             if ex:
                 new_ev = ((ex["evidence"] or "") + "\n---\n" + evidence.strip()).strip()

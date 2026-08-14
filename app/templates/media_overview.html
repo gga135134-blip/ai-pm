@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% import "_icons.html" as ic %}
+{% block title %}自媒体 · 人设总览{% endblock %}
+{% block content %}
+<style>
+  #np-overlay{ display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:50; align-items:center; justify-content:center; padding:16px; }
+  #np-overlay.open{ display:flex; }
+  #np-overlay .panel{ background:var(--bg); border:1px solid var(--border); border-radius:var(--r); box-shadow:var(--shadow-lg); padding:18px; width:100%; max-width:420px; }
+  .pcard{ display:block; border:1px solid var(--border); border-radius:var(--r); padding:16px 18px; margin-bottom:12px; background:var(--panel); text-decoration:none; color:inherit; }
+  .pcard:hover{ border-color:var(--accent); }
+  .pcard .nm{ font-size:17px; font-weight:600; }
+  .pcard .meta{ font-size:13px; color:var(--ink-3); margin-top:6px; display:flex; gap:14px; flex-wrap:wrap; }
+</style>
+<div style="max-width:720px; margin:0 auto">
+  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px">
+    <h2 style="margin:0">人设总览</h2>
+    <button onclick="document.getElementById('np-overlay').classList.add('open')" class="btn primary" style="padding:6px 14px; font-size:13px">＋ 新建人设</button>
+  </div>
+  {% for p in personas %}
+  <a class="pcard" href="/media/persona/{{ p.id }}/enter">
+    <div class="nm">{{ p.name }} <span class="pill run" style="font-size:11px">{{ p.current_phase }}期</span></div>
+    {% if p.one_liner %}<div style="font-size:13px; color:var(--ink-2); margin-top:4px">{{ p.one_liner }}</div>{% endif %}
+    <div class="meta">
+      <span>内容 {{ p.total }} · 已发 {{ p.published }} · 爆款 {{ p.winners }}</span>
+      {% if p.accounts %}<span>{% for a in p.accounts %}{{ a.platform }}{% if a.account_name %} @{{ a.account_name }}{% endif %}{% if not loop.last %}、{% endif %}{% endfor %}</span>
+      {% else %}<span style="color:var(--ink-3)">未绑账号</span>{% endif %}
+    </div>
+  </a>
+  {% else %}<div class="empty">还没有人设，点右上「＋ 新建人设」开始。</div>{% endfor %}
+</div>
+<div id="np-overlay" onclick="if(event.target===this) this.classList.remove('open')">
+  <div class="panel">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px">
+      <b>新建人设</b>
+      <button onclick="document.getElementById('np-overlay').classList.remove('open')" class="iconbtn">{{ ic.icon('x') }}</button>
+    </div>
+    <form method="post" action="/media/persona">
+      <input name="name" placeholder="人设名字（如 同事-An）" required style="width:100%; padding:8px; margin-bottom:8px">
+      <input name="one_liner" placeholder="一句话定位（可留空）" style="width:100%; padding:8px; margin-bottom:12px">
+      <button type="submit" class="btn primary" style="width:100%">建好，进工作区</button>
+    </form>
+  </div>
+</div>
+{% endblock %}
