@@ -917,8 +917,7 @@ async def legacy_home(request: Request):
 async def playbook_home(request: Request):
     db = await get_db()
     try:
-        pid = await _first_persona_id(db)
-        pbs = await list_playbooks(db, pid) if pid else []
+        pbs = await list_playbooks(db)
     finally:
         await db.close()
     return _tpl(request, "media_playbook.html", {"playbooks": pbs})
@@ -1136,8 +1135,8 @@ async def content_mine(cid: str):
             result = await mine_from_transcript(db, row["persona_id"], row["script"] or "")
             if row["is_winner"]:
                 cur = await db.execute(
-                    "SELECT name FROM media_playbook WHERE persona_id=? "
-                    "AND status IN ('validating','proven')", (row["persona_id"],))
+                    "SELECT name FROM media_playbook "
+                    "WHERE status IN ('validating','proven')")
                 names = [r["name"] for r in await cur.fetchall()]
                 st = await mine_structure(db, row["persona_id"], row["script"] or "", names)
                 result["playbook_candidate"] = st.get("playbook") if st.get("ok") else None
@@ -1191,8 +1190,8 @@ async def content_mine_adopt_playbook(cid: str, name: str = Form(...),
         merged = False
         if similar_to.strip():
             cur = await db.execute(
-                "SELECT id,evidence FROM media_playbook WHERE persona_id=? AND name=?",
-                (pid, similar_to.strip()))
+                "SELECT id,evidence FROM media_playbook WHERE name=?",
+                (similar_to.strip(),))
             ex = await cur.fetchone()
             if ex:
                 new_ev = ((ex["evidence"] or "") + "\n---\n" + evidence.strip()).strip()
