@@ -13,7 +13,10 @@
   /* ---- kanban (7 stage columns, horizontal scroll) ---- */
   .kanban-scroll{ overflow-x:auto; -webkit-overflow-scrolling:touch; }
   .kanban-cols{ display:flex; gap:14px; align-items:flex-start; }
-  .kb-col{ min-width:220px; flex:1; }
+  /* 列数从 7 减到 4 后 flex:1 会把列拉得很宽，加上限，否则卡片稀稀拉拉 */
+  .kb-col{ min-width:220px; max-width:330px; flex:1; }
+  /* 计数紧跟标题，不用两端对齐——列一宽数字就飘到老远，看着像下一列的 */
+  .kb-col .col-h{ justify-content:flex-start; gap:8px; }
   .card{ text-decoration:none; color:inherit; display:block; }
   .card .puz{ font-size:11.5px; color:var(--ai); margin-top:6px; }
   .card .pubrow{ display:flex; flex-wrap:wrap; gap:5px; margin-top:9px; }
@@ -50,8 +53,13 @@
   {% endif %}
 </p>
 
+{# 本步实际显示的条数。total 是全部内容（含已发/已复盘），在这里报会误导 ——
+   看板只显示本步的阶段列 #}
+{% set here_stages = ['ready'] if is_pub else ['idea','scripted','recording','editing'] %}
+{% set here_count = columns | selectattr('stage','in', here_stages) | map(attribute='cards') | map('length') | sum %}
 <div style="display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:16px">
-  <span class="pcode">{{ total }} 条内容</span>
+  <span class="pcode">{{ here_count }} 条{{ '待发' if is_pub else '在做' }}</span>
+  <span class="pcode" style="color:var(--ink-3)">· 共 {{ total }} 条内容</span>
   <span id="feishu-msg" style="font-size:11.5px; color:var(--ink-3)"></span>
 </div>
 
