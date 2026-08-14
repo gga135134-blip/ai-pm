@@ -22,6 +22,8 @@ from app.services.media_ai import (
     mine_from_transcript, mine_structure,
 )
 from app.services.media_legacy import split_legacy_scripts, create_legacy_contents
+from app.services.media_mine_queue import (
+    enqueue_candidates, list_pending_grouped, adopt_candidates, discard_candidates)
 from app.services.media_playbook import list_playbooks, get_playbook
 from app.services.media_flow import finalize_updates, clean_body
 from app.services.media_decision import build_decision_context, rank_pool
@@ -934,7 +936,8 @@ async def legacy_home(request: Request):
         rows = []
         if pid:
             cur = await db.execute(
-                "SELECT id,title,idea_source,is_winner FROM media_content "
+                "SELECT id,title,idea_source,is_winner,mined_signature_at,mined_essence_at "
+                "FROM media_content "
                 "WHERE persona_id=? AND idea_source IN ('video_reverse','legacy_text') "
                 "ORDER BY created_at DESC", (pid,))
             rows = [dict(r) for r in await cur.fetchall()]
@@ -1178,6 +1181,84 @@ async def content_mine(cid: str):
     finally:
         await db.close()
     return JSONResponse(result)
+
+
+@router.get("/media/mine-review", response_class=HTMLResponse)
+async def mine_review(request: Request):
+    db = await get_db()
+    try:
+        pid = await _current_persona_id(request, db)
+        grouped = (await list_pending_grouped(db, pid) if pid
+                   else {"signature": [], "material": [], "playbook": []})
+    finally:
+        await db.close()
+    return _tpl(request, "media_mine_review.html", {"grouped": grouped})
+
+
+@router.post("/media/mine-review/adopt")
+async def mine_review_adopt(candidate_ids: list[str] = Form([])):
+    if candidate_ids:
+        db = await get_db()
+        try:
+            await adopt_candidates(db, candidate_ids)
+        finally:
+            await db.close()
+    return RedirectResponse("/media/mine-review", status_code=303)
+
+
+@router.post("/media/mine-review/discard")
+async def mine_review_discard(candidate_ids: list[str] = Form([])):
+    if candidate_ids:
+        db = await get_db()
+        try:
+            await discard_candidates(db, candidate_ids)
+        finally:
+            await db.close()
+    return RedirectResponse("/media/mine-review", status_code=303)
+
+
+@router.post("/media/content/{cid}/mine-to-queue")
+async def content_mine_to_queue(cid: str, kind: str = Form(...), force: int = Form(0)):
+    """批量挖矿：逐条调（前端编排）。kind=signature 从任意内容挖口头禅；essence 仅爆款挖素材+打法。"""
+    db = await get_db()
+    try:
+        cur = await db.execute(
+            "SELECT persona_id,script,is_winner,mined_signature_at,mined_essence_at "
+            "FROM media_content WHERE id=?", (cid,))
+        row = await cur.fetchone()
+        if not row:
+            return JSONResponse({"ok": False, "error": "内容不存在"})
+        pid, script = row["persona_id"], row["script"] or ""
+        try:
+            if kind == "signature":
+                if row["mined_signature_at"] and not force:
+                    return JSONResponse({"ok": True, "added": 0, "skipped": "already"})
+                res = await mine_from_transcript(db, pid, script)
+                added = await enqueue_candidates(db, pid, cid, "signature",
+                                                 res.get("signatures") or [])
+                await db.execute("UPDATE media_content SET mined_signature_at=CURRENT_TIMESTAMP WHERE id=?", (cid,))
+                await db.commit()
+                return JSONResponse({"ok": True, "added": added, "skipped": ""})
+            elif kind == "essence":
+                if not row["is_winner"]:
+                    return JSONResponse({"ok": True, "added": 0, "skipped": "not_winner"})
+                if row["mined_essence_at"] and not force:
+                    return JSONResponse({"ok": True, "added": 0, "skipped": "already"})
+                res = await mine_from_transcript(db, pid, script)
+                added = await enqueue_candidates(db, pid, cid, "material",
+                                                 res.get("materials") or [])
+                st = await mine_structure(db, pid, script)
+                if st.get("ok") and st.get("playbook"):
+                    added += await enqueue_candidates(db, pid, cid, "playbook", [st["playbook"]])
+                await db.execute("UPDATE media_content SET mined_essence_at=CURRENT_TIMESTAMP WHERE id=?", (cid,))
+                await db.commit()
+                return JSONResponse({"ok": True, "added": added, "skipped": ""})
+            return JSONResponse({"ok": False, "error": "kind 非法"})
+        except Exception as e:
+            log.exception("批量挖矿失败")
+            return JSONResponse({"ok": False, "error": str(e)})
+    finally:
+        await db.close()
 
 
 @router.post("/media/content/{cid}/mine/adopt-material")

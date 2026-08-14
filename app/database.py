@@ -510,6 +510,18 @@ CREATE TABLE IF NOT EXISTS media_playbook (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (persona_id) REFERENCES media_persona(id)
 );
+
+CREATE TABLE IF NOT EXISTS media_mine_candidate (
+    id TEXT PRIMARY KEY,
+    persona_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    payload TEXT DEFAULT '{}',
+    source_content_id TEXT DEFAULT '',
+    dedup_key TEXT DEFAULT '',
+    status TEXT DEFAULT 'pending',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (persona_id) REFERENCES media_persona(id)
+);
 """
 
 
@@ -556,6 +568,8 @@ MIGRATIONS = [
     "ALTER TABLE media_content ADD COLUMN published_at DATETIME",
     "ALTER TABLE media_phase_review ADD COLUMN anchor_actions TEXT DEFAULT '[]'",
     "ALTER TABLE media_content ADD COLUMN is_winner INTEGER DEFAULT 0",
+    "ALTER TABLE media_content ADD COLUMN mined_signature_at DATETIME",
+    "ALTER TABLE media_content ADD COLUMN mined_essence_at DATETIME",
     "ALTER TABLE media_material ADD COLUMN scope TEXT DEFAULT 'persona'",
     # 选题溯源到主题（可空：AI 自由推的选题没有主题来源）。
     # 价值在复盘：能回答「哪个主题最出爆款」，而不只是「哪条视频数据好」。
