@@ -18,7 +18,7 @@ from app.services.media_ai import (
     critique_draft, revise_draft,
     persona_interview_questions, persona_interview_extract,
     learn_edit_style, draft_audience_segments, draft_anchors,
-    mine_from_transcript,
+    mine_from_transcript, mine_structure,
 )
 from app.services.media_legacy import split_legacy_scripts, create_legacy_contents
 from app.services.media_flow import finalize_updates, clean_body
@@ -1038,15 +1038,23 @@ async def content_detail(request: Request, cid: str):
 
 @router.post("/media/content/{cid}/mine")
 async def content_mine(cid: str):
-    """从转写稿挖两桶精华候选（不写库）。"""
+    """挖精华：前两桶(经历/口头禅)；is_winner 再挖结构桶。"""
     db = await get_db()
     try:
-        cur = await db.execute("SELECT persona_id,script FROM media_content WHERE id=?", (cid,))
+        cur = await db.execute(
+            "SELECT persona_id,script,is_winner FROM media_content WHERE id=?", (cid,))
         row = await cur.fetchone()
         if not row:
             return JSONResponse({"ok": False, "error": "内容不存在"})
         try:
             result = await mine_from_transcript(db, row["persona_id"], row["script"] or "")
+            if row["is_winner"]:
+                cur = await db.execute(
+                    "SELECT name FROM media_playbook WHERE persona_id=? "
+                    "AND status IN ('validating','proven')", (row["persona_id"],))
+                names = [r["name"] for r in await cur.fetchall()]
+                st = await mine_structure(db, row["persona_id"], row["script"] or "", names)
+                result["playbook_candidate"] = st.get("playbook") if st.get("ok") else None
         except Exception as e:
             log.exception("挖精华失败")
             return JSONResponse({"ok": False, "error": str(e)})
@@ -1078,6 +1086,44 @@ async def content_mine_adopt_material(cid: str, type: str = Form("story"),
     finally:
         await db.close()
     return JSONResponse({"ok": True})
+
+
+@router.post("/media/content/{cid}/mine/adopt-playbook")
+async def content_mine_adopt_playbook(cid: str, name: str = Form(...),
+                                      structure: str = Form(""), when_to_use: str = Form(""),
+                                      evidence: str = Form(""), similar_to: str = Form("")):
+    """采纳结构候选 → 打法库。similar_to 命中已有打法则追加 evidence(归并)，否则新建。"""
+    if not name.strip():
+        return JSONResponse({"ok": False, "error": "空打法名"})
+    db = await get_db()
+    try:
+        cur = await db.execute("SELECT persona_id FROM media_content WHERE id=?", (cid,))
+        row = await cur.fetchone()
+        if not row:
+            return JSONResponse({"ok": False, "error": "内容不存在"})
+        pid = row["persona_id"]
+        merged = False
+        if similar_to.strip():
+            cur = await db.execute(
+                "SELECT id,evidence FROM media_playbook WHERE persona_id=? AND name=?",
+                (pid, similar_to.strip()))
+            ex = await cur.fetchone()
+            if ex:
+                new_ev = ((ex["evidence"] or "") + "\n---\n" + evidence.strip()).strip()
+                await db.execute("UPDATE media_playbook SET evidence=? WHERE id=?",
+                                 (new_ev, ex["id"]))
+                merged = True
+        if not merged:
+            await db.execute(
+                "INSERT INTO media_playbook "
+                "(id,persona_id,name,structure,when_to_use,evidence,source,status) "
+                "VALUES (?,?,?,?,?,?, 'legacy_mine','validating')",
+                (str(uuid.uuid4()), pid, name.strip(), structure.strip(),
+                 when_to_use.strip(), evidence.strip()))
+        await db.commit()
+    finally:
+        await db.close()
+    return JSONResponse({"ok": True, "merged": merged})
 
 
 @router.post("/media/content/{cid}/published-at")
