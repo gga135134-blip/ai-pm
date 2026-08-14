@@ -42,11 +42,13 @@ def _seed():
                              "VALUES ('OB','乙','定位乙','冷启动','active')")
             await db.execute("INSERT INTO media_account (id,persona_id,platform,account_name) "
                              "VALUES ('AC','OA','抖音','嘉姐')")
-            # OA: 2 条内容，1 已发，1 已发爆款
+            # OA: 3 条内容，1 已发(published阶段)+1 已发爆款，1 已进阶到 reviewed(仍算已发)
             await db.execute("INSERT INTO media_content (id,persona_id,title,stage,is_winner) "
                              "VALUES ('CA1','OA','a1','published',1)")
             await db.execute("INSERT INTO media_content (id,persona_id,title,stage,is_winner) "
                              "VALUES ('CA2','OA','a2','idea',0)")
+            await db.execute("INSERT INTO media_content (id,persona_id,title,stage,is_winner) "
+                             "VALUES ('CA3','OA','a3','reviewed',0)")
             # OB: 1 条 idea
             await db.execute("INSERT INTO media_content (id,persona_id,title,stage,is_winner) "
                              "VALUES ('CB1','OB','b1','idea',0)")
@@ -63,7 +65,7 @@ def test_persona_overview_aggregates_per_persona():
         db = await get_db()
         try:
             rows = {r["id"]: r for r in await persona_overview(db)}
-            assert rows["OA"]["total"] == 2 and rows["OA"]["published"] == 1 and rows["OA"]["winners"] == 1
+            assert rows["OA"]["total"] == 3 and rows["OA"]["published"] == 2 and rows["OA"]["winners"] == 1
             assert "抖音" in " ".join(a["platform"] for a in rows["OA"]["accounts"])
             assert rows["OB"]["total"] == 1 and rows["OB"]["published"] == 0 and rows["OB"]["winners"] == 0
             assert rows["OB"]["accounts"] == []           # 账号不串

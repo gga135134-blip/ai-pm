@@ -8,7 +8,7 @@ async def persona_overview(db) -> list:
     for p in personas:
         cur = await db.execute(
             "SELECT COUNT(*) total, "
-            "SUM(CASE WHEN stage='published' THEN 1 ELSE 0 END) published, "
+            "SUM(CASE WHEN stage IN ('published','reviewed') THEN 1 ELSE 0 END) published, "
             "SUM(CASE WHEN is_winner=1 THEN 1 ELSE 0 END) winners "
             "FROM media_content WHERE persona_id=?", (p["id"],))
         c = await cur.fetchone()
