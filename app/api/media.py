@@ -1340,11 +1340,11 @@ async def metrics_screenshot(pubid: str, file: UploadFile = File(...)):
 
 @router.post("/media/content/{cid}/ai-script")
 async def content_ai_script(cid: str, mode: str = Form("full"),
-                            hint: str = Form("")):
+                            hint: str = Form(""), playbook_id: str = Form("")):
     db = await get_db()
     try:
         try:
-            result = await write_script(db, cid, mode=mode, hint=hint)
+            result = await write_script(db, cid, mode=mode, hint=hint, playbook_id=playbook_id)
         except Exception as e:
             log.exception("AI 写脚本失败")
             return JSONResponse({"ok": False, "error": str(e)})
