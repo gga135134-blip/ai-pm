@@ -865,7 +865,7 @@ async def draft_anchors(db, persona_id: str, answers: str, model: str = "auto") 
 
 
 async def write_script(db, content_id: str, mode: str = "full",
-                       model: str = "auto", hint: str = "") -> dict:
+                       model: str = "auto", hint: str = "", playbook_id: str = "") -> dict:
     """AI 写口播脚本。hint 非空=带要求重写（如"开头别铺垫，更狠"/"加个案例"）。
 
     mode="full"：注入完整预算内的人设资产（默认）
@@ -921,6 +921,22 @@ async def write_script(db, content_id: str, mode: str = "full",
         material_ids = [m["id"] for m in picked_mats]
         material_block = render_material_block(picked_mats)
 
+    playbook = None
+    if mode != "lean":
+        if playbook_id == "none":
+            playbook = None
+        elif playbook_id:
+            cur = await db.execute(
+                "SELECT id,name,structure,when_to_use,status FROM media_playbook WHERE id=?",
+                (playbook_id,))
+            prow = await cur.fetchone()
+            if prow:
+                playbook = dict(prow)
+                playbook["reason"] = "（手动指定）"
+        else:
+            m = await match_playbook(db, content, model=model)
+            playbook = m.get("playbook")
+
     parts = [context_text]
     ev_block = render_evidence_block(evidence)
     if ev_block:
@@ -930,6 +946,11 @@ async def write_script(db, content_id: str, mode: str = "full",
     ang_block = render_angle_block(angle_text, angle_rationale)
     if ang_block:
         parts.append(ang_block)
+    if playbook:
+        parts.append(
+            f"【打法骨架】{playbook['name']}（{playbook.get('when_to_use','')}）\n"
+            f"{playbook.get('structure','')}\n"
+            f"（按这个结构写，但别硬套；结构服务于内容，不是填空）")
     parts.append(f"【本条选题】{content['title']}")
     if content["puzzle"]:
         parts.append(f"【核心谜题】{content['puzzle']}")
@@ -956,19 +977,23 @@ async def write_script(db, content_id: str, mode: str = "full",
     # ── 持久化草稿：进 ai_draft（不碰 script，script 留给人定稿）──
     gaps = extract_gap_markers(resp)
     gap_text = "；".join(gaps)
+    used_pb = [playbook["id"]] if playbook else []
     await db.execute(
-        "UPDATE media_content SET ai_draft=?, evidence_gap=?, "
+        "UPDATE media_content SET ai_draft=?, evidence_gap=?, used_playbook_ids=?, "
         "authoring_stage='drafted', updated_at=CURRENT_TIMESTAMP WHERE id=?",
-        (resp, gap_text, content_id))
+        (resp, gap_text, json.dumps(used_pb), content_id))
     await db.commit()
 
     all_injected = injected_ids + material_ids
     await log_injection(db, content_id, f"write_script:{mode}",
                         all_injected, result.get("tokens", 0))
 
+    pb_out = ({"id": playbook["id"], "name": playbook["name"],
+               "reason": playbook.get("reason", ""), "status": playbook.get("status", "")}
+              if playbook else None)
     return {"ok": True, "script": resp, "error": "", "gap": gap_text,
             "cost": result.get("cost", 0), "model": result.get("model", ""),
-            "injected_count": len(all_injected)}
+            "injected_count": len(all_injected), "playbook": pb_out}
 
 
 ANGLE_SYSTEM = """你是口播选题的角度策划。基于真实素材，给出 2-3 个不同的切入角度。
@@ -1603,3 +1628,42 @@ async def mine_structure(db, persona_id: str, transcript: str,
                          "when_to_use": obj.get("when_to_use", ""),
                          "evidence": obj.get("evidence", ""),
                          "similar_to": obj.get("similar_to", "")}}
+
+
+MATCH_PLAYBOOK_SYSTEM = """给这条选题从「打法清单」里挑最贴的一条打法。
+诚实：只有真的贴才挑；都不合适就返回空 playbook_id，别硬凑。只挑一条。
+playbook_id 必须是清单里出现过的 id（方括号里那个），或空串。reason 一句话说为什么这条选题适合这个打法。
+只输出严格 JSON：{"playbook_id":"","reason":""}"""
+
+
+async def match_playbook(db, content: dict, model: str = "auto") -> dict:
+    """从共享打法库挑最贴这条选题的一条。整库只在这里出现，绝不进写稿 prompt。
+    池空不调 AI。返回 {ok, playbook:{...}|None, cost, model}。"""
+    cur = await db.execute(
+        "SELECT id,name,when_to_use,structure,status FROM media_playbook "
+        "WHERE status IN ('proven','validating')")
+    pool = [dict(r) for r in await cur.fetchall()]
+    if not pool:
+        return {"ok": True, "playbook": None, "cost": 0, "model": ""}
+    menu = "\n".join(
+        f"[{p['id']}] {p['name']}｜适用:{p['when_to_use']}｜结构:{p['structure']}" for p in pool)
+    q = (f"选题：{content.get('title','')}\n谜题：{content.get('puzzle','')}\n"
+         f"为什么做：{content.get('idea_reason','')}\n\n打法清单：\n{menu}")
+    result = await ask_ai(q, model=model, task_type="media_topic",
+                          system_prompt=MATCH_PLAYBOOK_SYSTEM, json_mode=True)
+    resp = result.get("response", "")
+    await log_injection(db, content.get("id", ""), "match_playbook", [], result.get("tokens", 0))
+    if resp.startswith("[错误]") or resp.startswith("[费用保护]"):
+        return {"ok": False, "playbook": None, "error": resp,
+                "cost": result.get("cost", 0), "model": result.get("model", "")}
+    obj = extract_json(resp, expect="object") or {}
+    pid = (obj.get("playbook_id") or "").strip()
+    by_id = {p["id"]: p for p in pool}
+    if pid not in by_id:
+        return {"ok": True, "playbook": None,
+                "cost": result.get("cost", 0), "model": result.get("model", "")}
+    p = by_id[pid]
+    return {"ok": True, "cost": result.get("cost", 0), "model": result.get("model", ""),
+            "playbook": {"id": p["id"], "name": p["name"], "structure": p["structure"],
+                         "when_to_use": p["when_to_use"], "status": p["status"],
+                         "reason": (obj.get("reason") or "").strip()}}

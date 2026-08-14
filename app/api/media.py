@@ -1123,6 +1123,7 @@ async def content_detail(request: Request, cid: str):
             "ORDER BY created_at DESC LIMIT 1", (cid,))
         drow = await cur.fetchone()
         latest_review = dict(drow) if drow else None
+        playbooks = await list_playbooks(db)
     finally:
         await db.close()
 
@@ -1148,7 +1149,8 @@ async def content_detail(request: Request, cid: str):
                  "angles": angles, "evidence": evidence,
                  "latest_review": latest_review,
                  "is_reverse": content.get("idea_source") in ("video_reverse", "legacy_text"),
-                 "next_stage": next_stage(content["stage"])})
+                 "next_stage": next_stage(content["stage"]),
+                 "playbooks": playbooks})
 
 
 @router.post("/media/content/{cid}/mine")
@@ -1340,11 +1342,11 @@ async def metrics_screenshot(pubid: str, file: UploadFile = File(...)):
 
 @router.post("/media/content/{cid}/ai-script")
 async def content_ai_script(cid: str, mode: str = Form("full"),
-                            hint: str = Form("")):
+                            hint: str = Form(""), playbook_id: str = Form("")):
     db = await get_db()
     try:
         try:
-            result = await write_script(db, cid, mode=mode, hint=hint)
+            result = await write_script(db, cid, mode=mode, hint=hint, playbook_id=playbook_id)
         except Exception as e:
             log.exception("AI 写脚本失败")
             return JSONResponse({"ok": False, "error": str(e)})
