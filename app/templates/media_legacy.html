@@ -1,9 +1,18 @@
 {% extends "base.html" %}
-{% block title %}标记爆款{% endblock %}
+{% import "_icons.html" as ic %}
+{% import "_media_shell.html" as shell %}
+{% block title %}老文案{% endblock %}
+{% block topbar %}
+<span class="crumb"><a href="/media" style="color:inherit;text-decoration:none">自媒体</a> {{ ic.icon('chevron') }} 体系库 {{ ic.icon('chevron') }} <b>老文案</b></span>
+{% endblock %}
 {% block content %}
 <div style="max-width:820px; margin:0 auto">
-  <h2>标记爆款（老内容）</h2>
-  <p style="color:var(--ink-3); font-size:13px">勾选真爆过的 → 批量标为爆款；之后挖精华会对它们多挖一桶「结构/打法」。</p>
+  {{ shell.media_shell('lib') }}
+
+  <h1 class="pname" style="margin:0 0 5px">老文案</h1>
+  <p style="font-size:13px;color:var(--ink-3);line-height:1.6;margin:0 0 16px;max-width:620px">
+    批量导入的历史内容。勾选真爆过的标为爆款——之后「挖精华」会对它们多挖一桶「结构 / 打法」，沉淀进打法库。
+  </p>
   <form method="post" action="/media/legacy/mark-winner">
     <input type="hidden" name="winner" value="1">
     <div style="margin:10px 0">
@@ -14,9 +23,17 @@
           <span style="font-size:11px; color:var(--ink-3)">（{{ '视频' if it.idea_source=='video_reverse' else '文案' }}）</span></span>
         {% if it.is_winner %}<span class="tag" style="color:var(--up)">爆款</span>{% endif %}
       </label>
-      {% else %}<div class="empty">还没有反向补录的老内容</div>{% endfor %}
+      {% else %}
+      <div class="empty" style="padding:34px 12px">
+        <div style="color:var(--ink-3);margin-bottom:8px;display:flex;justify-content:center;font-size:26px">{{ ic.icon('doc') }}</div>
+        <p style="color:var(--ink-2);font-size:13.5px;margin:0 0 4px">还没有老内容</p>
+        <p style="color:var(--ink-3);font-size:12px;margin:0">去内容看板点「批量导入老文案」，把历史稿子导进来。</p>
+      </div>
+      {% endfor %}
     </div>
     <button type="submit" class="btn primary">标记选中为爆款</button>
   </form>
+
+  {{ shell.step_nav(back={'href':'/media/board','label':'内容看板'}) }}
 </div>
 {% endblock %}

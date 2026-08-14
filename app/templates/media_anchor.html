@@ -1,8 +1,9 @@
 {% extends "base.html" %}
 {% import "_icons.html" as ic %}
+{% import "_media_shell.html" as shell %}
 {% block title %}生意锚点{% endblock %}
 {% block topbar %}
-<span class="crumb"><a href="/media" style="color:inherit;text-decoration:none">自媒体</a> {{ ic.icon('chevron') }} <b>生意锚点</b></span>
+<span class="crumb"><a href="/media" style="color:inherit;text-decoration:none">自媒体</a> {{ ic.icon('chevron') }} 体系库 {{ ic.icon('chevron') }} <b>生意锚点</b></span>
 {% endblock %}
 {% block content %}
 <style>
@@ -13,6 +14,8 @@
 
 {% if not persona %}
 <div class="module" style="max-width:460px; margin:0 auto">
+  {{ shell.media_shell('lib') }}
+
   <div class="mh"><span class="ttl">还没有人设</span></div>
   <div class="inner"><p style="font-size:13px; color:var(--ink-3); margin-bottom:14px">生意锚点挂在人设下，先去建一个人设。</p>
   <a href="/media/persona" class="btn primary">去建人设</a></div>
@@ -31,7 +34,7 @@
 </div>
 
 <div class="module">
-  <div class="mh"><span class="ttl">🧭 AI 帮我梳理变现</span></div>
+  <div class="mh"><span class="ic">{{ ic.icon('robot') }}</span><span class="ttl">AI 帮我梳理变现</span></div>
   <div class="inner">
     <p style="font-size:12px; color:var(--ink-3); margin-bottom:8px">说说你靠什么变现、卖给谁、多少钱、怎么成交。</p>
     <textarea id="anc-answers" rows="3" class="input w-full" placeholder="我主要靠……收费……成交路径是……"></textarea>
@@ -125,7 +128,9 @@ async function draftAnchor(pid){
       btns[1].onclick = function(){ card.remove(); };
       box.appendChild(card);
     });
-  } catch(e){ box.innerHTML = '<div class="empty">出错了：'+e+'</div>'; }
+  } catch(e){ box.innerHTML = '<div class="empty">出错了：'+e+'
+  {{ shell.step_nav(back={'href':'/media/board','label':'内容看板'}) }}
+</div>'; }
   finally { btn.disabled = false; btn.textContent = '让 AI 提炼'; }
 }
 function escapeHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
