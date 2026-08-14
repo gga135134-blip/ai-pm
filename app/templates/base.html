@@ -158,7 +158,11 @@
         /* kanban */
         .cols{ display:grid; grid-template-columns:repeat(3,1fr) 46px; gap:14px; align-items:start; }
         .col-h{ display:flex; align-items:center; justify-content:space-between; font-size:13px; font-weight:600; color:var(--ink-2); margin-bottom:10px; }
-        .col-h .c{ font-family:var(--mono); color:var(--ink-3); font-weight:500; background:var(--panel-2); border-radius:999px; padding:1px 8px; font-size:11px; }
+        /* 列计数：原来 11px + 最暗灰，几乎看不见。放大提亮；0 才退回灰色 */
+        .col-h .c{ font-family:var(--mono); color:var(--ink-1); font-weight:700; font-size:14px;
+          font-variant-numeric:tabular-nums; background:var(--panel-2); border-radius:999px;
+          padding:2px 10px; min-width:28px; text-align:center; }
+        .col-h .c.zero{ color:var(--ink-3); font-weight:500; }
         .card{ background:var(--bg); border:1px solid var(--border); border-radius:var(--r-sm); padding:11px 12px; margin-bottom:10px; }
         .card:hover{ border-color:var(--accent); }
         .card .ct{ font-size:13.5px; font-weight:500; }
@@ -327,7 +331,14 @@
           display:flex; align-items:center; gap:5px; }
         .step .n .icon{ font-size:12px; }
         .step .t{ font-size:14px; font-weight:600; margin-top:3px; display:block; }
-        .step .c{ font-size:11.5px; color:var(--ink-3); margin-top:2px; display:block; }
+        /* 说明行里的数字单独放大提亮——这行是「做到哪了」的关键信息，太小会看不见 */
+        .step .c{ font-size:12.5px; color:var(--ink-2); margin-top:4px; display:block; }
+        .step .c b{ font-family:var(--mono); font-size:18px; font-weight:700;
+          font-variant-numeric:tabular-nums; letter-spacing:-.02em; color:var(--ink-1);
+          vertical-align:-.05em; margin:0 1px; }
+        .step.now .c b{ color:var(--accent); }
+        .step.done .c b{ color:var(--up); }
+        .step.locked .c b{ color:var(--ink-3); }
         .step:hover{ border-color:var(--accent); }
         .step.done .n{ color:var(--up); }
         .step.now{ border-color:var(--accent); background:var(--accent-soft); }

@@ -108,7 +108,7 @@ async function feishuSync(btn){
       <div class="kb-col">
         {# idea 阶段后端叫「选题」，与第1步的选题池撞名（那是 media_topic，这是已采用待写脚本的内容）。
            这里改显示名消歧义，不动后端常量 STAGE_LABELS #}
-        <div class="col-h"><span>{{ '待写脚本' if col.stage == 'idea' else col.label }}</span><span class="c">{{ col.cards|length }}</span></div>
+        <div class="col-h"><span>{{ '待写脚本' if col.stage == 'idea' else col.label }}</span><span class="c {% if not col.cards %}zero{% endif %}">{{ col.cards|length }}</span></div>
         {% for c in col.cards %}
         <a href="/media/content/{{ c.id }}" class="card">
           <div class="ct">{{ c.title }}</div>

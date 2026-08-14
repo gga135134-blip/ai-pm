@@ -78,14 +78,16 @@ function msToggleLibs(){ document.getElementById('ms-libs').classList.toggle('op
       var k = el.dataset.step, s = d.steps[k];
       if(!s) return;
       var cEl = el.querySelector('[data-c]');
-      cEl.textContent = s.label || '';
+      /* 把数字包成 <b> 单独放大（标签由后端生成，无用户输入，无注入风险） */
+      var wrap = function(txt){ return (txt || '').replace(/(\d+)/g, '<b>$1</b>'); };
+      cEl.innerHTML = wrap(s.label);
       if(k === CUR) return;                       /* 当前步保持 now，不被覆盖 */
       var n = el.querySelector('[data-n]');
       if(s.locked){
         el.classList.remove('todo'); el.classList.add('locked');
         el.setAttribute('title', s.reason || '');
         n.textContent = '不可用';
-        cEl.textContent = s.reason || s.label || '';
+        cEl.innerHTML = wrap(s.reason || s.label);
       } else if(s.done){
         el.classList.remove('todo'); el.classList.add('done');
         n.textContent = '已完成';

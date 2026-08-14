@@ -226,7 +226,7 @@ function switchView(name){
                 {% set col = task_board[status] %}
                 {% if col %}
                 <div class="kb-col">
-                    <div class="col-h"><span>{{ label }}</span><span class="c">{{ col|length }}</span></div>
+                    <div class="col-h"><span>{{ label }}</span><span class="c {% if not col %}zero{% endif %}">{{ col|length }}</span></div>
                     <div>
                         {% for t in col %}
                         <div class="card">
