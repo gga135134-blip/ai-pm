@@ -22,6 +22,8 @@
         <span style="flex:1"><a href="/media/content/{{ it.id }}" style="color:var(--ink-1)">{{ it.title }}</a>
           <span style="font-size:11px; color:var(--ink-3)">（{{ '视频' if it.idea_source=='video_reverse' else '文案' }}）</span></span>
         {% if it.is_winner %}<span class="tag" style="color:var(--up)">爆款</span>{% endif %}
+        {% if it.mined_signature_at %}<span class="tag" style="color:var(--ink-3)">记忆点✓</span>{% endif %}
+        {% if it.mined_essence_at %}<span class="tag" style="color:var(--ink-3)">精华✓</span>{% endif %}
       </label>
       {% else %}
       <div class="empty" style="padding:34px 12px">
@@ -32,8 +34,34 @@
       {% endfor %}
     </div>
     <button type="submit" class="btn primary">标记选中为爆款</button>
+    <div style="margin-top:12px; padding-top:12px; border-top:1px solid var(--border); display:flex; gap:8px; flex-wrap:wrap; align-items:center">
+      <button type="button" onclick="batchMine('signature')" class="btn ai" style="font-size:12.5px">批量挖记忆点（选中）</button>
+      <button type="button" onclick="batchMine('essence')" class="btn ai" style="font-size:12.5px">批量挖精华（选中爆款）</button>
+      <label style="font-size:12px; color:var(--ink-3)"><input type="checkbox" id="mine-force"> 已挖也重挖</label>
+      <a href="/media/mine-review" style="font-size:12.5px; margin-left:auto">去复核采纳 →</a>
+    </div>
+    <div id="mine-progress" style="font-size:12.5px; color:var(--ai); margin-top:8px"></div>
   </form>
 
   {{ shell.step_nav(back={'href':'/media/board','label':'内容看板'}) }}
 </div>
+<script>
+async function batchMine(kind){
+  const ids=[...document.querySelectorAll('input[name=content_ids]:checked')].map(c=>c.value);
+  const prog=document.getElementById('mine-progress');
+  if(!ids.length){ prog.textContent='先勾选老文案'; return; }
+  const force=document.getElementById('mine-force').checked?'1':'0';
+  let added=0, skipped=0, done=0;
+  for(const id of ids){
+    prog.textContent='挖矿中… '+(++done)+'/'+ids.length;
+    try{
+      const fd=new FormData(); fd.append('kind',kind); fd.append('force',force);
+      const r=await fetch('/media/content/'+id+'/mine-to-queue',{method:'POST',body:fd});
+      const txt=await r.text(); let d; try{ d=JSON.parse(txt); }catch(_){ continue; }
+      if(d.skipped) skipped++; else added+=(d.added||0);
+    }catch(e){}
+  }
+  prog.innerHTML='完成：新增候选 '+added+' 条，跳过 '+skipped+' 条 → <a href="/media/mine-review">去复核采纳</a>';
+}
+</script>
 {% endblock %}
