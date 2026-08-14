@@ -865,7 +865,7 @@ async def draft_anchors(db, persona_id: str, answers: str, model: str = "auto") 
 
 
 async def write_script(db, content_id: str, mode: str = "full",
-                       model: str = "auto", hint: str = "") -> dict:
+                       model: str = "auto", hint: str = "", playbook_id: str = "") -> dict:
     """AI 写口播脚本。hint 非空=带要求重写（如"开头别铺垫，更狠"/"加个案例"）。
 
     mode="full"：注入完整预算内的人设资产（默认）
@@ -921,6 +921,22 @@ async def write_script(db, content_id: str, mode: str = "full",
         material_ids = [m["id"] for m in picked_mats]
         material_block = render_material_block(picked_mats)
 
+    playbook = None
+    if mode != "lean":
+        if playbook_id == "none":
+            playbook = None
+        elif playbook_id:
+            cur = await db.execute(
+                "SELECT id,name,structure,when_to_use,status FROM media_playbook WHERE id=?",
+                (playbook_id,))
+            prow = await cur.fetchone()
+            if prow:
+                playbook = dict(prow)
+                playbook["reason"] = "（手动指定）"
+        else:
+            m = await match_playbook(db, content, model=model)
+            playbook = m.get("playbook")
+
     parts = [context_text]
     ev_block = render_evidence_block(evidence)
     if ev_block:
@@ -930,6 +946,11 @@ async def write_script(db, content_id: str, mode: str = "full",
     ang_block = render_angle_block(angle_text, angle_rationale)
     if ang_block:
         parts.append(ang_block)
+    if playbook:
+        parts.append(
+            f"【打法骨架】{playbook['name']}（{playbook.get('when_to_use','')}）\n"
+            f"{playbook.get('structure','')}\n"
+            f"（按这个结构写，但别硬套；结构服务于内容，不是填空）")
     parts.append(f"【本条选题】{content['title']}")
     if content["puzzle"]:
         parts.append(f"【核心谜题】{content['puzzle']}")
@@ -956,19 +977,23 @@ async def write_script(db, content_id: str, mode: str = "full",
     # ── 持久化草稿：进 ai_draft（不碰 script，script 留给人定稿）──
     gaps = extract_gap_markers(resp)
     gap_text = "；".join(gaps)
+    used_pb = [playbook["id"]] if playbook else []
     await db.execute(
-        "UPDATE media_content SET ai_draft=?, evidence_gap=?, "
+        "UPDATE media_content SET ai_draft=?, evidence_gap=?, used_playbook_ids=?, "
         "authoring_stage='drafted', updated_at=CURRENT_TIMESTAMP WHERE id=?",
-        (resp, gap_text, content_id))
+        (resp, gap_text, json.dumps(used_pb), content_id))
     await db.commit()
 
     all_injected = injected_ids + material_ids
     await log_injection(db, content_id, f"write_script:{mode}",
                         all_injected, result.get("tokens", 0))
 
+    pb_out = ({"id": playbook["id"], "name": playbook["name"],
+               "reason": playbook.get("reason", ""), "status": playbook.get("status", "")}
+              if playbook else None)
     return {"ok": True, "script": resp, "error": "", "gap": gap_text,
             "cost": result.get("cost", 0), "model": result.get("model", ""),
-            "injected_count": len(all_injected)}
+            "injected_count": len(all_injected), "playbook": pb_out}
 
 
 ANGLE_SYSTEM = """你是口播选题的角度策划。基于真实素材，给出 2-3 个不同的切入角度。
