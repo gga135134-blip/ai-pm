@@ -4,7 +4,7 @@
     current: topic|content|publish|review|lib（lib = 体系库页，不高亮主线步）
     persona: 人设 dict（可空）；persona_id: 没有 persona 对象时传 id
     步骤的完成度/存量由 /media/ui/steps 前端填充（各页 context 数据不齐，见 spec §3.2） -#}
-{% macro media_shell(current, persona=None, persona_id=None) -%}
+{% macro media_shell(current, persona=None, persona_id=None, here='') -%}
 {% set steps = [
    ('topic','1 · 选题','/media/topics'),
    ('content','2 · 内容','/media/board'),
@@ -20,7 +20,7 @@
   {% endif %}
   <span class="acc" id="ms-acc"></span>
   <span class="sp"></span>
-  <span class="lib" onclick="msToggleLibs()">{{ ic.icon('kanban') }}体系库<span class="gap" id="ms-gap" style="display:none"></span></span>
+  <span class="lib {% if current == 'lib' %}on{% endif %}" onclick="msToggleLibs()">{{ ic.icon('kanban') }}体系库<span class="gap" id="ms-gap" style="display:none"></span></span>
   <a class="sw" href="/media">切换人设 {{ ic.icon('chevron') }}</a>
 </div>
 
@@ -50,6 +50,14 @@
 </div>
 
 <div class="rail" id="ms-rail">
+  {#- 体系库页不属于主线任何一步；给它一张「你在这」的卡，否则四步全灰、看不出位置 -#}
+  {% if current == 'lib' %}
+  <span class="step here">
+    <span class="n">{{ ic.icon('kanban') }}你在这</span>
+    <span class="t">体系库{% if here %} · {{ here }}{% endif %}</span>
+    <span class="c">不在主线上，随时可回</span>
+  </span>
+  {% endif %}
   {% for key, label, href in steps %}
   <a class="step {% if key == current %}now{% else %}todo{% endif %}" data-step="{{ key }}" href="{{ href }}">
     <span class="n" data-n>{% if key == current %}{{ ic.icon('clock') }}进行中{% else %}未开始{% endif %}</span>

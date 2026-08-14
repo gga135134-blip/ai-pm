@@ -313,6 +313,8 @@
           display:inline-flex; align-items:center; gap:6px; position:relative; }
         .pbar .lib .gap{ position:absolute; top:3px; right:5px; width:7px; height:7px; border-radius:50%;
           background:var(--warn); }
+        /* 正在体系库页时，入口本身也点亮 */
+        .pbar .lib.on{ border-color:var(--ai); box-shadow:0 0 0 3px var(--ai-soft); }
         .pbar .sw{ font-size:12.5px; color:var(--ink-3); text-decoration:none;
           display:inline-flex; align-items:center; gap:5px; }
         .pbar .sw:hover{ color:var(--ink-1); }
@@ -333,6 +335,10 @@
         .step.todo .t{ color:var(--ink-2); }
         .step.locked{ opacity:.45; cursor:not-allowed; pointer-events:none; }
         .step.locked .t{ color:var(--ink-3); }
+        /* 「你在这」卡：体系库页用，紫色系与主线四步区分开 */
+        .step.here{ border-color:var(--ai); background:var(--ai-soft); cursor:default; }
+        .step.here .n, .step.here .t{ color:var(--ai); }
+        .step.here:hover{ border-color:var(--ai); }
 
         .stepnav{ display:flex; align-items:center; gap:10px; margin-top:22px; padding-top:16px;
           border-top:1px solid var(--border); flex-wrap:wrap; }

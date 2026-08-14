@@ -14,7 +14,7 @@
   .pw{ color:var(--warn); white-space:nowrap; }
 </style>
 
-{{ shell.media_shell('lib') }}
+{{ shell.media_shell('lib', persona=persona, here='受众') }}
 
 {% if not persona %}
 <div class="module" style="max-width:460px; margin:0 auto">

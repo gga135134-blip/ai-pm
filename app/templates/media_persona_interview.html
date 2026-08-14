@@ -15,7 +15,7 @@
 </style>
 
 <div style="margin-bottom:16px">
-  {{ shell.media_shell('lib') }}
+  {{ shell.media_shell('lib', persona=persona, here='人设访谈') }}
 
   <div class="pname" style="margin-bottom:8px">人设访谈 · {{ persona.name if persona else '' }}</div>
   <div style="font-size:12.5px; color:var(--ink-3)">一个模块一坐：AI 出题 → 你一次答完 → AI 提炼 → 你逐条拍板。可随时中断续做。</div>

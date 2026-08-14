@@ -18,7 +18,7 @@
   .acct-row:last-child{ border-bottom:0; }
 </style>
 
-{{ shell.media_shell('lib') }}
+{{ shell.media_shell('lib', persona=persona, here='人设') }}
 
 {% if not persona %}
 <div class="module" style="max-width:420px; margin:0 auto">
