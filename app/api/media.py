@@ -647,12 +647,22 @@ async def topics_home(request: Request, source: str = ""):
         pid = await _current_persona_id(request, db)
         if not pid:
             return RedirectResponse("/media/persona", status_code=302)
-        sql = ("SELECT * FROM media_topic WHERE persona_id=? AND status='pool'")
+        # 已采用但内容还没进发布的，继续留在池子里（标「制作中」）——
+        # 写脚本阶段人还可能改主意换选题，立刻消失就找不回来了。
+        # 一旦内容进到 ready 及以后（发布/已发/已复盘）才移出池子。
+        sql = ("SELECT t.*, c.stage AS content_stage FROM media_topic t "
+               "LEFT JOIN media_content c ON c.id = t.adopted_content_id "
+               "WHERE t.persona_id=? AND ("
+               "  t.status='pool'"
+               "  OR (t.status='adopted' AND c.stage IN ('idea','scripted','recording','editing'))"
+               ")")
         args = [pid]
         if source:
-            sql += " AND source=?"
+            sql += " AND t.source=?"
             args.append(source)
-        sql += " ORDER BY decision_score DESC, fit_score DESC, heat DESC, created_at DESC"
+        # 待选的排前面（要挑的），制作中的沉到后面（只是留个入口找得回）
+        sql += (" ORDER BY CASE WHEN t.status='pool' THEN 0 ELSE 1 END, "
+                "t.decision_score DESC, t.fit_score DESC, t.heat DESC, t.created_at DESC")
         cur = await db.execute(sql, tuple(args))
         topics = [dict(r) for r in await cur.fetchall()]
         cur = await db.execute(
@@ -671,6 +681,8 @@ async def topics_home(request: Request, source: str = ""):
     return _tpl(request, "media_topics.html",
                 {"topics": topics, "rejected": rejected, "persona_id": pid,
                  "themes": themes,
+                 # idea 阶段在看板上显示为「待写脚本」，这里保持一致
+                 "stage_labels": dict(STAGE_LABELS, idea="待写脚本"),
                  "sources": TOPIC_SOURCES, "cur_source": source})
 
 

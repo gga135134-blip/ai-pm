@@ -17,6 +17,9 @@
   .topic-card .angle{ font-size:11.5px; color:var(--ink-3); margin-top:4px; }
   .topic-card .stars{ font-size:11.5px; color:var(--warn); margin-top:8px; }
   .topic-card .acts{ display:flex; gap:8px; margin-top:10px; }
+  /* 已采用、制作中：压低存在感，它只是留个找得回的入口，不参与挑选 */
+  .topic-card.making{ opacity:.72; border-style:dashed; }
+  .topic-card.making:hover{ opacity:1; }
   /* 主题库 */
   .th-form{ display:none; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
   .th-form.open{ display:flex; }
@@ -107,10 +110,14 @@
 
 <div class="tp-grid mb-4">
   {% for t in topics %}
-  <div class="card topic-card" style="padding:14px">
+  <div class="card topic-card {% if t.status == 'adopted' %}making{% endif %}" style="padding:14px">
     <div class="flex items-start justify-between gap-2">
       <div class="ct" style="flex:1">{{ t.title }}</div>
+      {% if t.status == 'adopted' %}
+      <span class="tag" style="flex-shrink:0;color:var(--up);background:rgba(63,203,134,.14)">制作中</span>
+      {% else %}
       <span class="tag {% if t.source and t.source.startswith('ai') %}ai{% endif %}" style="flex-shrink:0">{{ sources.get(t.source, t.source) }}</span>
+      {% endif %}
     </div>
     {% if t.puzzle %}<div class="puz"><b style="font-weight:600">谜题</b> · {{ t.puzzle }}</div>{% endif %}
     {% if t.reason %}<div class="reason">{{ t.reason }}</div>{% endif %}
@@ -123,10 +130,18 @@
     </details>
     {% endif %}
     <div class="acts">
+      {% if t.status == 'adopted' %}
+      {# 已采用、内容还在制作中：留个入口找得回来，不再给采用/弃按钮 #}
+      <a href="/media/content/{{ t.adopted_content_id }}" class="btn"
+         style="flex:1; justify-content:center; padding:6px 0; font-size:12.5px">
+        {{ ic.icon('chevron') }}去看内容（{{ stage_labels.get(t.content_stage, t.content_stage) }}）
+      </a>
+      {% else %}
       <form method="post" action="/media/topic/{{ t.id }}/adopt" style="flex:1">
         <button class="btn primary" style="width:100%; justify-content:center; padding:6px 0; font-size:12.5px">采用</button>
       </form>
       <button onclick="rejectTopic('{{ t.id }}')" class="btn ghost" style="color:var(--ink-3); font-size:12.5px">弃</button>
+      {% endif %}
     </div>
   </div>
   {% else %}
