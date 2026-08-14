@@ -635,7 +635,7 @@ async def anchor_archive(aid: str):
 # ─────────────── 话题库 ───────────────
 
 TOPIC_SOURCES = {
-    "manual": "人工", "ai_rec": "AI推荐", "hot": "热点",
+    "manual": "人工", "ai_rec": "AI推荐", "theme": "主题展开", "hot": "热点",
     "comment": "评论区", "competitor": "对标", "review": "复盘衍生",
 }
 
@@ -659,10 +659,18 @@ async def topics_home(request: Request, source: str = ""):
             "SELECT * FROM media_topic WHERE persona_id=? AND status='rejected' "
             "ORDER BY created_at DESC LIMIT 20", (pid,))
         rejected = [dict(r) for r in await cur.fetchall()]
+        # 主题库：人投喂的方向，AI 据此展开成选题（见 app/api/media_theme.py）
+        cur = await db.execute(
+            "SELECT t.*, (SELECT COUNT(*) FROM media_topic p WHERE p.theme_id=t.id) AS topic_n, "
+            "(SELECT COUNT(*) FROM media_topic p WHERE p.theme_id=t.id AND p.status='adopted') AS adopted_n "
+            "FROM media_theme t WHERE t.persona_id=? AND COALESCE(t.status,'active')='active' "
+            "ORDER BY t.created_at DESC", (pid,))
+        themes = [dict(r) for r in await cur.fetchall()]
     finally:
         await db.close()
     return _tpl(request, "media_topics.html",
                 {"topics": topics, "rejected": rejected, "persona_id": pid,
+                 "themes": themes,
                  "sources": TOPIC_SOURCES, "cur_source": source})
 
 

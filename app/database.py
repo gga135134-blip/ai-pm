@@ -224,6 +224,19 @@ CREATE TABLE IF NOT EXISTS media_account (
     FOREIGN KEY (persona_id) REFERENCES media_persona(id)
 );
 
+-- 主题库：人投喂的粗方向，AI 据此展开成多条选题。
+-- 与 media_topic 的区别：主题长期存在、不消耗、可反复展开；选题是一次性的，采用或弃掉就出池。
+CREATE TABLE IF NOT EXISTS media_theme (
+    id TEXT PRIMARY KEY,
+    persona_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    note TEXT DEFAULT '',
+    status TEXT DEFAULT 'active',      -- active | archived
+    expand_count INTEGER DEFAULT 0,    -- 累计展开次数
+    last_expanded_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS media_topic (
     id TEXT PRIMARY KEY,
     persona_id TEXT NOT NULL,
@@ -544,6 +557,9 @@ MIGRATIONS = [
     "ALTER TABLE media_phase_review ADD COLUMN anchor_actions TEXT DEFAULT '[]'",
     "ALTER TABLE media_content ADD COLUMN is_winner INTEGER DEFAULT 0",
     "ALTER TABLE media_material ADD COLUMN scope TEXT DEFAULT 'persona'",
+    # 选题溯源到主题（可空：AI 自由推的选题没有主题来源）。
+    # 价值在复盘：能回答「哪个主题最出爆款」，而不只是「哪条视频数据好」。
+    "ALTER TABLE media_topic ADD COLUMN theme_id TEXT DEFAULT ''",
 ]
 
 

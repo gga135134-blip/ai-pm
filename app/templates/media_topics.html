@@ -17,6 +17,17 @@
   .topic-card .angle{ font-size:11.5px; color:var(--ink-3); margin-top:4px; }
   .topic-card .stars{ font-size:11.5px; color:var(--warn); margin-top:8px; }
   .topic-card .acts{ display:flex; gap:8px; margin-top:10px; }
+  /* 主题库 */
+  .th-form{ display:none; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+  .th-form.open{ display:flex; }
+  .th-row{ display:flex; align-items:center; gap:10px; padding:11px 0; border-bottom:1px solid var(--border); }
+  .th-row:last-child{ border-bottom:0; }
+  .th-t{ font-size:14px; font-weight:600; }
+  .th-m{ font-size:11.5px; color:var(--ink-3); margin-top:3px; }
+  @media (max-width:767px){
+    .th-row{ flex-wrap:wrap; }
+    .th-row > div{ flex-basis:100%; }
+  }
 </style>
 
 {{ shell.media_shell('topic', persona_id=persona_id) }}
@@ -35,6 +46,55 @@
   </form>
   <button onclick="aiTag()" id="tag-btn" class="btn" style="margin-left:8px">{{ ic.icon('tag') }}AI 标注</button>
 </div>
+
+{# ===== ① 主题库：人投喂方向，AI 展开成选题。主题不消耗，可反复展开 ===== #}
+<div class="module">
+  <div class="mh">
+    <span class="ic">{{ ic.icon('folder') }}</span><span class="ttl">主题库</span>
+    <span class="sub">· 你给方向，AI 展开成选题</span>
+    <span style="flex:1"></span>
+    <button class="btn" style="padding:5px 11px;font-size:12px"
+            onclick="document.getElementById('th-form').classList.toggle('open')">{{ ic.icon('plus') }}加主题</button>
+  </div>
+  <div class="inner">
+    <form method="post" action="/media/themes" id="th-form" class="th-form">
+      <input name="title" required placeholder="一句话主题，如「老板买了 AI 没人用」" class="input" style="flex:1;min-width:200px">
+      <input name="note" placeholder="补充说明（可留空）" class="input" style="flex:1;min-width:160px">
+      <button class="btn primary">存入</button>
+    </form>
+
+    {% for t in themes %}
+    <div class="th-row" id="th-{{ t.id }}">
+      <div style="min-width:0;flex:1">
+        <div class="th-t">{{ t.title }}</div>
+        <div class="th-m">
+          {% if t.expand_count %}
+            展开 {{ t.expand_count }} 次 · 产出 {{ t.topic_n }} 条 · 采用 {{ t.adopted_n }} 条
+            {% if t.last_expanded_at %} · 上次 {{ t.last_expanded_at[:10] }}{% endif %}
+          {% else %}
+            还没展开过
+          {% endif %}
+          {% if t.note %} · {{ t.note }}{% endif %}
+        </div>
+      </div>
+      <button class="btn ai" style="padding:5px 11px;font-size:12px;flex-shrink:0"
+              onclick="expandTheme('{{ t.id }}', this)">{{ ic.icon('robot') }}展开成选题</button>
+      <form method="post" action="/media/theme/{{ t.id }}/archive" style="flex-shrink:0"
+            onsubmit="return confirm('归档这个主题？已展开的选题会保留。')">
+        <button class="iconbtn" title="归档">{{ ic.icon('trash') }}</button>
+      </form>
+    </div>
+    {% else %}
+    <div class="empty" style="padding:20px 12px;text-align:left">
+      还没有主题。想到什么方向就先扔进来（比如「老板买了 AI 没人用」），
+      需要选题时点「展开成选题」，AI 会围绕它给几个不同切入角。
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+{# ===== ② 选题池 ===== #}
+<div class="modhead">{{ ic.icon('tag') }}选题池<span class="rule"></span></div>
 
 <div class="src-row">
   <a href="/media/topics" class="src-chip {% if not cur_source %}on{% endif %}">全部</a>
@@ -132,6 +192,31 @@ async function aiRecommend() {
     const d = await r.json();
     if (d.ok) {
       status.textContent = '已加入 ' + d.count + ' 条，刷新中…';
+      location.reload();
+    } else {
+      status.textContent = '失败：' + (d.error || '未知错误');
+      btn.disabled = false;
+      btn.innerHTML = orig;
+    }
+  } catch (e) {
+    status.textContent = '请求失败：' + e;
+    btn.disabled = false;
+    btn.innerHTML = orig;
+  }
+}
+
+async function expandTheme(id, btn) {
+  const orig = btn.innerHTML;
+  const status = document.getElementById('ai-status');
+  btn.disabled = true;
+  btn.textContent = '展开中…';
+  status.style.display = 'block';
+  status.textContent = 'AI 正在围绕这个主题找不同切入角…';
+  try {
+    const r = await fetch('/media/theme/' + id + '/expand', {method: 'POST'});
+    const d = await r.json();
+    if (d.ok) {
+      status.textContent = '产出 ' + d.count + ' 条选题，刷新中…';
       location.reload();
     } else {
       status.textContent = '失败：' + (d.error || '未知错误');

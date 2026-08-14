@@ -95,7 +95,7 @@ async function feishuSync(btn){
 <div class="module">
   <div class="mh">
     <span class="ic">{{ ic.icon('kanban') }}</span><span class="ttl">{{ '待发' if is_pub else '内容看板' }}</span>
-    <span class="sub">{{ '· 生成三平台文案，发完标记已发' if is_pub else '· 选题 → 脚本 → 待录 → 待剪' }}</span>
+    <span class="sub">{{ '· 生成三平台文案，发完标记已发' if is_pub else '· 待写脚本 → 脚本 → 待录 → 待剪' }}</span>
   </div>
   <div class="inner">
   <div class="kanban-scroll">
@@ -106,7 +106,9 @@ async function feishuSync(btn){
                      else columns | selectattr('stage', 'in', ['idea','scripted','recording','editing']) | list %}
       {% for col in shown %}
       <div class="kb-col">
-        <div class="col-h"><span>{{ col.label }}</span><span class="c">{{ col.cards|length }}</span></div>
+        {# idea 阶段后端叫「选题」，与第1步的选题池撞名（那是 media_topic，这是已采用待写脚本的内容）。
+           这里改显示名消歧义，不动后端常量 STAGE_LABELS #}
+        <div class="col-h"><span>{{ '待写脚本' if col.stage == 'idea' else col.label }}</span><span class="c">{{ col.cards|length }}</span></div>
         {% for c in col.cards %}
         <a href="/media/content/{{ c.id }}" class="card">
           <div class="ct">{{ c.title }}</div>

@@ -146,6 +146,116 @@ async def recommend_topics(db, persona_id: str, model: str = "auto") -> dict:
             "model": result.get("model", ""), "error": ""}
 
 
+async def expand_theme(db, theme_id: str, model: str = "auto", n: int = 5) -> dict:
+    """把一个主题展开成 N 条具体选题。
+
+    与 recommend_topics 的区别：那个是 AI 自己找方向（theme_id 为空），
+    这个是人给定方向、AI 只在这个方向内找不同切入角。
+    主题不消耗——同一主题隔一段时间可以再展开，因为人设/受众变了，切入角也会变。
+    """
+    cur = await db.execute("SELECT * FROM media_theme WHERE id=?", (theme_id,))
+    row = await cur.fetchone()
+    if not row:
+        return {"ok": False, "error": "主题不存在", "count": 0, "cost": 0, "model": ""}
+    theme = dict(row)
+    persona_id = theme["persona_id"]
+
+    cur = await db.execute("SELECT * FROM media_persona WHERE id=?", (persona_id,))
+    row = await cur.fetchone()
+    if not row:
+        return {"ok": False, "error": "人设不存在", "count": 0, "cost": 0, "model": ""}
+    persona = dict(row)
+
+    cur = await db.execute(
+        "SELECT id,dimension,content,brief,confidence FROM media_persona_trait "
+        "WHERE persona_id=? AND status='active' ORDER BY confidence DESC LIMIT 12",
+        (persona_id,))
+    traits = [dict(r) for r in await cur.fetchall()]
+
+    # 这个主题以前展开过什么 —— 不要重复给同样的切入角
+    cur = await db.execute(
+        "SELECT title FROM media_topic WHERE theme_id=? ORDER BY created_at DESC LIMIT 20",
+        (theme_id,))
+    prior = [r["title"] for r in await cur.fetchall()]
+
+    cur = await db.execute(
+        "SELECT title, rejected_reason FROM media_topic "
+        "WHERE persona_id=? AND status='rejected' ORDER BY created_at DESC LIMIT 10",
+        (persona_id,))
+    rejected = [dict(r) for r in await cur.fetchall()]
+
+    parts = [
+        f"人设：{persona['name']}｜{persona['one_liner']}｜当前阶段：{persona['current_phase']}",
+        f"【本次要展开的主题】{theme['title']}"
+        + (f"\n补充说明：{theme['note']}" if theme["note"] else ""),
+    ]
+    if traits:
+        parts.append("人设条目：\n" + "\n".join(
+            f"- [{t['dimension']}] {t['brief'] or t['content'][:40]}" for t in traits))
+    if prior:
+        parts.append("这个主题以前已经展开过（换新角度，别重复）：\n"
+                     + "\n".join(f"- {t}" for t in prior))
+    if rejected:
+        parts.append("已弃选题及原因（不要推同类）：\n" + "\n".join(
+            f"- {r['title']}：{r['rejected_reason'] or '未说明'}" for r in rejected))
+    menu = await _build_asset_menu(db, persona_id)
+    parts.append("资产菜单（给选题打受众/锚点标用）：\n" + menu["menu"])
+    parts.append(f"请**只围绕上面这个主题**，给出 {n} 个不同切入角度的选题。"
+                 "每个都要有自己的谜题，角度之间要有明显区别，不要换汤不换药。")
+
+    prompt = "\n\n".join(parts)
+    result = await ask_ai(prompt, model=model, task_type="media_topic",
+                          system_prompt=RECOMMEND_SYSTEM, json_mode=True)
+    resp = result.get("response", "")
+    if resp.startswith("[错误]") or resp.startswith("[费用保护]"):
+        return {"ok": False, "error": resp, "count": 0,
+                "cost": result.get("cost", 0), "model": result.get("model", "")}
+
+    items = extract_json(resp, expect="array")
+    if not items:
+        obj = extract_json(resp, expect="object")
+        items = obj.get("topics") or obj.get("data") or []
+    if not items:
+        return {"ok": False, "error": "AI 输出无法解析为选题列表", "count": 0,
+                "cost": result.get("cost", 0), "model": result.get("model", "")}
+
+    trait_ids = [t["id"] for t in traits]
+    count = 0
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        title = _txt(it.get("title"))
+        puzzle = _txt(it.get("puzzle"))
+        if not title or not puzzle:
+            continue  # 铁律 2：没谜题的不入库
+        await db.execute(
+            "INSERT INTO media_topic "
+            "(id,persona_id,theme_id,title,puzzle,source,reason,angle,heat,fit_score,"
+            " related_trait_ids,audience_ids,anchor_ids,dropped_drift_ids,tagged) "
+            "VALUES (?,?,?,?,?,'theme',?,?,?,?,?,?,?,?,1)",
+            (str(uuid.uuid4()), persona_id, theme_id, title, puzzle,
+             _txt(it.get("reason")), _txt(it.get("angle")),
+             _clamp(it.get("heat"), 3), _clamp(it.get("fit_score"), 3),
+             json.dumps(trait_ids, ensure_ascii=False),
+             json.dumps(_clean_ids(it.get("audience_ids"), menu["valid_aud"]),
+                        ensure_ascii=False),
+             json.dumps(_clean_ids(it.get("anchor_ids"), menu["valid_anc"]),
+                        ensure_ascii=False),
+             json.dumps(_clean_ids(it.get("dropped_drift_ids"), menu["valid_dropped"]),
+                        ensure_ascii=False)))
+        count += 1
+
+    await db.execute(
+        "UPDATE media_theme SET expand_count=expand_count+1, "
+        "last_expanded_at=CURRENT_TIMESTAMP WHERE id=?", (theme_id,))
+    await db.commit()
+
+    await log_injection(db, "", "expand_theme", trait_ids, result.get("tokens", 0))
+
+    return {"ok": True, "count": count, "cost": result.get("cost", 0),
+            "model": result.get("model", ""), "error": ""}
+
+
 def _clamp(value, default: int) -> int:
     """把 AI 给的评分夹到 1-5。AI 偶尔会返回 0、10 或字符串。"""
     try:
