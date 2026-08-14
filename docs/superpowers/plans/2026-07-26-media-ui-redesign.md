@@ -536,6 +536,77 @@ git commit -m "feat(media-ui): 内容详情页接入 shell + AI 注入说明"
 
 ---
 
+## Task 4.5: 复盘落地页（执行中发现的缺口，用户确认新增）
+
+**背景：** 复盘只有 `/media/review-cycle/{id}` 和 `/media/phase-review/{id}` 两个详情路由，没有列表/发起页——入口藏在人设档案页里。步骤条第 4 步无处可去。
+
+**Files:**
+- Modify: `app/api/media_ui.py`（新增只读路由，仍不碰 `media.py`）
+- Create: `app/templates/media_review_home.html`
+
+**Interfaces:**
+- Produces: `GET /media/review` → 渲染 `media_review_home.html`，context：`persona`（dict 或 None）、`cycles`（周期复盘列表）、`phases`（阶段复盘列表）。
+
+- [ ] **Step 1: 确认复盘表结构**
+
+```bash
+cd /d/GAGA-5-25/ai-pm && python -c "
+import sqlite3; c=sqlite3.connect('data/aipm.db')
+for t in ['media_review_cycle','media_phase_review']:
+    print(t, [d[1] for d in c.execute(f'PRAGMA table_info({t})')])"
+```
+以实际列名为准写下面的查询；对不上就改查询，**不得编造字段**。
+
+- [ ] **Step 2: 在 `app/api/media_ui.py` 末尾加只读路由**（复用文件里已有的 `_current_persona_id`）
+
+```python
+@router.get("/media/review")
+async def media_review_home(request: Request):
+    db = await get_db()
+    try:
+        pid = await _current_persona_id(request, db)
+        persona, cycles, phases = None, [], []
+        if pid:
+            cur = await db.execute("SELECT * FROM media_persona WHERE id=?", (pid,))
+            row = await cur.fetchone()
+            persona = dict(row) if row else None
+            cur = await db.execute(
+                "SELECT * FROM media_review_cycle WHERE persona_id=? ORDER BY created_at DESC", (pid,))
+            cycles = [dict(r) for r in await cur.fetchall()]
+            cur = await db.execute(
+                "SELECT * FROM media_phase_review WHERE persona_id=? ORDER BY created_at DESC", (pid,))
+            phases = [dict(r) for r in await cur.fetchall()]
+        ctx = {"request": request, "persona": persona, "cycles": cycles, "phases": phases}
+        return request.app.state.templates.TemplateResponse(request, "media_review_home.html", ctx)
+    finally:
+        await db.close()
+```
+
+- [ ] **Step 3: 新建 `media_review_home.html`** —— 挂 `shell.media_shell('review', persona=persona)`；标题「复盘」+ 解释「把已发内容的表现总结成经验，沉淀回体系库，喂给下一轮选题。」；两个 `.module` 分别列周期复盘与阶段复盘（每条链到已有详情页 `/media/review-cycle/{id}`、`/media/phase-review/{id}`）；各自空状态用 `.empty`；发起复盘的按钮**指向人设档案页已有的发起入口**（`/media/persona`），不复制其 POST 逻辑。底部 `{{ shell.step_nav(back={'href':'/media/board?view=publish','label':'发布'}) }}`。
+
+- [ ] **Step 4: 把 shell 第 4 步指向新页** —— `_media_shell.html` 里 `('review','4 · 复盘','/media/persona')` 改为 `('review','4 · 复盘','/media/review')`。
+
+- [ ] **Step 5: 验证**
+
+```bash
+cd /d/GAGA-5-25/ai-pm && python -c "
+from jinja2 import Environment, FileSystemLoader
+Environment(loader=FileSystemLoader('app/templates')).get_template('media_review_home.html'); print('OK')"
+python -c "
+from fastapi.testclient import TestClient; from app.main import app
+print('/media/review ->', TestClient(app).get('/media/review', follow_redirects=False).status_code)"
+```
+Expected: OK；路由返回 200 或 302（登录重定向）。
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add app/api/media_ui.py app/templates/media_review_home.html app/templates/_media_shell.html
+git commit -m "feat(media-ui): 新增复盘落地页，补上第4步的落点"
+```
+
+---
+
 ## Task 5: 复盘三页接入 shell
 
 **Files:**

@@ -93,3 +93,27 @@ async def media_ui_steps(request: Request):
                              "libs_empty": [k for k, v in libs.items() if not v]})
     finally:
         await db.close()
+
+
+@router.get("/media/review")
+async def media_review_home(request: Request):
+    """复盘落地页：原本只有 /media/review-cycle/{id} 与 /media/phase-review/{id}
+    两个详情路由，列表入口藏在人设档案页里。这里补一个只读落地页。"""
+    db = await get_db()
+    try:
+        pid = await _current_persona_id(request, db)
+        persona, cycles, phases = None, [], []
+        if pid:
+            cur = await db.execute("SELECT * FROM media_persona WHERE id=?", (pid,))
+            row = await cur.fetchone()
+            persona = dict(row) if row else None
+            cur = await db.execute(
+                "SELECT * FROM media_review_cycle WHERE persona_id=? ORDER BY created_at DESC", (pid,))
+            cycles = [dict(r) for r in await cur.fetchall()]
+            cur = await db.execute(
+                "SELECT * FROM media_phase_review WHERE persona_id=? ORDER BY created_at DESC", (pid,))
+            phases = [dict(r) for r in await cur.fetchall()]
+        ctx = {"request": request, "persona": persona, "cycles": cycles, "phases": phases}
+        return request.app.state.templates.TemplateResponse(request, "media_review_home.html", ctx)
+    finally:
+        await db.close()

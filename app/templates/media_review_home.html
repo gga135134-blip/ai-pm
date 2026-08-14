@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% import "_icons.html" as ic %}
+{% import "_media_shell.html" as shell %}
+{% block title %}复盘{% endblock %}
+{% block topbar %}
+<span class="crumb"><a href="/media" style="color:inherit;text-decoration:none">自媒体</a> {{ ic.icon('chevron') }} <b>复盘</b></span>
+{% endblock %}
+{% block content %}
+<style>
+  .rv-row{ display:flex; align-items:center; gap:10px; padding:11px 0; border-bottom:1px solid var(--border);
+    text-decoration:none; color:inherit; }
+  .rv-row:last-child{ border-bottom:0; }
+  .rv-row:hover .rv-t{ color:var(--accent); }
+  .rv-t{ font-size:14px; font-weight:600; }
+  .rv-m{ font-size:11.5px; color:var(--ink-3); margin-top:3px; }
+  .rv-when{ margin-left:auto; font-family:var(--mono); font-size:11.5px; color:var(--ink-3); flex-shrink:0; }
+</style>
+
+{{ shell.media_shell('review', persona=persona) }}
+
+<h1 class="pname" style="margin:0 0 5px">复盘</h1>
+<p style="font-size:13px;color:var(--ink-3);line-height:1.6;margin:0 0 16px;max-width:620px">
+  把已发内容的表现总结成经验，沉淀回体系库，喂给下一轮选题。周期复盘看一段时间的规律；阶段复盘决定要不要换打法、进下一期。
+</p>
+
+<div class="module">
+  <div class="mh">
+    <span class="ic">{{ ic.icon('chart') }}</span><span class="ttl">周期复盘</span>
+    <span class="sub">· 一段时间的规律与假设</span>
+    <span style="flex:1"></span>
+    <a href="/media/persona" class="btn" style="padding:5px 11px;font-size:12px">{{ ic.icon('plus') }}去发起</a>
+  </div>
+  <div class="inner">
+    {% for c in cycles %}
+    <a class="rv-row" href="/media/review-cycle/{{ c.id }}">
+      <div style="min-width:0">
+        <div class="rv-t">第 {{ c.seq }} 轮{% if c.level %} · {{ c.level }}{% endif %}</div>
+        <div class="rv-m">
+          {% if c.period_start or c.period_end %}{{ c.period_start }} — {{ c.period_end }}{% else %}未标注周期{% endif %}
+          {% if c.model %} · {{ c.model }}{% endif %}
+        </div>
+      </div>
+      <span class="rv-when">{{ (c.created_at or '')[:10] }}</span>
+      {{ ic.icon('chevron') }}
+    </a>
+    {% else %}
+    <div class="empty" style="padding:26px 12px">
+      <div style="color:var(--ink-3);margin-bottom:8px;display:flex;justify-content:center;font-size:26px">{{ ic.icon('chart') }}</div>
+      <p style="color:var(--ink-2);font-size:13.5px;margin:0 0 4px">还没有周期复盘</p>
+      <p style="color:var(--ink-3);font-size:12px;margin:0">发够内容之后，去人设档案页发起一轮，AI 会总结这段时间的规律。</p>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="module">
+  <div class="mh">
+    <span class="ic">{{ ic.icon('arrow-up') }}</span><span class="ttl">阶段复盘</span>
+    <span class="sub">· 要不要换打法、进下一期</span>
+    <span style="flex:1"></span>
+    <a href="/media/persona" class="btn" style="padding:5px 11px;font-size:12px">{{ ic.icon('plus') }}去发起</a>
+  </div>
+  <div class="inner">
+    {% for r in phases %}
+    <a class="rv-row" href="/media/phase-review/{{ r.id }}">
+      <div style="min-width:0">
+        <div class="rv-t">第 {{ r.seq }} 次{% if r.phase_from %} · {{ r.phase_from }} 期{% if r.phase_to %} → {{ r.phase_to }} 期{% endif %}{% endif %}</div>
+        <div class="rv-m">
+          {% if r.phase_reco %}建议：{{ r.phase_reco }}{% else %}无建议记录{% endif %}
+          {% if r.model %} · {{ r.model }}{% endif %}
+        </div>
+      </div>
+      <span class="rv-when">{{ (r.created_at or '')[:10] }}</span>
+      {{ ic.icon('chevron') }}
+    </a>
+    {% else %}
+    <div class="empty" style="padding:26px 12px">
+      <div style="color:var(--ink-3);margin-bottom:8px;display:flex;justify-content:center;font-size:26px">{{ ic.icon('arrow-up') }}</div>
+      <p style="color:var(--ink-2);font-size:13.5px;margin:0 0 4px">还没有阶段复盘</p>
+      <p style="color:var(--ink-3);font-size:12px;margin:0">积累几轮周期复盘之后再做，用来判断是否进入下一期。</p>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+{{ shell.step_nav(back={'href':'/media/board?view=publish','label':'发布'}) }}
+{% endblock %}
