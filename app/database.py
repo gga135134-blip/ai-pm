@@ -543,6 +543,7 @@ MIGRATIONS = [
     "ALTER TABLE media_content ADD COLUMN published_at DATETIME",
     "ALTER TABLE media_phase_review ADD COLUMN anchor_actions TEXT DEFAULT '[]'",
     "ALTER TABLE media_content ADD COLUMN is_winner INTEGER DEFAULT 0",
+    "ALTER TABLE media_material ADD COLUMN scope TEXT DEFAULT 'persona'",
 ]
 
 

@@ -368,7 +368,7 @@ async def interview_questions(db, content_id: str, model: str = "auto") -> dict:
 
     # 已有原料库 brief —— 告诉 AI 别重复问
     cur = await db.execute(
-        "SELECT brief,title FROM media_material WHERE persona_id=? AND status='active' "
+        "SELECT brief,title FROM media_material WHERE (persona_id=? OR scope='shared') AND status='active' "
         "LIMIT 30", (content["persona_id"],))
     mats = [((r["brief"] or r["title"]) or "").strip() for r in await cur.fetchall()]
     mats = [m for m in mats if m]
@@ -805,7 +805,7 @@ async def write_script(db, content_id: str, mode: str = "full",
     if mode != "lean":
         cur = await db.execute(
             "SELECT id,brief,title,use_count FROM media_material "
-            "WHERE persona_id=? AND status='active'", (content["persona_id"],))
+            "WHERE (persona_id=? OR scope='shared') AND status='active'", (content["persona_id"],))
         mats = [dict(r) for r in await cur.fetchall()]
         picked_mats = select_materials(mats)
         material_ids = [m["id"] for m in picked_mats]

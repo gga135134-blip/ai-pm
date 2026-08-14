@@ -360,7 +360,7 @@ async def materials_home(request: Request):
             row = await cur.fetchone()
             persona = dict(row) if row else None
             cur = await db.execute(
-                "SELECT * FROM media_material WHERE persona_id=? AND status='active' "
+                "SELECT * FROM media_material WHERE (persona_id=? OR scope='shared') AND status='active' "
                 "ORDER BY use_count ASC, created_at DESC", (pid,))
             materials = [dict(r) for r in await cur.fetchall()]
     finally:
@@ -1007,7 +1007,7 @@ async def topics_rank(request: Request):
             "SELECT * FROM media_anchor WHERE persona_id=? AND status='dropped'", (pid,))
         dropped_anchors = [dict(r) for r in await cur.fetchall()]
         cur = await db.execute(
-            "SELECT * FROM media_material WHERE persona_id=? AND status='active'", (pid,))
+            "SELECT * FROM media_material WHERE (persona_id=? OR scope='shared') AND status='active'", (pid,))
         materials = [dict(r) for r in await cur.fetchall()]
         cur = await db.execute(
             "SELECT title, brief FROM media_content WHERE persona_id=? "
