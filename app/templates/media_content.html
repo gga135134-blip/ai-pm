@@ -715,7 +715,12 @@ async function mineEssence(){
   status.textContent='AI 正在从转写稿挖精华…';
   try{
     const r=await fetch('/media/content/{{ content.id }}/mine',{method:'POST'});
-    const d=await r.json();
+    const txt=await r.text();
+    let d;
+    try{ d=JSON.parse(txt); }catch(_){
+      status.textContent='挖料没跑完：服务器没返回内容（多半是 AI 超时，这条较长时更容易），稍等再点一次。';
+      btn.disabled=false; btn.innerHTML=orig; return;
+    }
     if(!d.ok){ status.textContent='失败：'+(d.error||'未知错误'); btn.disabled=false; btn.innerHTML=orig; return; }
     renderMine('mine-materials','内容素材（→原料库）', d.materials, 'material');
     renderMine('mine-signatures','口头禅/记忆点（→人设）', d.signatures, 'signature');

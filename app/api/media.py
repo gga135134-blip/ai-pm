@@ -912,18 +912,18 @@ async def reverse_paste_commit(persona_id: str = Form(...), segments: str = Form
 @router.post("/media/legacy/mark-winner")
 async def legacy_mark_winner(content_ids: list[str] = Form([]),
                              winner: int = Form(1)):
-    if not content_ids:
-        return JSONResponse({"ok": True, "count": 0})
-    db = await get_db()
-    try:
-        qs = ",".join("?" for _ in content_ids)
-        await db.execute(
-            f"UPDATE media_content SET is_winner=? WHERE id IN ({qs})",
-            [1 if winner else 0, *content_ids])
-        await db.commit()
-    finally:
-        await db.close()
-    return JSONResponse({"ok": True, "count": len(content_ids)})
+    """普通表单提交 → 标记后跳回老文案页（不是 AJAX，别返 JSON）。"""
+    if content_ids:
+        db = await get_db()
+        try:
+            qs = ",".join("?" for _ in content_ids)
+            await db.execute(
+                f"UPDATE media_content SET is_winner=? WHERE id IN ({qs})",
+                [1 if winner else 0, *content_ids])
+            await db.commit()
+        finally:
+            await db.close()
+    return RedirectResponse("/media/legacy", status_code=303)
 
 
 @router.get("/media/legacy", response_class=HTMLResponse)

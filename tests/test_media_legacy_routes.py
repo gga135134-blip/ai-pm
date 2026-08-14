@@ -108,8 +108,9 @@ def test_mark_winner_batch():
             await db.close()
     asyncio.run(seed())
     r = _client().post("/media/legacy/mark-winner",
-                       data={"content_ids": ["W1", "W2"], "winner": 1})
-    assert r.status_code == 200
+                       data={"content_ids": ["W1", "W2"], "winner": 1},
+                       follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/media/legacy"
 
     async def check():
         db = await get_db()
