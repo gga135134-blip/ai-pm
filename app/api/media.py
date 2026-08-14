@@ -21,6 +21,7 @@ from app.services.media_ai import (
     mine_from_transcript, mine_structure,
 )
 from app.services.media_legacy import split_legacy_scripts, create_legacy_contents
+from app.services.media_playbook import list_playbooks, get_playbook
 from app.services.media_flow import finalize_updates, clean_body
 from app.services.media_decision import build_decision_context, rank_pool
 from app.services.media_review_cycle import (
@@ -848,6 +849,29 @@ async def legacy_mark_winner(content_ids: list[str] = Form([]),
     finally:
         await db.close()
     return JSONResponse({"ok": True, "count": len(content_ids)})
+
+
+@router.get("/media/playbook", response_class=HTMLResponse)
+async def playbook_home(request: Request):
+    db = await get_db()
+    try:
+        pid = await _first_persona_id(db)
+        pbs = await list_playbooks(db, pid) if pid else []
+    finally:
+        await db.close()
+    return _tpl(request, "media_playbook.html", {"playbooks": pbs})
+
+
+@router.post("/media/playbook/{pid}/status")
+async def playbook_set_status(pid: str, status: str = Form(...)):
+    if status in ("validating", "proven"):
+        db = await get_db()
+        try:
+            await db.execute("UPDATE media_playbook SET status=? WHERE id=?", (status, pid))
+            await db.commit()
+        finally:
+            await db.close()
+    return RedirectResponse("/media/playbook", status_code=302)
 
 
 @router.get("/media/asr-audio/{token}")
