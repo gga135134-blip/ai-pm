@@ -20,6 +20,7 @@ from app.services.media_ai import (
     learn_edit_style, draft_audience_segments, draft_anchors,
     mine_from_transcript,
 )
+from app.services.media_legacy import split_legacy_scripts, create_legacy_contents
 from app.services.media_flow import finalize_updates, clean_body
 from app.services.media_decision import build_decision_context, rank_pool
 from app.services.media_review_cycle import (
@@ -808,6 +809,47 @@ async def media_reverse_ingest(request: Request, video_url: str = Form(...)):
     return JSONResponse(result)
 
 
+@router.post("/media/reverse/paste-text/preview")
+async def reverse_paste_preview(text: str = Form("")):
+    """切分预览，不写库。"""
+    segs = split_legacy_scripts(text)
+    return JSONResponse({"ok": True, "count": len(segs), "segments": segs})
+
+
+@router.post("/media/reverse/paste-text/commit")
+async def reverse_paste_commit(persona_id: str = Form(...), segments: str = Form(...)):
+    """确认的段落 → 建成 media_content(legacy_text)。"""
+    try:
+        segs = json.loads(segments)
+    except Exception:
+        segs = []
+    if not isinstance(segs, list) or not segs:
+        return JSONResponse({"ok": False, "error": "无有效段落", "count": 0})
+    db = await get_db()
+    try:
+        n = await create_legacy_contents(db, persona_id, [str(s) for s in segs])
+    finally:
+        await db.close()
+    return JSONResponse({"ok": True, "count": n})
+
+
+@router.post("/media/legacy/mark-winner")
+async def legacy_mark_winner(content_ids: list[str] = Form([]),
+                             winner: int = Form(1)):
+    if not content_ids:
+        return JSONResponse({"ok": True, "count": 0})
+    db = await get_db()
+    try:
+        qs = ",".join("?" for _ in content_ids)
+        await db.execute(
+            f"UPDATE media_content SET is_winner=? WHERE id IN ({qs})",
+            [1 if winner else 0, *content_ids])
+        await db.commit()
+    finally:
+        await db.close()
+    return JSONResponse({"ok": True, "count": len(content_ids)})
+
+
 @router.get("/media/asr-audio/{token}")
 async def media_asr_audio(token: str):
     """公开免登录返回临时音频（供豆包 ASR 抓）。防目录穿越。"""
@@ -990,7 +1032,7 @@ async def content_detail(request: Request, cid: str):
                  "stage_labels": STAGE_LABELS,
                  "angles": angles, "evidence": evidence,
                  "latest_review": latest_review,
-                 "is_reverse": content.get("idea_source") == "video_reverse",
+                 "is_reverse": content.get("idea_source") in ("video_reverse", "legacy_text"),
                  "next_stage": next_stage(content["stage"])})
 
 
