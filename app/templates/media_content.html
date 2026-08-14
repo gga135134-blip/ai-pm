@@ -82,6 +82,7 @@
     <div id="mine-status" style="font-size:12.5px; color:var(--ai); min-height:18px; padding:0 4px"></div>
     <div id="mine-materials"></div>
     <div id="mine-signatures"></div>
+    <div id="mine-playbook"></div>
   </div>
 
   <div class="module">
@@ -629,6 +630,7 @@ async function mineEssence(){
     if(!d.ok){ status.textContent='失败：'+(d.error||'未知错误'); btn.disabled=false; btn.innerHTML=orig; return; }
     renderMine('mine-materials','内容素材（→原料库）', d.materials, 'material');
     renderMine('mine-signatures','口头禅/记忆点（→人设）', d.signatures, 'signature');
+    renderPlaybook(d.playbook_candidate);
     status.textContent='挖出 内容料 '+d.materials.length+' 条、口头禅 '+d.signatures.length+' 条。逐条采纳。';
     btn.disabled=false; btn.innerHTML=orig;
   }catch(e){ status.textContent='请求失败：'+e; btn.disabled=false; btn.innerHTML=orig; }
@@ -672,6 +674,36 @@ async function adoptMine(kind, i){
     const el=document.getElementById(kind+'-'+i);
     if(d.ok && el){ el.style.opacity='.5'; el.querySelector('button').outerHTML='<span style="color:var(--success); font-size:12px">已采纳✓</span>'; }
   }catch(e){}
+}
+
+let _playbookCand=null;
+function renderPlaybook(p){
+  const box=document.getElementById('mine-playbook');
+  _playbookCand=p||null;
+  if(!p){ box.innerHTML=''; return; }
+  box.innerHTML='<div style="font-size:12.5px; color:var(--ink-2); margin:10px 4px 4px">🏗️ 结构/打法（爆款）</div>'
+    +'<div class="card" style="padding:10px; margin:6px 0" id="pb-cand">'
+    +'<div style="font-size:13px"><b>'+escapeHtml(p.name)+'</b></div>'
+    +'<div style="font-size:12px; color:var(--ink-3); margin-top:4px">'+escapeHtml(p.structure)+'</div>'
+    +'<div style="font-size:12px; margin-top:2px">适用：'+escapeHtml(p.when_to_use)
+    +(p.similar_to?'｜似已有《'+escapeHtml(p.similar_to)+'》':'')+'</div>'
+    +'<div style="margin-top:6px"><button class="btn primary" style="padding:4px 12px; font-size:12px" onclick="adoptPlaybook()">采纳进打法库</button> '
+    +'<button class="btn ghost" style="padding:4px 12px; font-size:12px" onclick=\'document.getElementById("pb-cand").remove()\'>丢弃</button></div>'
+    +'</div>';
+}
+
+async function adoptPlaybook(){
+  const p=_playbookCand; if(!p) return;
+  const b=new URLSearchParams();
+  b.set('name',p.name); b.set('structure',p.structure||''); b.set('when_to_use',p.when_to_use||'');
+  b.set('evidence',p.evidence||''); b.set('similar_to',p.similar_to||'');
+  try{
+    const r=await fetch('/media/content/{{ content.id }}/mine/adopt-playbook',{method:'POST', body:b});
+    const d=await r.json().catch(()=>({ok:r.ok}));
+    const el=document.getElementById('pb-cand');
+    if(d.ok && el){ el.style.opacity='.5'; el.querySelector('button').outerHTML='<span style="color:var(--success); font-size:12px">'+(d.merged?'已归并✓':'已采纳✓')+'</span>'; }
+    else if(!d.ok){ alert('失败：'+(d.error||'')); }
+  }catch(e){ alert('请求失败：'+e); }
 }
 </script>
 {% endblock %}

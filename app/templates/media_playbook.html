@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}打法库{% endblock %}
+{% block content %}
+<div style="max-width:820px; margin:0 auto">
+  <h2>🏗️ 打法库</h2>
+  <p style="color:var(--ink-3); font-size:13px">从爆款炼出的可复制结构。跑通的标 proven。（本轮暂不接决策/写稿）</p>
+  {% for p in playbooks %}
+  <div class="module" style="margin-top:10px">
+    <div class="mh"><span class="ttl">{{ p.name }}</span>
+      <span class="tag" style="color:{{ 'var(--up)' if p.status=='proven' else 'var(--ink-3)' }}">
+        {{ '已跑通' if p.status=='proven' else '验证中' }}</span></div>
+    <div class="inner" style="font-size:13px">
+      <div>{{ p.structure }}</div>
+      {% if p.when_to_use %}<div style="color:var(--ink-3); margin-top:4px">适用：{{ p.when_to_use }}</div>{% endif %}
+      {% if p.evidence %}<div style="color:var(--ink-3); font-size:12px; margin-top:4px; white-space:pre-wrap">出处：{{ p.evidence }}</div>{% endif %}
+      <form method="post" action="/media/playbook/{{ p.id }}/status" style="margin-top:6px">
+        <input type="hidden" name="status" value="{{ 'validating' if p.status=='proven' else 'proven' }}">
+        <button type="submit" class="btn" style="font-size:12px">{{ '降回验证中' if p.status=='proven' else '标为已跑通' }}</button>
+      </form>
+    </div>
+  </div>
+  {% else %}<div class="empty">还没有打法。去爆款内容挖精华时采纳结构。</div>{% endfor %}
+</div>
+{% endblock %}
