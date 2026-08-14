@@ -1180,6 +1180,25 @@ async def content_published_at(cid: str, published_at: str = Form("")):
     return JSONResponse({"ok": True, "published_at": published_at.strip()})
 
 
+@router.post("/media/content/{cid}/delete")
+async def content_delete(cid: str):
+    """删除一条内容（连同发布/复盘等关联记录）。用于清理重复导入等。"""
+    db = await get_db()
+    try:
+        # 先清子表，避免外键约束报错（metrics 挂在 publish 下，先删）
+        await db.execute(
+            "DELETE FROM media_metrics WHERE publish_id IN "
+            "(SELECT id FROM media_publish WHERE content_id=?)", (cid,))
+        for tbl in ("media_publish", "media_review", "media_case",
+                    "media_evidence", "media_angle", "media_draft_review"):
+            await db.execute(f"DELETE FROM {tbl} WHERE content_id=?", (cid,))
+        await db.execute("DELETE FROM media_content WHERE id=?", (cid,))
+        await db.commit()
+    finally:
+        await db.close()
+    return RedirectResponse("/media", status_code=303)
+
+
 @router.post("/media/content/{cid}/script")
 async def content_save_script(cid: str, script: str = Form(""),
                               edit_note: str = Form(""), cover_idea: str = Form("")):

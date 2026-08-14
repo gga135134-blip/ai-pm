@@ -63,6 +63,37 @@ def test_preview_then_commit_creates_contents():
     asyncio.run(check())
 
 
+def test_delete_content_with_children():
+    _seed_persona("LGD")
+
+    async def seed():
+        db = await get_db()
+        try:
+            await db.execute("INSERT INTO media_content (id,persona_id,title,stage,idea_source) "
+                             "VALUES ('DC1','LGD','重复内容','published','legacy_text')")
+            await db.execute("INSERT INTO media_account (id,persona_id,platform) "
+                             "VALUES ('ACC1','LGD','抖音')")
+            await db.execute("INSERT INTO media_publish (id,content_id,account_id,status) "
+                             "VALUES ('PUB1','DC1','ACC1','published')")
+            await db.commit()
+        finally:
+            await db.close()
+    asyncio.run(seed())
+    r = _client().post("/media/content/DC1/delete", follow_redirects=False)
+    assert r.status_code in (302, 303)
+
+    async def check():
+        db = await get_db()
+        try:
+            cur = await db.execute("SELECT COUNT(*) n FROM media_content WHERE id='DC1'")
+            assert (await cur.fetchone())["n"] == 0
+            cur = await db.execute("SELECT COUNT(*) n FROM media_publish WHERE content_id='DC1'")
+            assert (await cur.fetchone())["n"] == 0    # 子表也清了，无孤儿
+        finally:
+            await db.close()
+    asyncio.run(check())
+
+
 def test_mark_winner_batch():
     _seed_persona("LGP2")
 
