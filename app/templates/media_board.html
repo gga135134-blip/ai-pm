@@ -48,6 +48,7 @@
     <button onclick="feishuSync(this)" class="btn primary" style="padding:6px 12px; font-size:12.5px">🔄 从飞书同步</button>
     <a href="/media/feishu/review" class="btn" style="padding:6px 12px; font-size:12.5px">未对上的数据</a>
     <button onclick="document.getElementById('rev-overlay').classList.add('open')" class="btn" style="padding:6px 12px; font-size:12.5px">🎬 视频反向入库</button>
+    <button onclick="document.getElementById('legacy-overlay').classList.add('open')" class="btn" style="padding:6px 12px; font-size:12.5px">📄 批量导入老文案</button>
     <span id="feishu-msg" style="font-size:11.5px; color:var(--ink-3)"></span>
   </div>
 </div>
@@ -143,7 +144,42 @@ async function feishuSync(btn){
   </div>
 </div>
 
+<div id="legacy-overlay" onclick="if(event.target===this) this.classList.remove('open')">
+  <div class="panel">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px">
+      <b>批量导入老文案</b>
+      <button onclick="document.getElementById('legacy-overlay').classList.remove('open')" class="iconbtn">{{ ic.icon('x') }}</button>
+    </div>
+    <p style="font-size:12.5px; color:var(--ink-3); margin-bottom:8px">粘贴带序号的老文案（1. … 2. …），或每条空行分隔。先预览切分，确认再入库。</p>
+    <textarea id="legacy-text" rows="8" style="width:100%; margin-bottom:8px" placeholder="1. 第一条老文案…&#10;2. 第二条…"></textarea>
+    <div style="margin-bottom:8px">
+      <button onclick="legacyPreview()" class="btn primary">预览切分</button>
+      <a href="/media/legacy" style="font-size:12px; margin-left:8px; color:var(--ai)">→ 去标爆款</a>
+    </div>
+    <div id="legacy-preview" style="font-size:13px"></div>
+  </div>
+</div>
+
 <script>
+let _segs = [];
+async function legacyPreview(){
+  const t = document.getElementById('legacy-text').value;
+  const b = new URLSearchParams(); b.set('text', t);
+  const r = await fetch('/media/reverse/paste-text/preview', {method:'POST', body:b});
+  const d = await r.json(); _segs = d.segments || [];
+  const box = document.getElementById('legacy-preview');
+  box.innerHTML = '切成 ' + d.count + ' 段：<br>' +
+    _segs.map((s,i)=>(i+1)+'. '+s.slice(0,30).replace(/</g,'&lt;')).join('<br>') +
+    '<br><button class="btn primary" style="margin-top:8px" onclick="legacyCommit()">确认入库</button>';
+}
+async function legacyCommit(){
+  const pid = "{{ persona.id if persona else '' }}";
+  const b = new URLSearchParams(); b.set('persona_id', pid); b.set('segments', JSON.stringify(_segs));
+  const r = await fetch('/media/reverse/paste-text/commit', {method:'POST', body:b});
+  const d = await r.json();
+  document.getElementById('legacy-preview').innerHTML =
+    d.ok ? ('已入库 '+d.count+' 条 → <a href="/media/legacy" style="color:var(--ai)">去标爆款</a>') : ('失败：'+(d.error||''));
+}
 async function reverseIngest(){
   const btn = document.getElementById('rev-btn');
   const status = document.getElementById('rev-status');

@@ -851,6 +851,23 @@ async def legacy_mark_winner(content_ids: list[str] = Form([]),
     return JSONResponse({"ok": True, "count": len(content_ids)})
 
 
+@router.get("/media/legacy", response_class=HTMLResponse)
+async def legacy_home(request: Request):
+    db = await get_db()
+    try:
+        pid = await _first_persona_id(db)
+        rows = []
+        if pid:
+            cur = await db.execute(
+                "SELECT id,title,idea_source,is_winner FROM media_content "
+                "WHERE persona_id=? AND idea_source IN ('video_reverse','legacy_text') "
+                "ORDER BY created_at DESC", (pid,))
+            rows = [dict(r) for r in await cur.fetchall()]
+    finally:
+        await db.close()
+    return _tpl(request, "media_legacy.html", {"items": rows})
+
+
 @router.get("/media/playbook", response_class=HTMLResponse)
 async def playbook_home(request: Request):
     db = await get_db()
