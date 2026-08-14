@@ -74,6 +74,16 @@ async def _first_persona_id(db) -> str | None:
     return row["id"] if row else None
 
 
+async def _current_persona_id(request, db) -> str | None:
+    """当前人设：读 cookie media_persona→校验存在→回落第一个 active。"""
+    pid = request.cookies.get("media_persona")
+    if pid:
+        cur = await db.execute("SELECT id FROM media_persona WHERE id=?", (pid,))
+        if await cur.fetchone():
+            return pid
+    return await _first_persona_id(db)
+
+
 # ─────────────── 人设 ───────────────
 
 @router.get("/media/persona", response_class=HTMLResponse)
@@ -105,6 +115,23 @@ async def persona_create(name: str = Form(...), one_liner: str = Form(""),
     finally:
         await db.close()
     return RedirectResponse(f"/media/persona/{pid}", status_code=302)
+
+
+@router.get("/media/persona/{pid}/enter")
+async def persona_enter(pid: str):
+    """选中人设：设 cookie 后进它的看板。无效 pid 回总览。"""
+    db = await get_db()
+    try:
+        cur = await db.execute("SELECT id FROM media_persona WHERE id=?", (pid,))
+        ok = await cur.fetchone() is not None
+    finally:
+        await db.close()
+    if not ok:
+        return RedirectResponse("/media", status_code=302)
+    resp = RedirectResponse("/media/board", status_code=302)
+    resp.set_cookie("media_persona", pid, max_age=31536000,
+                    httponly=True, samesite="lax")
+    return resp
 
 
 @router.get("/media/persona/{pid}", response_class=HTMLResponse)
