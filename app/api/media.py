@@ -5,6 +5,7 @@ from pathlib import Path as _Path
 from fastapi import APIRouter, Request, Form, UploadFile, File
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, FileResponse
 from app.database import get_db
+from app.services.media_overview import persona_overview
 from app.services.media_reverse import reverse_ingest
 from app.services.media_metrics import recognize_screenshot, save_metrics
 from app.services.media_feishu_sync import sync_from_feishu
@@ -114,7 +115,9 @@ async def persona_create(name: str = Form(...), one_liner: str = Form(""),
         await db.commit()
     finally:
         await db.close()
-    return RedirectResponse(f"/media/persona/{pid}", status_code=302)
+    resp = RedirectResponse("/media/board", status_code=302)
+    resp.set_cookie("media_persona", pid, max_age=31536000, httponly=True, samesite="lax")
+    return resp
 
 
 @router.get("/media/persona/{pid}/enter")
@@ -728,13 +731,28 @@ async def topic_reject(tid: str, rejected_reason: str = Form("")):
     return RedirectResponse("/media/topics", status_code=302)
 
 
+# ─────────────── 人设总览 ───────────────
+
+@router.get("/media/overview", response_class=HTMLResponse)
+@router.get("/media", response_class=HTMLResponse)
+async def media_overview_page(request: Request):
+    db = await get_db()
+    try:
+        rows = await persona_overview(db)
+    finally:
+        await db.close()
+    if not rows:
+        return RedirectResponse("/media/persona", status_code=302)   # 零人设→引导建
+    return _tpl(request, "media_overview.html", {"personas": rows})
+
+
 # ─────────────── 内容看板 ───────────────
 
-@router.get("/media", response_class=HTMLResponse)
+@router.get("/media/board", response_class=HTMLResponse)
 async def board(request: Request):
     db = await get_db()
     try:
-        pid = await _first_persona_id(db)
+        pid = await _current_persona_id(request, db)
         if not pid:
             return RedirectResponse("/media/persona", status_code=302)
         cur = await db.execute("SELECT * FROM media_persona WHERE id=?", (pid,))
