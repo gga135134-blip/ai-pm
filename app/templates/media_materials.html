@@ -21,9 +21,10 @@
   .src-tag{ font-size:11px; padding:1px 7px; border-radius:10px; background:var(--panel-2); color:var(--ink-3); }
 </style>
 
+{{ shell.media_shell('lib') }}
+
 {% if not persona %}
 <div class="module" style="max-width:460px; margin:0 auto">
-  {{ shell.media_shell('lib') }}
 
   <div class="mh"><span class="ttl">还没有人设</span></div>
   <div class="inner">

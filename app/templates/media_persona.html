@@ -18,9 +18,10 @@
   .acct-row:last-child{ border-bottom:0; }
 </style>
 
+{{ shell.media_shell('lib') }}
+
 {% if not persona %}
 <div class="module" style="max-width:420px; margin:0 auto">
-  {{ shell.media_shell('lib') }}
 
   <div class="mh"><span class="ttl">建立第一个人设</span></div>
   <div class="inner">
