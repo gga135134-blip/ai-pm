@@ -92,6 +92,8 @@
   </div>
 </div>
 
+{{ shell.step_nav(back={'href':'/media/board','label':'内容看板'}) }}
+
 <script>
 async function draftAnchor(pid){
   var btn = document.getElementById('anc-draft-btn');
@@ -128,9 +130,7 @@ async function draftAnchor(pid){
       btns[1].onclick = function(){ card.remove(); };
       box.appendChild(card);
     });
-  } catch(e){ box.innerHTML = '<div class="empty">出错了：'+e+'
-  {{ shell.step_nav(back={'href':'/media/board','label':'内容看板'}) }}
-</div>'; }
+  } catch(e){ box.innerHTML = '<div class="empty">出错了：'+e+'</div>'; }
   finally { btn.disabled = false; btn.textContent = '让 AI 提炼'; }
 }
 function escapeHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }

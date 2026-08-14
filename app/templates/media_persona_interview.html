@@ -52,6 +52,8 @@
 </div>
 {% endfor %}
 
+{{ shell.step_nav(back={'href':'/media/persona','label':'人设档案'}) }}
+
 <script>
 const PID = "{{ persona.id }}";
 function card(mod){ return document.querySelector('.module[data-module="'+mod+'"]'); }
@@ -75,9 +77,7 @@ async function extract(mod){
   const d = await r.json();
   if(!d.ok){ alert(d.error||'提炼失败'); return; }
   const box = c.querySelector('.candidates'); box.innerHTML='';
-  if(!(d.traits||[]).length){ box.innerHTML='<div class="empty">AI 没从回答里提炼出条目（可能答得太少）。
-  {{ shell.step_nav(back={'href':'/media/board','label':'内容看板'}) }}
-</div>'; return; }
+  if(!(d.traits||[]).length){ box.innerHTML='<div class="empty">AI 没从回答里提炼出条目（可能答得太少）。</div>'; return; }
   d.traits.forEach(t=>box.appendChild(candidate(t)));
 }
 

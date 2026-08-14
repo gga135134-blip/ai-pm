@@ -123,7 +123,7 @@ async function feishuSync(btn){
 </div>
 
 {% if is_pub %}
-{{ shell.step_nav(back={'href':'/media/board','label':'内容'}, next={'href':'/media/persona','label':'复盘'}) }}
+{{ shell.step_nav(back={'href':'/media/board','label':'内容'}, next={'href':'/media/review','label':'复盘'}) }}
 {% else %}
 {{ shell.step_nav(back={'href':'/media/topics','label':'选题'}, next={'href':'/media/board?view=publish','label':'发布'}) }}
 {% endif %}

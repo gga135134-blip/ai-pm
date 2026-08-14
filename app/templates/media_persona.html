@@ -212,6 +212,8 @@
 </div>
 {% endif %}
 
+{{ shell.step_nav(back={'href':'/media/board','label':'内容看板'}) }}
+
 <script>
 async function learnEdits(pid){
   const btn = document.getElementById('learn-btn');
@@ -256,9 +258,7 @@ async function learnEdits(pid){
       box.appendChild(card);
     });
   } catch(e){
-    box.innerHTML = '<div class="empty">出错了：'+e+'
-  {{ shell.step_nav(back={'href':'/media/board','label':'内容看板'}) }}
-</div>';
+    box.innerHTML = '<div class="empty">出错了：'+e+'</div>';
   } finally {
     btn.disabled = false; btn.textContent = '让 AI 复盘';
   }
