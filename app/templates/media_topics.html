@@ -1,8 +1,9 @@
 {% extends "base.html" %}
 {% import "_icons.html" as ic %}
-{% block title %}话题库{% endblock %}
+{% import "_media_shell.html" as shell %}
+{% block title %}选题{% endblock %}
 {% block topbar %}
-<span class="crumb"><a href="/media" style="color:inherit;text-decoration:none">自媒体</a> {{ ic.icon('chevron') }} <b>话题库</b></span>
+<span class="crumb"><a href="/media" style="color:inherit;text-decoration:none">自媒体</a> {{ ic.icon('chevron') }} <b>选题</b></span>
 {% endblock %}
 {% block content %}
 <style>
@@ -18,15 +19,21 @@
   .topic-card .acts{ display:flex; gap:8px; margin-top:10px; }
 </style>
 
+{{ shell.media_shell('topic', persona_id=persona_id) }}
+
+<h1 class="pname" style="margin:0 0 5px">选题</h1>
+<p style="font-size:13px;color:var(--ink-3);line-height:1.6;margin:0 0 16px;max-width:620px">
+  AI 基于人设和历史表现推选题，你挑能用的采用；采用后进入内容制作。弃掉的会带上原因喂回 AI，避免重复推荐。
+</p>
+
 <div class="phead" style="margin-bottom:6px">
-  <span class="pname" style="font-size:22px">话题库</span>
   <span class="pcode">{{ topics|length }} 条待选</span>
   <span class="sp"></span>
   <button onclick="aiRecommend()" id="ai-btn" class="btn ai">{{ ic.icon('robot') }}AI 推选题</button>
   <form method="post" action="/media/topics/rank" style="display:inline">
-    <button class="btn" style="margin-left:8px">🧮 决策排序</button>
+    <button class="btn" style="margin-left:8px">{{ ic.icon('chart') }}决策排序</button>
   </form>
-  <button onclick="aiTag()" id="tag-btn" class="btn" style="margin-left:8px">🏷️ AI标注</button>
+  <button onclick="aiTag()" id="tag-btn" class="btn" style="margin-left:8px">{{ ic.icon('tag') }}AI 标注</button>
 </div>
 
 <div class="src-row">
@@ -45,13 +52,13 @@
       <div class="ct" style="flex:1">{{ t.title }}</div>
       <span class="tag {% if t.source and t.source.startswith('ai') %}ai{% endif %}" style="flex-shrink:0">{{ sources.get(t.source, t.source) }}</span>
     </div>
-    {% if t.puzzle %}<div class="puz">❓ {{ t.puzzle }}</div>{% endif %}
+    {% if t.puzzle %}<div class="puz"><b style="font-weight:600">谜题</b> · {{ t.puzzle }}</div>{% endif %}
     {% if t.reason %}<div class="reason">{{ t.reason }}</div>{% endif %}
     {% if t.angle %}<div class="angle">切入角度：{{ t.angle }}</div>{% endif %}
     <div class="stars">契合 {{ '★' * t.fit_score }}　热度 {{ '★' * t.heat }}</div>
     {% if t.decision_score and t.decision_score > 0 %}
     <details style="margin-top:8px">
-      <summary style="font-size:12.5px; color:var(--accent); cursor:pointer; list-style:none">🧮 决策得分 {{ t.decision_score }}/10 · 看理由</summary>
+      <summary style="font-size:12.5px; color:var(--accent); cursor:pointer; list-style:none">{{ ic.icon('chart') }} 决策得分 {{ t.decision_score }}/10 · 看理由</summary>
       <div style="font-size:11.5px; color:var(--ink-2); white-space:pre-wrap; margin-top:6px; background:var(--panel-2); border-radius:6px; padding:8px 10px">{{ t.decision_report }}</div>
     </details>
     {% endif %}
@@ -94,6 +101,8 @@
   </div>
 </details>
 {% endif %}
+
+{{ shell.step_nav(next={'href':'/media/board','label':'内容'}) }}
 
 <script>
 function rejectTopic(id) {

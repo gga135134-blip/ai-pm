@@ -1,8 +1,12 @@
 {% extends "base.html" %}
 {% import "_icons.html" as ic %}
-{% block title %}内容看板{% endblock %}
+{% import "_media_shell.html" as shell %}
+{# view=publish 时本页承载「发布」步，只显示待发/已发；否则承载「内容」步，显示全部阶段 #}
+{% set view = request.query_params.get('view') %}
+{% set is_pub = (view == 'publish') %}
+{% block title %}{{ '发布' if is_pub else '内容看板' }}{% endblock %}
 {% block topbar %}
-<span class="crumb"><b>自媒体</b></span>
+<span class="crumb"><a href="/media" style="color:inherit;text-decoration:none">自媒体</a> {{ ic.icon('chevron') }} <b>{{ '发布' if is_pub else '内容' }}</b></span>
 {% endblock %}
 {% block content %}
 <style>
@@ -35,28 +39,25 @@
   #legacy-overlay .panel{ background:var(--bg); border:1px solid var(--border); border-radius:var(--r); box-shadow:var(--shadow-lg); padding:18px; width:100%; max-width:560px; max-height:85vh; overflow-y:auto; }
 </style>
 
-<!-- ===== 页头：标题独占一行，徽标另起一行，不再挤成一堆 ===== -->
-<div style="margin-bottom:18px">
-  <a href="/media" style="font-size:12.5px; color:var(--ink-3); text-decoration:none">← 全部人设</a>
-  <span style="font-size:12.5px; color:var(--ink-3)"> ｜ 当前：{{ persona.name }}</span>
-  <div class="pname" style="margin-bottom:8px">{{ persona.name }}</div>
-  <div style="display:flex; align-items:center; flex-wrap:wrap; gap:10px">
-    {% if persona.one_liner %}<span style="font-size:13px; color:var(--ink-2)">{{ persona.one_liner }}</span>{% endif %}
-    <span class="pill run">{{ persona.current_phase }}期</span>
-    <span class="pcode">{{ total }} 条内容</span>
-    <span class="sp"></span>
-    <a href="/media/topics" class="btn" style="padding:6px 12px; font-size:12.5px">{{ ic.icon('tag') }}话题库{% if pool_count %} ({{ pool_count }}){% endif %}</a>
-    <a href="/media/materials" class="btn" style="padding:6px 12px; font-size:12.5px">{{ ic.icon('folder') }}原料库</a>
-    <a href="/media/audience" class="btn" style="padding:6px 12px; font-size:12.5px">{{ ic.icon('folder') }}受众</a>
-    <a href="/media/anchor" class="btn" style="padding:6px 12px; font-size:12.5px">{{ ic.icon('folder') }}锚点</a>
-    <a href="/media/playbook" class="btn" style="padding:6px 12px; font-size:12.5px">🏗️ 打法库</a>
-    <a href="/media/persona/{{ persona.id }}" class="btn" style="padding:6px 12px; font-size:12.5px">{{ ic.icon('folder') }}人设档案</a>
-    <button onclick="feishuSync(this)" class="btn primary" style="padding:6px 12px; font-size:12.5px">🔄 从飞书同步</button>
-    <a href="/media/feishu/review" class="btn" style="padding:6px 12px; font-size:12.5px">未对上的数据</a>
-    <button onclick="document.getElementById('rev-overlay').classList.add('open')" class="btn" style="padding:6px 12px; font-size:12.5px">🎬 视频反向入库</button>
-    <button onclick="document.getElementById('legacy-overlay').classList.add('open')" class="btn" style="padding:6px 12px; font-size:12.5px">📄 批量导入老文案</button>
-    <span id="feishu-msg" style="font-size:11.5px; color:var(--ink-3)"></span>
-  </div>
+{{ shell.media_shell('publish' if is_pub else 'content', persona=persona) }}
+
+<h1 class="pname" style="margin:0 0 5px">{{ '发布' if is_pub else '内容' }}</h1>
+<p style="font-size:13px;color:var(--ink-3);line-height:1.6;margin:0 0 16px;max-width:620px">
+  {% if is_pub %}
+    生成三平台差异化文案，发完标记已发并回填数据。只显示「待发 / 已发」的内容。
+  {% else %}
+    把采用的选题做成能发的内容：AI 写脚本 → 你录 → 你剪 → 生成三平台文案。
+  {% endif %}
+</p>
+
+<div style="display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:16px">
+  <span class="pcode">{{ total }} 条内容</span>
+  <span class="sp" style="flex:1"></span>
+  <button onclick="feishuSync(this)" class="btn">{{ ic.icon('arrow-down') }}从飞书同步</button>
+  <a href="/media/feishu/review" class="btn">{{ ic.icon('eye') }}未对上的数据</a>
+  <button onclick="document.getElementById('rev-overlay').classList.add('open')" class="btn">{{ ic.icon('play') }}视频反向入库</button>
+  <button onclick="document.getElementById('legacy-overlay').classList.add('open')" class="btn">{{ ic.icon('doc') }}批量导入老文案</button>
+  <span id="feishu-msg" style="font-size:11.5px; color:var(--ink-3)"></span>
 </div>
 
 <script>
@@ -68,10 +69,12 @@ async function feishuSync(btn){
     const r = await fetch('/media/feishu/sync', {method:'POST'});
     const j = await r.json();
     msg.textContent = j.ok
-      ? `✅ 同步 ${j.synced} 条（疑似 ${j.suspected}），未对上 ${j.unmatched} 条`
-      : `❌ ${j.error || '失败'}`;
+      ? `同步 ${j.synced} 条（疑似 ${j.suspected}），未对上 ${j.unmatched} 条`
+      : `同步失败：${j.error || '未知错误'}`;
+    msg.style.color = j.ok ? 'var(--up)' : 'var(--down)';
   }catch(e){
-    msg.textContent = '❌ ' + e;
+    msg.textContent = '请求失败：' + e;
+    msg.style.color = 'var(--down)';
   }
   btn.disabled = false;
 }
@@ -80,19 +83,21 @@ async function feishuSync(btn){
 <!-- ===== 看板 ===== -->
 <div class="module">
   <div class="mh">
-    <span class="ic">{{ ic.icon('kanban') }}</span><span class="ttl">内容看板</span>
-    <span class="sub">· 7 阶段流转</span>
+    <span class="ic">{{ ic.icon('kanban') }}</span><span class="ttl">{{ '待发 / 已发' if is_pub else '内容看板' }}</span>
+    <span class="sub">{{ '· 发布环节' if is_pub else '· 7 阶段流转' }}</span>
   </div>
   <div class="inner">
   <div class="kanban-scroll">
     <div class="kanban-cols">
-      {% for col in columns %}
+      {# 发布步只保留 ready/published 两列；数据仍来自后端已给的 columns，仅前端筛选 #}
+      {% set shown = columns | selectattr('stage', 'in', ['ready','published']) | list if is_pub else columns %}
+      {% for col in shown %}
       <div class="kb-col">
         <div class="col-h"><span>{{ col.label }}</span><span class="c">{{ col.cards|length }}</span></div>
         {% for c in col.cards %}
         <a href="/media/content/{{ c.id }}" class="card">
           <div class="ct">{{ c.title }}</div>
-          {% if c.puzzle %}<div class="puz">❓ {{ c.puzzle }}</div>{% endif %}
+          {% if c.puzzle %}<div class="puz">谜题 · {{ c.puzzle }}</div>{% endif %}
           {% if c.publishes %}
           <div class="pubrow">
             {% for p in c.publishes %}
@@ -111,6 +116,12 @@ async function feishuSync(btn){
   </div>
   </div>
 </div>
+
+{% if is_pub %}
+{{ shell.step_nav(back={'href':'/media/board','label':'内容'}, next={'href':'/media/persona','label':'复盘'}) }}
+{% else %}
+{{ shell.step_nav(back={'href':'/media/topics','label':'选题'}, next={'href':'/media/board?view=publish','label':'发布'}) }}
+{% endif %}
 
 <!-- ===== FAB：新建内容 ===== -->
 <div class="fab-root">
