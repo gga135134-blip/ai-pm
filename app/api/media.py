@@ -670,9 +670,14 @@ async def topics_home(request: Request, source: str = ""):
             "ORDER BY created_at DESC LIMIT 20", (pid,))
         rejected = [dict(r) for r in await cur.fetchall()]
         # 主题库：人投喂的方向，AI 据此展开成选题（见 app/api/media_theme.py）
+        # 四个数都是子查询实时算的（不是存下来的），所以采用/弃之后刷新页面就变，
+        # 不需要额外的同步逻辑。
         cur = await db.execute(
-            "SELECT t.*, (SELECT COUNT(*) FROM media_topic p WHERE p.theme_id=t.id) AS topic_n, "
-            "(SELECT COUNT(*) FROM media_topic p WHERE p.theme_id=t.id AND p.status='adopted') AS adopted_n "
+            "SELECT t.*, "
+            "(SELECT COUNT(*) FROM media_topic p WHERE p.theme_id=t.id) AS topic_n, "
+            "(SELECT COUNT(*) FROM media_topic p WHERE p.theme_id=t.id AND p.status='pool') AS pool_n, "
+            "(SELECT COUNT(*) FROM media_topic p WHERE p.theme_id=t.id AND p.status='adopted') AS adopted_n, "
+            "(SELECT COUNT(*) FROM media_topic p WHERE p.theme_id=t.id AND p.status='rejected') AS rejected_n "
             "FROM media_theme t WHERE t.persona_id=? AND COALESCE(t.status,'active')='active' "
             "ORDER BY t.created_at DESC", (pid,))
         themes = [dict(r) for r in await cur.fetchall()]

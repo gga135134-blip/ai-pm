@@ -25,8 +25,22 @@
   .th-form.open{ display:flex; }
   .th-row{ display:flex; align-items:center; gap:10px; padding:11px 0; border-bottom:1px solid var(--border); }
   .th-row:last-child{ border-bottom:0; }
-  .th-t{ font-size:14px; font-weight:600; }
-  .th-m{ font-size:11.5px; color:var(--ink-3); margin-top:3px; }
+  .th-t{ font-size:15px; font-weight:600; }
+  .th-m{ font-size:12px; color:var(--ink-3); margin-top:3px; }
+  /* 主题统计：数字放大、等宽对齐，按状态配色，扫一眼就知道命中率 */
+  .th-stats{ display:flex; align-items:baseline; gap:18px; margin-top:8px; flex-wrap:wrap; }
+  .th-stats .st{ display:inline-flex; align-items:baseline; gap:5px; }
+  .th-stats .st b{ font-family:var(--mono); font-size:20px; font-weight:700;
+    font-variant-numeric:tabular-nums; letter-spacing:-.02em; color:var(--ink-1); }
+  .th-stats .st i{ font-style:normal; font-size:11.5px; color:var(--ink-3); }
+  .th-stats .st.pool b{ color:var(--accent); }      /* 待选：该你处理 */
+  .th-stats .st.adopted b{ color:var(--up); }        /* 采用：已推进 */
+  .th-stats .st.dropped b{ color:var(--ink-3); }     /* 弃：已排除，不是错误所以不用红 */
+  .th-when{ font-size:11.5px; color:var(--ink-3); margin-left:auto; }
+  @media (max-width:767px){
+    .th-stats{ gap:14px; }
+    .th-when{ margin-left:0; flex-basis:100%; }
+  }
   @media (max-width:767px){
     .th-row{ flex-wrap:wrap; }
     .th-row > div{ flex-basis:100%; }
@@ -70,15 +84,19 @@
     <div class="th-row" id="th-{{ t.id }}">
       <div style="min-width:0;flex:1">
         <div class="th-t">{{ t.title }}</div>
-        <div class="th-m">
-          {% if t.expand_count %}
-            展开 {{ t.expand_count }} 次 · 产出 {{ t.topic_n }} 条 · 采用 {{ t.adopted_n }} 条
-            {% if t.last_expanded_at %} · 上次 {{ t.last_expanded_at[:10] }}{% endif %}
-          {% else %}
-            还没展开过
-          {% endif %}
-          {% if t.note %} · {{ t.note }}{% endif %}
+        {% if t.note %}<div class="th-m">{{ t.note }}</div>{% endif %}
+        {% if t.expand_count %}
+        {# 四个数按状态配色：待选=青(该你处理) 采用=绿(已推进) 弃=灰(已排除) #}
+        <div class="th-stats">
+          <span class="st"><b>{{ t.topic_n }}</b><i>产出</i></span>
+          <span class="st pool"><b>{{ t.pool_n }}</b><i>待选</i></span>
+          <span class="st adopted"><b>{{ t.adopted_n }}</b><i>采用</i></span>
+          <span class="st dropped"><b>{{ t.rejected_n }}</b><i>弃</i></span>
+          <span class="th-when">展开 {{ t.expand_count }} 次{% if t.last_expanded_at %} · 上次 {{ t.last_expanded_at[:10] }}{% endif %}</span>
         </div>
+        {% else %}
+        <div class="th-m">还没展开过</div>
+        {% endif %}
       </div>
       <button class="btn ai" style="padding:5px 11px;font-size:12px;flex-shrink:0"
               onclick="expandTheme('{{ t.id }}', this)">{{ ic.icon('robot') }}展开成选题</button>
