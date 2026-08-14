@@ -1603,3 +1603,42 @@ async def mine_structure(db, persona_id: str, transcript: str,
                          "when_to_use": obj.get("when_to_use", ""),
                          "evidence": obj.get("evidence", ""),
                          "similar_to": obj.get("similar_to", "")}}
+
+
+MATCH_PLAYBOOK_SYSTEM = """给这条选题从「打法清单」里挑最贴的一条打法。
+诚实：只有真的贴才挑；都不合适就返回空 playbook_id，别硬凑。只挑一条。
+playbook_id 必须是清单里出现过的 id（方括号里那个），或空串。reason 一句话说为什么这条选题适合这个打法。
+只输出严格 JSON：{"playbook_id":"","reason":""}"""
+
+
+async def match_playbook(db, content: dict, model: str = "auto") -> dict:
+    """从共享打法库挑最贴这条选题的一条。整库只在这里出现，绝不进写稿 prompt。
+    池空不调 AI。返回 {ok, playbook:{...}|None, cost, model}。"""
+    cur = await db.execute(
+        "SELECT id,name,when_to_use,structure,status FROM media_playbook "
+        "WHERE status IN ('proven','validating')")
+    pool = [dict(r) for r in await cur.fetchall()]
+    if not pool:
+        return {"ok": True, "playbook": None, "cost": 0, "model": ""}
+    menu = "\n".join(
+        f"[{p['id']}] {p['name']}｜适用:{p['when_to_use']}｜结构:{p['structure']}" for p in pool)
+    q = (f"选题：{content.get('title','')}\n谜题：{content.get('puzzle','')}\n"
+         f"为什么做：{content.get('idea_reason','')}\n\n打法清单：\n{menu}")
+    result = await ask_ai(q, model=model, task_type="media_topic",
+                          system_prompt=MATCH_PLAYBOOK_SYSTEM, json_mode=True)
+    resp = result.get("response", "")
+    await log_injection(db, content.get("id", ""), "match_playbook", [], result.get("tokens", 0))
+    if resp.startswith("[错误]") or resp.startswith("[费用保护]"):
+        return {"ok": False, "playbook": None, "error": resp,
+                "cost": result.get("cost", 0), "model": result.get("model", "")}
+    obj = extract_json(resp, expect="object") or {}
+    pid = (obj.get("playbook_id") or "").strip()
+    by_id = {p["id"]: p for p in pool}
+    if pid not in by_id:
+        return {"ok": True, "playbook": None,
+                "cost": result.get("cost", 0), "model": result.get("model", "")}
+    p = by_id[pid]
+    return {"ok": True, "cost": result.get("cost", 0), "model": result.get("model", ""),
+            "playbook": {"id": p["id"], "name": p["name"], "structure": p["structure"],
+                         "when_to_use": p["when_to_use"], "status": p["status"],
+                         "reason": (obj.get("reason") or "").strip()}}
