@@ -86,14 +86,16 @@ async function feishuSync(btn){
 <!-- ===== 看板 ===== -->
 <div class="module">
   <div class="mh">
-    <span class="ic">{{ ic.icon('kanban') }}</span><span class="ttl">{{ '待发 / 已发' if is_pub else '内容看板' }}</span>
-    <span class="sub">{{ '· 发布环节' if is_pub else '· 7 阶段流转' }}</span>
+    <span class="ic">{{ ic.icon('kanban') }}</span><span class="ttl">{{ '待发' if is_pub else '内容看板' }}</span>
+    <span class="sub">{{ '· 生成三平台文案，发完标记已发' if is_pub else '· 选题 → 脚本 → 待录 → 待剪' }}</span>
   </div>
   <div class="inner">
   <div class="kanban-scroll">
     <div class="kanban-cols">
-      {# 发布步只保留 ready/published 两列；数据仍来自后端已给的 columns，仅前端筛选 #}
-      {% set shown = columns | selectattr('stage', 'in', ['ready','published']) | list if is_pub else columns %}
+      {# 7 个阶段按主线三步分掉：内容=制作中，发布=待发，已发/已复盘归复盘页。
+         数据仍来自后端已给的 columns，仅前端筛选，不改状态机 #}
+      {% set shown = columns | selectattr('stage', 'in', ['ready']) | list if is_pub
+                     else columns | selectattr('stage', 'in', ['idea','scripted','recording','editing']) | list %}
       {% for col in shown %}
       <div class="kb-col">
         <div class="col-h"><span>{{ col.label }}</span><span class="c">{{ col.cards|length }}</span></div>

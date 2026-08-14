@@ -23,6 +23,39 @@
   把已发内容的表现总结成经验，沉淀回体系库，喂给下一轮选题。周期复盘看一段时间的规律；阶段复盘决定要不要换打法、进下一期。
 </p>
 
+{# 已发内容 + 数据回填工具：从「发布」步移来，它们才是复盘的输入 #}
+<div class="module">
+  <div class="mh">
+    <span class="ic">{{ ic.icon('check') }}</span><span class="ttl">已发内容</span>
+    <span class="sub">· 复盘的对象</span>
+    <span style="flex:1"></span>
+    <a href="/media/board?tool=feishu" class="btn" style="padding:5px 11px;font-size:12px">{{ ic.icon('arrow-down') }}从飞书同步</a>
+    <a href="/media/feishu/review" class="btn" style="padding:5px 11px;font-size:12px">{{ ic.icon('eye') }}未对上的数据</a>
+    <a href="/media/board?tool=reverse" class="btn" style="padding:5px 11px;font-size:12px">{{ ic.icon('play') }}视频反向入库</a>
+  </div>
+  <div class="inner">
+    {% for c in published %}
+    <a class="rv-row" href="/media/content/{{ c.id }}">
+      <div style="min-width:0">
+        <div class="rv-t">{{ c.title }}</div>
+        <div class="rv-m">
+          {% if c.stage == 'reviewed' %}已复盘{% else %}待复盘{% endif %}
+          {% if c.is_winner %} · <span style="color:var(--warn)">爆款</span>{% endif %}
+        </div>
+      </div>
+      <span class="rv-when">{{ (c.published_at or c.created_at or '')[:10] }}</span>
+      {{ ic.icon('chevron') }}
+    </a>
+    {% else %}
+    <div class="empty" style="padding:26px 12px">
+      <div style="color:var(--ink-3);margin-bottom:8px;display:flex;justify-content:center;font-size:26px">{{ ic.icon('check') }}</div>
+      <p style="color:var(--ink-2);font-size:13.5px;margin:0 0 4px">还没有已发内容</p>
+      <p style="color:var(--ink-3);font-size:12px;margin:0">发布之后内容会出现在这里；也可以用「视频反向入库」把过去发过的补录进来。</p>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
 <div class="module">
   <div class="mh">
     <span class="ic">{{ ic.icon('chart') }}</span><span class="ttl">周期复盘</span>

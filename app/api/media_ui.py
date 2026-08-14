@@ -79,7 +79,8 @@ async def media_ui_steps(request: Request):
                       "label": f"采用 {adopted} 条" if adopted else "还没采用选题"},
             "content": {"done": making == 0 and published > 0, "count": making,
                         "label": f"{making} 条在做" if making else "没有在做的内容"},
-            "publish": {"done": published > 0, "count": ready,
+            # 发布步只管「待发」：没有积压且发过东西才算做完
+            "publish": {"done": ready == 0 and published > 0, "count": ready,
                         "label": f"待发 {ready}" if ready else (f"已发 {published}" if published else "还没有待发")},
             "review": {"done": reviewed > 0, "count": reviewed,
                        "label": f"已复盘 {reviewed}" if reviewed else "发布后解锁"},
@@ -102,7 +103,7 @@ async def media_review_home(request: Request):
     db = await get_db()
     try:
         pid = await _current_persona_id(request, db)
-        persona, cycles, phases = None, [], []
+        persona, cycles, phases, published = None, [], [], []
         if pid:
             cur = await db.execute("SELECT * FROM media_persona WHERE id=?", (pid,))
             row = await cur.fetchone()
@@ -113,7 +114,14 @@ async def media_review_home(request: Request):
             cur = await db.execute(
                 "SELECT * FROM media_phase_review WHERE persona_id=? ORDER BY created_at DESC", (pid,))
             phases = [dict(r) for r in await cur.fetchall()]
-        ctx = {"request": request, "persona": persona, "cycles": cycles, "phases": phases}
+            # 已发/已复盘内容：从「发布」步移过来，它们是复盘的输入
+            cur = await db.execute(
+                "SELECT id,title,stage,is_winner,published_at,created_at FROM media_content "
+                "WHERE persona_id=? AND stage IN ('published','reviewed') "
+                "ORDER BY COALESCE(published_at, created_at) DESC", (pid,))
+            published = [dict(r) for r in await cur.fetchall()]
+        ctx = {"request": request, "persona": persona, "cycles": cycles,
+               "phases": phases, "published": published}
         return request.app.state.templates.TemplateResponse(request, "media_review_home.html", ctx)
     finally:
         await db.close()
