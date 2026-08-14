@@ -92,7 +92,7 @@ async def persona_home(request: Request):
     """没有人设时引导创建，有则跳到第一个人设档案。"""
     db = await get_db()
     try:
-        pid = await _first_persona_id(db)
+        pid = await _current_persona_id(request, db)
     finally:
         await db.close()
     if pid:
@@ -352,7 +352,7 @@ async def materials_home(request: Request):
     brief / use_count / 来源，用旧的（use_count≥阈值）标灰提示补新料。spec §3.3。"""
     db = await get_db()
     try:
-        pid = await _first_persona_id(db)
+        pid = await _current_persona_id(request, db)
         persona = None
         materials = []
         if pid:
@@ -426,7 +426,7 @@ async def audience_home(request: Request):
     """受众画像查看页：segment 卡片，按付费意愿降序（值钱的靠前）。"""
     db = await get_db()
     try:
-        pid = await _first_persona_id(db)
+        pid = await _current_persona_id(request, db)
         persona = None
         segments = []
         if pid:
@@ -470,11 +470,11 @@ async def audience_create(persona_id: str = Form(...), segment: str = Form(...),
 
 
 @router.post("/media/audience/draft")
-async def audience_draft(answers: str = Form("")):
+async def audience_draft(request: Request, answers: str = Form("")):
     """AI 起草受众画像候选（不写库）。"""
     db = await get_db()
     try:
-        pid = await _first_persona_id(db)
+        pid = await _current_persona_id(request, db)
         if not pid:
             return JSONResponse({"ok": False, "error": "先建人设", "segments": []})
         try:
@@ -538,7 +538,7 @@ async def anchor_home(request: Request):
     """生意锚点查看页：按 status 分组 proven→validating→dropped。"""
     db = await get_db()
     try:
-        pid = await _first_persona_id(db)
+        pid = await _current_persona_id(request, db)
         persona = None
         anchors = []
         if pid:
@@ -585,10 +585,10 @@ async def anchor_create(persona_id: str = Form(...), name: str = Form(...),
 
 
 @router.post("/media/anchor/draft")
-async def anchor_draft(answers: str = Form("")):
+async def anchor_draft(request: Request, answers: str = Form("")):
     db = await get_db()
     try:
-        pid = await _first_persona_id(db)
+        pid = await _current_persona_id(request, db)
         if not pid:
             return JSONResponse({"ok": False, "error": "先建人设", "anchors": []})
         try:
@@ -644,7 +644,7 @@ TOPIC_SOURCES = {
 async def topics_home(request: Request, source: str = ""):
     db = await get_db()
     try:
-        pid = await _first_persona_id(db)
+        pid = await _current_persona_id(request, db)
         if not pid:
             return RedirectResponse("/media/persona", status_code=302)
         sql = ("SELECT * FROM media_topic WHERE persona_id=? AND status='pool'")
@@ -838,7 +838,7 @@ async def media_reverse_ingest(request: Request, video_url: str = Form(...)):
         return JSONResponse({"ok": False, "error": "未配置豆包 ASR 凭证，去设置页填"})
     db = await get_db()
     try:
-        pid = await _first_persona_id(db)
+        pid = await _current_persona_id(request, db)
         if not pid:
             return JSONResponse({"ok": False, "error": "请先创建人设"})
         public_base = (cfg.get("public_base") or str(request.base_url)).rstrip("/")
@@ -900,7 +900,7 @@ async def legacy_mark_winner(content_ids: list[str] = Form([]),
 async def legacy_home(request: Request):
     db = await get_db()
     try:
-        pid = await _first_persona_id(db)
+        pid = await _current_persona_id(request, db)
         rows = []
         if pid:
             cur = await db.execute(
@@ -948,10 +948,10 @@ async def media_asr_audio(token: str):
 
 
 @router.post("/media/topics/ai-recommend")
-async def topics_ai_recommend():
+async def topics_ai_recommend(request: Request):
     db = await get_db()
     try:
-        pid = await _first_persona_id(db)
+        pid = await _current_persona_id(request, db)
         if not pid:
             return JSONResponse({"ok": False, "error": "请先创建人设"})
         try:
@@ -965,11 +965,11 @@ async def topics_ai_recommend():
 
 
 @router.post("/media/topics/tag")
-async def topics_tag():
+async def topics_tag(request: Request):
     """一键给选题池未打标话题补受众/锚点/护栏标。"""
     db = await get_db()
     try:
-        pid = await _first_persona_id(db)
+        pid = await _current_persona_id(request, db)
         if not pid:
             return JSONResponse({"ok": False, "error": "请先创建人设"})
         try:
@@ -983,11 +983,11 @@ async def topics_tag():
 
 
 @router.post("/media/topics/rank")
-async def topics_rank():
+async def topics_rank(request: Request):
     """一键给选题池全部 pool 话题打分，写 decision_score + decision_report。纯计算。"""
     db = await get_db()
     try:
-        pid = await _first_persona_id(db)
+        pid = await _current_persona_id(request, db)
         if not pid:
             return RedirectResponse("/media/topics", status_code=302)
         cur = await db.execute("SELECT current_phase FROM media_persona WHERE id=?", (pid,))

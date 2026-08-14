@@ -68,3 +68,21 @@ def test_enter_sets_cookie_and_redirects():
     assert r.status_code in (302, 303)
     assert r.headers["location"] == "/media/board"
     assert "media_persona=PB" in r.headers.get("set-cookie", "")
+
+
+def test_subpages_respect_current_persona():
+    _seed_two()
+    c = _client()
+    c.cookies.set("media_persona", "PB")
+
+    async def seed_mat():
+        db = await get_db()
+        try:
+            await db.execute("INSERT INTO media_material (id,persona_id,type,title,detail,status) "
+                             "VALUES ('MB','PB','story','乙的料','乙的料正文','active')")
+            await db.commit()
+        finally:
+            await db.close()
+    asyncio.run(seed_mat())
+    r = c.get("/media/materials")
+    assert r.status_code == 200 and "乙的料" in r.text   # 原料库认当前人设PB
