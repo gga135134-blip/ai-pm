@@ -299,6 +299,71 @@
         .status-reviewing { background: var(--ai-soft);          color: var(--ai); }
         .status-blocked,
         .status-failed  { background: rgba(255,98,87,.16);       color: var(--down); }
+
+        /* ===== 自媒体工作流组件 ===== */
+        .icon.flip{ transform:rotate(180deg); }
+
+        .pbar{ display:flex; align-items:center; gap:10px; padding:10px 14px; background:var(--panel-2);
+          border:1px solid var(--border); border-radius:var(--r-sm); margin-bottom:14px; flex-wrap:wrap; }
+        .pbar .who{ font-weight:600; font-size:14px; }
+        .pbar .acc{ font-size:12.5px; color:var(--ink-3); }
+        .pbar .sp{ flex:1; }
+        .pbar .lib{ font-size:12.5px; color:var(--ai); border:1px solid transparent; padding:6px 12px;
+          border-radius:999px; background:var(--ai-soft); font-weight:600; cursor:pointer;
+          display:inline-flex; align-items:center; gap:6px; position:relative; }
+        .pbar .lib .gap{ position:absolute; top:3px; right:5px; width:7px; height:7px; border-radius:50%;
+          background:var(--warn); }
+        .pbar .sw{ font-size:12.5px; color:var(--ink-3); text-decoration:none;
+          display:inline-flex; align-items:center; gap:5px; }
+        .pbar .sw:hover{ color:var(--ink-1); }
+
+        .rail{ display:flex; gap:8px; overflow-x:auto; -webkit-overflow-scrolling:touch;
+          padding-bottom:4px; margin-bottom:18px; }
+        .step{ flex:1 0 auto; min-width:140px; border:1px solid var(--border); border-radius:var(--r-sm);
+          padding:10px 12px; background:var(--bg); text-decoration:none; color:inherit; display:block; }
+        .step .n{ font-size:10.5px; letter-spacing:.1em; color:var(--ink-3); font-weight:600;
+          display:flex; align-items:center; gap:5px; }
+        .step .n .icon{ font-size:12px; }
+        .step .t{ font-size:14px; font-weight:600; margin-top:3px; display:block; }
+        .step .c{ font-size:11.5px; color:var(--ink-3); margin-top:2px; display:block; }
+        .step:hover{ border-color:var(--accent); }
+        .step.done .n{ color:var(--up); }
+        .step.now{ border-color:var(--accent); background:var(--accent-soft); }
+        .step.now .n, .step.now .t{ color:var(--accent); }
+        .step.todo .t{ color:var(--ink-2); }
+        .step.locked{ opacity:.45; cursor:not-allowed; pointer-events:none; }
+        .step.locked .t{ color:var(--ink-3); }
+
+        .stepnav{ display:flex; align-items:center; gap:10px; margin-top:22px; padding-top:16px;
+          border-top:1px solid var(--border); flex-wrap:wrap; }
+        .stepnav .sp{ flex:1; }
+        .stepnav .why{ flex-basis:100%; font-size:11.5px; color:var(--warn); margin-top:2px; }
+
+        .inj{ font-size:11.5px; color:var(--ink-3); display:inline-flex; align-items:center;
+          gap:6px; flex-wrap:wrap; }
+        .inj b{ color:var(--ink-2); font-weight:600; }
+        .inj .zero{ color:var(--warn); font-weight:600; }
+        .inj .more{ color:var(--ai); cursor:pointer; text-decoration:underline dotted; text-underline-offset:2px; }
+
+        .libpanel{ display:none; background:var(--bg); border:1px solid var(--ai); border-radius:var(--r);
+          padding:15px 17px; margin-bottom:14px; }
+        .libpanel.open{ display:block; }
+        .libpanel .lh{ display:flex; align-items:center; gap:8px; margin-bottom:11px; font-size:14px; font-weight:600; }
+        .libpanel .lh .icon{ color:var(--ai); }
+        .libgrid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(158px,1fr)); gap:10px; }
+        .libcard{ border:1px solid var(--border); border-radius:var(--r-sm); padding:11px 12px;
+          background:var(--panel-2); text-decoration:none; color:inherit; display:block; }
+        .libcard:hover{ border-color:var(--accent); }
+        .libcard .rn{ font-size:13px; font-weight:600; display:flex; align-items:center; gap:7px; }
+        .libcard .rn .icon{ color:var(--ai); font-size:14px; }
+        .libcard .rs{ font-size:11.5px; color:var(--ink-3); margin-top:4px; }
+        .libcard .rs.empty{ color:var(--warn); }
+
+        @media (max-width:767px){
+          .pbar .acc{ display:none; }
+          .stepnav .btn{ flex:1; justify-content:center; min-height:44px; }
+          .libpanel{ position:fixed; inset:0; z-index:60; border-radius:0; overflow:auto; margin:0; }
+        }
     </style>
 </head>
 <body>
