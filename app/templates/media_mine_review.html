@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% import "_icons.html" as ic %}
+{% block title %}挖矿复核{% endblock %}
+{% block topbar %}
+<span class="crumb"><a href="/media" style="color:inherit;text-decoration:none">自媒体</a> {{ ic.icon('chevron') }} <b>挖矿复核</b></span>
+{% endblock %}
+{% block content %}
+<div style="max-width:820px; margin:0 auto">
+  <h1 class="pname" style="margin:0 0 5px">挖矿复核</h1>
+  <p style="font-size:13px;color:var(--ink-3);margin:0 0 16px">批量挖出的候选，去重后勾选采纳。同句合并显示出现次数。</p>
+  <form method="post" id="rev-form">
+    {% set sections = [('signature','记忆点 → 人设'), ('material','素材 → 原料库'), ('playbook','打法 → 打法库')] %}
+    {% for key, label in sections %}
+    <div class="module" style="margin-top:12px">
+      <div class="mh"><span class="ttl">{{ label }}（{{ grouped[key]|length }}）</span></div>
+      <div class="inner">
+        {% for g in grouped[key] %}
+        <label style="display:flex; gap:8px; padding:7px 0; border-bottom:1px solid var(--border); font-size:13px">
+          <input type="checkbox" name="candidate_ids" value="{{ g.rep_id }}">
+          <span style="flex:1">
+            <b>{{ g.payload.name if key=='playbook' else g.payload.content }}</b>
+            {% if g.count > 1 %}<span class="tag" style="color:var(--ai)">出现 {{ g.count }} 次</span>{% endif %}
+            {% if key=='playbook' and g.payload.structure %}<div style="color:var(--ink-3); font-size:12px">{{ g.payload.structure }}</div>{% endif %}
+            {% if g.payload.evidence %}<div style="color:var(--ink-3); font-size:11.5px; margin-top:2px">原文：{{ g.payload.evidence }}</div>{% endif %}
+            {% if g.sources %}<div style="color:var(--ink-3); font-size:11px">来自：{{ g.sources[:3]|join('、') }}{% if g.sources|length>3 %} 等{% endif %}</div>{% endif %}
+          </span>
+        </label>
+        {% else %}<div class="empty" style="padding:16px; color:var(--ink-3); font-size:12.5px">无</div>{% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+    <div style="margin-top:14px; display:flex; gap:8px; align-items:center">
+      <button type="submit" formaction="/media/mine-review/adopt" class="btn primary">采纳选中</button>
+      <button type="submit" formaction="/media/mine-review/discard" class="btn">丢弃选中</button>
+      <label style="margin-left:auto; font-size:12px; color:var(--ink-3)"><input type="checkbox" onclick="document.querySelectorAll('#rev-form input[name=candidate_ids]').forEach(c=>c.checked=this.checked)"> 全选</label>
+    </div>
+  </form>
+</div>
+{% endblock %}

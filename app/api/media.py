@@ -1183,6 +1183,40 @@ async def content_mine(cid: str):
     return JSONResponse(result)
 
 
+@router.get("/media/mine-review", response_class=HTMLResponse)
+async def mine_review(request: Request):
+    db = await get_db()
+    try:
+        pid = await _current_persona_id(request, db)
+        grouped = (await list_pending_grouped(db, pid) if pid
+                   else {"signature": [], "material": [], "playbook": []})
+    finally:
+        await db.close()
+    return _tpl(request, "media_mine_review.html", {"grouped": grouped})
+
+
+@router.post("/media/mine-review/adopt")
+async def mine_review_adopt(candidate_ids: list[str] = Form([])):
+    if candidate_ids:
+        db = await get_db()
+        try:
+            await adopt_candidates(db, candidate_ids)
+        finally:
+            await db.close()
+    return RedirectResponse("/media/mine-review", status_code=303)
+
+
+@router.post("/media/mine-review/discard")
+async def mine_review_discard(candidate_ids: list[str] = Form([])):
+    if candidate_ids:
+        db = await get_db()
+        try:
+            await discard_candidates(db, candidate_ids)
+        finally:
+            await db.close()
+    return RedirectResponse("/media/mine-review", status_code=303)
+
+
 @router.post("/media/content/{cid}/mine-to-queue")
 async def content_mine_to_queue(cid: str, kind: str = Form(...), force: int = Form(0)):
     """批量挖矿：逐条调（前端编排）。kind=signature 从任意内容挖口头禅；essence 仅爆款挖素材+打法。"""
