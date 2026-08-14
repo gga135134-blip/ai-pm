@@ -197,6 +197,17 @@
     </div>
     <div class="inner">
       <div id="ai-status" class="ai-status-line"></div>
+      <div id="pb-bar" style="display:none; font-size:12.5px; margin:6px 0; padding:7px 10px; border:1px solid var(--border); border-radius:8px; background:var(--panel-2)">
+        <span id="pb-text"></span>
+        <span style="margin-left:8px">
+          <select id="pb-pick" style="font-size:12px; padding:2px 6px">
+            <option value="">换一条打法…</option>
+            {% for p in playbooks %}<option value="{{ p.id }}">{{ p.name }}（{{ '已跑通' if p.status=='proven' else '验证中' }}）</option>{% endfor %}
+          </select>
+          <button type="button" onclick="pbSwap()" class="btn" style="font-size:12px; padding:2px 8px">用这条重写</button>
+          <button type="button" onclick="aiScript('full','none')" class="btn" style="font-size:12px; padding:2px 8px">不用打法重写</button>
+        </span>
+      </div>
       <div id="supply-result" style="display:none; margin-top:8px"></div>
       <form method="post" action="/media/content/{{ content.id }}/script">
         <textarea name="script" id="script-box" rows="22"
@@ -405,7 +416,7 @@ fetch('/media/ui/steps').then(function(r){ return r.json(); }).then(function(d){
   document.querySelectorAll('[data-inj-body]').forEach(function(el){ el.innerHTML = parts.join(' · '); });
 }).catch(function(){});
 
-async function aiScript(mode) {
+async function aiScript(mode, playbookId) {
   const box = document.getElementById('script-box');
   if (box.value.trim() && !confirm('会覆盖当前脚本，继续？')) return;
   const btns = [document.getElementById('btn-full'), document.getElementById('btn-lean')];
@@ -414,10 +425,11 @@ async function aiScript(mode) {
   status.style.display = 'block';
   status.textContent = mode === 'lean'
     ? 'AI 写作中（精简注入，仅人设身份）…'
-    : 'AI 写作中（完整注入人设条目与记忆点）…';
+    : 'AI 写作中（自动匹配打法+完整注入）…';
   try {
     const fd = new FormData();
     fd.append('mode', mode);
+    if (playbookId) fd.append('playbook_id', playbookId);
     const r = await fetch('/media/content/{{ content.id }}/ai-script',
                           {method: 'POST', body: fd});
     const d = await r.json();
@@ -427,6 +439,7 @@ async function aiScript(mode) {
                          + ' 条资产，费用 $' + (d.cost || 0).toFixed(4) + '）。'
                          + (d.gap ? ' AI 标了缺真料：' + d.gap + '（可点上面「采访我补料」）。' : '')
                          + ' 改成你要念的话后点「保存脚本」即定稿。';
+      renderPbBar(d.playbook);
     } else {
       status.textContent = '失败：' + (d.error || '未知错误');
     }
@@ -434,6 +447,22 @@ async function aiScript(mode) {
     status.textContent = '请求失败：' + e;
   }
   btns.forEach(b => b.disabled = false);
+}
+
+function renderPbBar(pb) {
+  const bar = document.getElementById('pb-bar');
+  const txt = document.getElementById('pb-text');
+  if (!pb) { bar.style.display = 'none'; return; }
+  const tag = pb.status === 'proven' ? '已跑通' : '验证中';
+  txt.textContent = '本次用了打法《' + pb.name + '》（' + tag + '）'
+                  + (pb.reason ? ' · ' + pb.reason : '');
+  bar.style.display = 'block';
+}
+
+function pbSwap() {
+  const v = document.getElementById('pb-pick').value;
+  if (!v) return;
+  aiScript('full', v);
 }
 
 async function aiCopy(accountId) {
