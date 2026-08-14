@@ -1177,7 +1177,7 @@ async def content_published_at(cid: str, published_at: str = Form("")):
         await db.commit()
     finally:
         await db.close()
-    return RedirectResponse(f"/media/content/{cid}", status_code=303)
+    return JSONResponse({"ok": True, "published_at": published_at.strip()})
 
 
 @router.post("/media/content/{cid}/script")

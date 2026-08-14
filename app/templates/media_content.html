@@ -58,11 +58,12 @@
       {% if content.idea_reason %}
       <div style="margin:6px 0"><a href="{{ content.idea_reason }}" target="_blank" style="color:var(--accent); font-size:13px">🔗 原视频链接</a></div>
       {% endif %}
-      <form method="post" action="/media/content/{{ content.id }}/published-at" style="display:flex; gap:8px; align-items:center; margin:8px 0">
+      <div style="display:flex; gap:8px; align-items:center; margin:8px 0">
         <label style="font-size:12.5px; color:var(--ink-3)">📅 发布时间</label>
-        <input type="date" name="published_at" value="{{ content.published_at or '' }}" style="padding:4px 8px">
-        <button class="btn" style="padding:4px 12px; font-size:12px">保存</button>
-      </form>
+        <input type="date" id="pub-date" value="{{ content.published_at or '' }}" style="padding:4px 8px">
+        <button onclick="savePublishedAt()" class="btn" style="padding:4px 12px; font-size:12px">保存</button>
+        <span id="pub-msg" style="font-size:12px; color:var(--success)"></span>
+      </div>
     </div>
   </div>
 
@@ -674,6 +675,18 @@ async function adoptMine(kind, i){
     const el=document.getElementById(kind+'-'+i);
     if(d.ok && el){ el.style.opacity='.5'; el.querySelector('button').outerHTML='<span style="color:var(--success); font-size:12px">已采纳✓</span>'; }
   }catch(e){}
+}
+
+async function savePublishedAt(){
+  const msg=document.getElementById('pub-msg');
+  const b=new URLSearchParams(); b.set('published_at', document.getElementById('pub-date').value);
+  msg.style.color='var(--ai)'; msg.textContent='保存中…';
+  try{
+    const r=await fetch('/media/content/{{ content.id }}/published-at',{method:'POST', body:b});
+    const d=await r.json().catch(()=>({ok:r.ok}));
+    if(d.ok){ msg.style.color='var(--success)'; msg.textContent='✓ 已保存'; setTimeout(()=>{msg.textContent='';}, 2500); }
+    else{ msg.style.color='var(--down)'; msg.textContent='保存失败'; }
+  }catch(e){ msg.style.color='var(--down)'; msg.textContent='请求失败'; }
 }
 
 let _playbookCand=null;
