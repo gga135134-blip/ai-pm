@@ -1460,3 +1460,36 @@ async def mine_from_transcript(db, persona_id: str, transcript: str,
     sigs = [s for s in sigs if s["content"]]
     return {"ok": True, "materials": mats, "signatures": sigs, "error": "",
             "cost": result.get("cost", 0), "model": result.get("model", "")}
+
+
+MINE_STRUCTURE_SYSTEM = """从这条真爆过的内容里，提炼一个可复制的「打法/结构」。
+诚实：只提炼这条真爆款里清晰可复制的结构，别空泛、别硬凑；一条只提一个主打法。
+给：name(打法名,如"痛点自曝法")、structure(骨架步骤+为什么成,如"前3秒抛痛点→自曝踩坑→给3步方法→反问收尾｜靠真实踩坑建信任")、when_to_use(什么选题适用)、evidence(这条里体现该打法的关键片段)。
+若给了「已有打法名清单」，判断这条是不是其中某个打法的又一例：是则 similar_to 填那个打法名(人采纳时归并)，否则 similar_to 留空(提新打法)。
+只输出严格 JSON：{"name":"","structure":"","when_to_use":"","evidence":"","similar_to":""}"""
+
+
+async def mine_structure(db, persona_id: str, transcript: str,
+                         existing_names=None, model: str = "auto") -> dict:
+    """从一条爆款转写稿提炼一个打法候选。绝不写库——返回候选，人 adopt 才入。"""
+    snippet = (transcript or "").strip()[:8000]
+    if not snippet:
+        return {"ok": False, "playbook": None, "cost": 0, "model": ""}
+    names = "、".join(existing_names or []) or "（暂无）"
+    result = await ask_ai(f"已有打法名清单：{names}\n\n内容转写：\n{snippet}",
+                          model=model, task_type="media_topic",
+                          system_prompt=MINE_STRUCTURE_SYSTEM, json_mode=True)
+    resp = result.get("response", "")
+    if resp.startswith("[错误]") or resp.startswith("[费用保护]"):
+        return {"ok": False, "playbook": None, "error": resp,
+                "cost": result.get("cost", 0), "model": result.get("model", "")}
+    obj = extract_json(resp, expect="object")
+    if not obj or not obj.get("name"):
+        return {"ok": False, "playbook": None, "error": "结构提炼失败",
+                "cost": result.get("cost", 0), "model": result.get("model", "")}
+    await log_injection(db, "", "mine_structure", [], result.get("tokens", 0))
+    return {"ok": True, "cost": result.get("cost", 0), "model": result.get("model", ""),
+            "playbook": {"name": obj.get("name", ""), "structure": obj.get("structure", ""),
+                         "when_to_use": obj.get("when_to_use", ""),
+                         "evidence": obj.get("evidence", ""),
+                         "similar_to": obj.get("similar_to", "")}}
