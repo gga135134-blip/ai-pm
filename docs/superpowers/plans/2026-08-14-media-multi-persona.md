@@ -562,16 +562,24 @@ git commit -m "feat(media): 原料库加scope列+4处读取honor scope=shared(�
 
 ---
 
-### Task 6: 看板头部面包屑「← 全部人设 ｜ 当前：X」
+### Task 6: 看板头部面包屑「← 全部人设 ｜ 当前：X」+ 修子页「← 看板」死链
 
-**Files:** Modify `app/templates/media_board.html`（页头 :39 之前加面包屑）
+**Files:** Modify `app/templates/media_board.html`（页头 :39 之前加面包屑）；Modify `media_anchor.html:29`、`media_audience.html:31`、`media_materials.html:40`、`media_persona.html:47`（「← 看板」链接 `/media`→`/media/board`）
 
-- [ ] **Step 1: 加面包屑** — `media_board.html`，在 `<!-- ===== 页头 -->` 的 `<div style="margin-bottom:18px">`（:39）**内部最上方**加：
+**背景（Task 2 暴露）：** 看板从 `/media` 搬到 `/media/board` 后，4 个子页的「← 看板」按钮仍指 `/media`（现在=总览页），点了回不到看板。面包屑「自媒体」指 `/media`=总览是**对的**（保留），只修「← 看板」这类明确回看板的按钮。
+
+- [ ] **Step 1: 加看板面包屑** — `media_board.html`，在 `<!-- ===== 页头 -->` 的 `<div style="margin-bottom:18px">`（:39）**内部最上方**（`<div class="pname">` 之前）加：
 ```html
   <a href="/media" style="font-size:12.5px; color:var(--ink-3); text-decoration:none">← 全部人设</a>
   <span style="font-size:12.5px; color:var(--ink-3)"> ｜ 当前：{{ persona.name }}</span>
 ```
-（放在 `<div class="pname">{{ persona.name }}</div>` 之前。sub-pages 已有 base.html topbar 的「自媒体」面包屑指向 /media=总览，无需逐页改。）
+
+- [ ] **Step 2: 修 4 处「← 看板」死链** — 把这 4 个文件里的 `<a href="/media" class="btn" ...>← 看板</a>` 的 `href="/media"` 改成 `href="/media/board"`（**只改带「← 看板」文字的那一行**，面包屑里的「自媒体」`href="/media"` 保持不动）：
+  - `app/templates/media_anchor.html:29`
+  - `app/templates/media_audience.html:31`
+  - `app/templates/media_materials.html:40`
+  - `app/templates/media_persona.html:47`
+  grep 核对：`grep -rn '← 看板' app/templates/` 结果里的 href 应全为 `/media/board`。
 
 - [ ] **Step 2: 冒烟 + 全套回归** — controller 亲跑：临时端口 8011、签名 cookie 登录，播 2 人设：
   - `GET /media` 列两张人设卡（各带内容数/账号）。
