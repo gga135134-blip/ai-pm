@@ -52,15 +52,18 @@
 
 <div style="display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:16px">
   <span class="pcode">{{ total }} 条内容</span>
-  <span class="sp" style="flex:1"></span>
-  <button onclick="feishuSync(this)" class="btn">{{ ic.icon('arrow-down') }}从飞书同步</button>
-  <a href="/media/feishu/review" class="btn">{{ ic.icon('eye') }}未对上的数据</a>
-  <button onclick="document.getElementById('rev-overlay').classList.add('open')" class="btn">{{ ic.icon('play') }}视频反向入库</button>
-  <button onclick="document.getElementById('legacy-overlay').classList.add('open')" class="btn">{{ ic.icon('doc') }}批量导入老文案</button>
   <span id="feishu-msg" style="font-size:11.5px; color:var(--ink-3)"></span>
 </div>
 
 <script>
+/* 导入/同步工具的入口已收进「体系库」面板，带 ?tool= 跳回本页自动打开对应浮层 */
+window.addEventListener('DOMContentLoaded', function(){
+  var tool = new URLSearchParams(location.search).get('tool');
+  if(tool === 'reverse'){ document.getElementById('rev-overlay').classList.add('open'); }
+  else if(tool === 'legacy'){ document.getElementById('legacy-overlay').classList.add('open'); }
+  else if(tool === 'feishu'){ feishuSync({disabled:false}); }
+});
+
 async function feishuSync(btn){
   btn.disabled = true;
   const msg = document.getElementById('feishu-msg');

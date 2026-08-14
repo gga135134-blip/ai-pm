@@ -37,6 +37,18 @@
     <a class="libcard" href="/media/playbook"><div class="rn">{{ ic.icon('tag') }}打法库</div><div class="rs" data-lib="playbook">—</div></a>
     <a class="libcard" href="/media/legacy"><div class="rn">{{ ic.icon('doc') }}老文案</div><div class="rs" data-lib="legacy">—</div></a>
   </div>
+
+  {# 数据导入/同步类工具。它们不属于主线任何一步，暂放这里；
+     浮层定义在看板页，所以带 ?tool= 跳过去自动打开 #}
+  <div class="lh" style="margin:16px 0 10px; font-size:12.5px; color:var(--ink-3)">
+    {{ ic.icon('arrow-down') }}导入 / 同步
+  </div>
+  <div class="libgrid">
+    <a class="libcard" href="/media/board?tool=feishu"><div class="rn">{{ ic.icon('arrow-down') }}从飞书同步</div><div class="rs">拉取平台数据</div></a>
+    <a class="libcard" href="/media/feishu/review"><div class="rn">{{ ic.icon('eye') }}未对上的数据</div><div class="rs">手动关联或忽略</div></a>
+    <a class="libcard" href="/media/board?tool=reverse"><div class="rn">{{ ic.icon('play') }}视频反向入库</div><div class="rs">贴链接补录已发</div></a>
+    <a class="libcard" href="/media/board?tool=legacy"><div class="rn">{{ ic.icon('doc') }}批量导入老文案</div><div class="rs">粘贴历史稿子</div></a>
+  </div>
 </div>
 
 <div class="rail" id="ms-rail">
