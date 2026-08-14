@@ -13,10 +13,12 @@
 ] %}
 <div class="pbar">
   {% if persona %}
-    <span class="who">{{ persona.name }}</span>
-    {% if persona.current_phase %}<span class="pill run">{{ persona.current_phase }} 期</span>{% endif %}
+    <span class="who" id="ms-who">{{ persona.name }}</span>
+    {% if persona.current_phase %}<span class="pill run" id="ms-phase">{{ persona.current_phase }} 期</span>{% endif %}
   {% else %}
-    <span class="who">当前人设</span>
+    {# 这页的路由没查人设，由 /media/ui/steps 兜底填 #}
+    <span class="who" id="ms-who" data-fallback="1">当前人设</span>
+    <span class="pill run" id="ms-phase" style="display:none"></span>
   {% endif %}
   <span class="acc" id="ms-acc"></span>
   <span class="sp"></span>
@@ -73,6 +75,13 @@ function msToggleLibs(){ document.getElementById('ms-libs').classList.toggle('op
   var CUR = '{{ current }}';
   fetch('/media/ui/steps').then(function(r){ return r.json(); }).then(function(d){
     if(!d || !d.ok) return;
+    /* 模板没拿到人设时（该页路由没查），用接口返回的补上 */
+    var who = document.getElementById('ms-who');
+    if(who && who.dataset.fallback && d.persona){
+      who.textContent = d.persona.name;
+      var ph = document.getElementById('ms-phase');
+      if(ph && d.persona.phase){ ph.textContent = d.persona.phase + ' 期'; ph.style.display = ''; }
+    }
     /* 步骤状态 */
     document.querySelectorAll('#ms-rail .step').forEach(function(el){
       var k = el.dataset.step, s = d.steps[k];

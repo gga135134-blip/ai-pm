@@ -38,6 +38,12 @@ async def media_ui_steps(request: Request):
         if not pid:
             return JSONResponse({"ok": False})
 
+        # 人设名/期数：有些页面的路由没查人设，模板传不了，由前端兜底填上
+        cur = await db.execute(
+            "SELECT name, current_phase FROM media_persona WHERE id=?", (pid,))
+        prow = await cur.fetchone()
+        persona = {"name": prow["name"], "phase": prow["current_phase"]} if prow else None
+
         adopted = await _scalar(
             db, "SELECT COUNT(*) FROM media_topic WHERE persona_id=? AND status='adopted'", (pid,))
         making = await _scalar(
@@ -89,8 +95,8 @@ async def media_ui_steps(request: Request):
             steps["review"]["locked"] = True
             steps["review"]["reason"] = "要先发布内容，才能复盘"
 
-        return JSONResponse({"ok": True, "persona_id": pid, "steps": steps,
-                             "libs": libs,
+        return JSONResponse({"ok": True, "persona_id": pid, "persona": persona,
+                             "steps": steps, "libs": libs,
                              "libs_empty": [k for k, v in libs.items() if not v]})
     finally:
         await db.close()

@@ -681,10 +681,15 @@ async def topics_home(request: Request, source: str = ""):
             "FROM media_theme t WHERE t.persona_id=? AND COALESCE(t.status,'active')='active' "
             "ORDER BY t.created_at DESC", (pid,))
         themes = [dict(r) for r in await cur.fetchall()]
+        # 人设条要显示名字/期数，不能只给 id（否则显示占位的「当前人设」）
+        cur = await db.execute("SELECT * FROM media_persona WHERE id=?", (pid,))
+        row = await cur.fetchone()
+        persona = dict(row) if row else None
     finally:
         await db.close()
     return _tpl(request, "media_topics.html",
                 {"topics": topics, "rejected": rejected, "persona_id": pid,
+                 "persona": persona,
                  "themes": themes,
                  # idea 阶段在看板上显示为「待写脚本」，这里保持一致
                  "stage_labels": dict(STAGE_LABELS, idea="待写脚本"),
