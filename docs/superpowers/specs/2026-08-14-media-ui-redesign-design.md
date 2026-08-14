@@ -1,6 +1,6 @@
 # 自媒体模块 UI 重做 — 设计文档
 
-> 日期：2026-07-26
+> 日期：2026-08-14
 > 方法论：finesse-ui **workflow 路线**（pages you OPERATE），承接全站设计系统
 > 前置：`2026-07-25-ui-redesign-design.md`（全站 token/组件/shell）、`2026-07-24-media-ops-system-design.md`（自媒体业务设计）
 > 可视化基准：结构 https://claude.ai/code/artifact/358716be-b236-4904-a1eb-5375cad9ca65 ｜ 体系信息 https://claude.ai/code/artifact/c5694bae-c0e3-4f0d-8df4-b50b5749fe58
@@ -191,7 +191,7 @@
 
 **连带修正：** `/media/ui/steps` 的 `publish.done` 由「有已发」改为 `ready == 0 and published > 0`（发布步只管待发，没积压且发过东西才算做完）。
 
-**工具归属（用户 2026-07-26 确认）：**
+**工具归属（用户 2026-08-14 确认）：**
 
 | 工具 | 最终归属 | 理由 |
 |---|---|---|

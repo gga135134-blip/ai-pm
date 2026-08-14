@@ -8,7 +8,7 @@
 
 **Tech Stack:** FastAPI + Jinja2 + 全站设计系统 token（`base.html`）+ vanilla JS。无新框架、无构建。
 
-**设计文档（每个 Task 必须对照）：** `docs/superpowers/specs/2026-07-26-media-ui-redesign-design.md`
+**设计文档（每个 Task 必须对照）：** `docs/superpowers/specs/2026-08-14-media-ui-redesign-design.md`
 **可视化基准：** 结构 https://claude.ai/code/artifact/358716be-b236-4904-a1eb-5375cad9ca65 ｜ 体系信息 https://claude.ai/code/artifact/c5694bae-c0e3-4f0d-8df4-b50b5749fe58
 
 ## Global Constraints
