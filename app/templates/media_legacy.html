@@ -42,9 +42,9 @@
     </div>
     <button type="submit" class="btn primary">标记选中为爆款</button>
     <div style="margin-top:12px; padding-top:12px; border-top:1px solid var(--border); display:flex; gap:8px; flex-wrap:wrap; align-items:center">
-      <button type="button" onclick="batchMine('signature')" class="btn ai" style="font-size:12.5px">批量挖记忆点（选中）</button>
-      <button type="button" onclick="batchMine('essence')" class="btn ai" style="font-size:12.5px">批量挖精华（选中爆款）</button>
-      <button type="button" onclick="batchOrganize()" class="btn ai" style="font-size:12.5px">批量整理（摘要+排版）</button>
+      <button type="button" onclick="startBatch('mine_signature')" class="btn ai" style="font-size:12.5px">批量挖记忆点（选中）</button>
+      <button type="button" onclick="startBatch('mine_essence')" class="btn ai" style="font-size:12.5px">批量挖精华（选中爆款）</button>
+      <button type="button" onclick="startBatch('organize')" class="btn ai" style="font-size:12.5px">批量整理（摘要+排版）</button>
       <label style="font-size:12px; color:var(--ink-3)"><input type="checkbox" id="mine-force"> 已挖也重挖</label>
       <a href="/media/mine-review" style="font-size:12.5px; margin-left:auto">去复核采纳 →</a>
     </div>
@@ -54,37 +54,28 @@
   {{ shell.step_nav(back={'href':'/media/board','label':'内容看板'}) }}
 </div>
 <script>
-async function batchMine(kind){
+async function startBatch(op){
   const ids=[...document.querySelectorAll('input[name=content_ids]:checked')].map(c=>c.value);
   const prog=document.getElementById('mine-progress');
   if(!ids.length){ prog.textContent='先勾选老文案'; return; }
-  const force=document.getElementById('mine-force').checked?'1':'0';
-  let added=0, skipped=0, done=0;
-  for(const id of ids){
-    prog.textContent='挖矿中… '+(++done)+'/'+ids.length;
-    try{
-      const fd=new FormData(); fd.append('kind',kind); fd.append('force',force);
-      const r=await fetch('/media/content/'+id+'/mine-to-queue',{method:'POST',body:fd});
-      const txt=await r.text(); let d; try{ d=JSON.parse(txt); }catch(_){ continue; }
-      if(d.skipped) skipped++; else added+=(d.added||0);
-    }catch(e){}
-  }
-  prog.innerHTML='完成：新增候选 '+added+' 条，跳过 '+skipped+' 条 → <a href="/media/mine-review">去复核采纳</a>';
+  const fd=new FormData(); fd.append('op',op); ids.forEach(id=>fd.append('content_ids',id));
+  const r=await fetch('/media/legacy/batch',{method:'POST',body:fd});
+  const d=await r.json();
+  if(!d.ok){ prog.textContent='失败：'+(d.error||''); return; }
+  if(!d.started){ prog.textContent='已有任务在跑，等它跑完再起'; return; }
+  prog.textContent='已在后台开始，你可以切去别的页面，回来还能看进度';
+  pollBatch();
 }
-async function batchOrganize(){
-  const ids=[...document.querySelectorAll('input[name=content_ids]:checked')].map(c=>c.value);
+let _batchTimer=null;
+async function pollBatch(){
   const prog=document.getElementById('mine-progress');
-  if(!ids.length){ prog.textContent='先勾选老文案'; return; }
-  let done=0, ok=0;
-  for(const id of ids){
-    prog.textContent='整理中… '+(++done)+'/'+ids.length;
-    try{
-      const r=await fetch('/media/content/'+id+'/organize',{method:'POST'});
-      const txt=await r.text(); let d; try{ d=JSON.parse(txt); }catch(_){ continue; }
-      if(d.ok) ok++;
-    }catch(e){}
-  }
-  prog.innerHTML='整理完成 '+ok+'/'+ids.length+' 条（摘要+排版）→ 刷新看摘要，改坏了去 <a href="/media/assistant/actions">改动记录</a> 撤销';
+  try{
+    const d=await (await fetch('/media/legacy/batch-status')).json();
+    if(d.running){ prog.textContent=d.op+'中… '+d.done+'/'+d.total+'（后台跑，可离开）';
+      _batchTimer=setTimeout(pollBatch,2000); }
+    else if(d.total){ prog.innerHTML='完成 '+d.done+'/'+d.total+' → 刷新看结果（挖矿去 <a href="/media/mine-review">复核采纳</a>）'; }
+  }catch(e){}
 }
+document.addEventListener('DOMContentLoaded', pollBatch);
 </script>
 {% endblock %}
