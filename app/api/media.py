@@ -2017,3 +2017,31 @@ async def assistant_clear(request: Request):
     finally:
         await db.close()
     return RedirectResponse("/media/assistant", status_code=303)
+
+
+@router.get("/media/assistant/actions", response_class=HTMLResponse)
+async def assistant_actions(request: Request):
+    db = await get_db()
+    try:
+        pid = await _current_persona_id(request, db)
+        acts = await list_actions(db, pid) if pid else []
+    finally:
+        await db.close()
+    for a in acts:
+        data = {}
+        try:
+            data = json.loads(a.get("after_json") or "{}") or json.loads(a.get("before_json") or "{}")
+        except (TypeError, ValueError):
+            data = {}
+        a["summary"] = data.get("title") or data.get("content") or data.get("ai_draft") or ""
+    return _tpl(request, "media_assistant_actions.html", {"actions": acts})
+
+
+@router.post("/media/assistant/action/{aid}/revert")
+async def assistant_action_revert(aid: str):
+    db = await get_db()
+    try:
+        await revert_action(db, aid)
+    finally:
+        await db.close()
+    return RedirectResponse("/media/assistant/actions", status_code=303)
