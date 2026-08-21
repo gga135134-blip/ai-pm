@@ -11,7 +11,7 @@
   {% for a in actions %}
   <div class="module" style="margin-top:10px">
     <div class="mh">
-      <span class="ttl">{{ {'create_topic':'建选题','write_next':'写下一条','draft_script':'写脚本草稿'}.get(a.action_type, a.action_type) }}</span>
+      <span class="ttl">{{ {'create_topic':'建选题','write_next':'写下一条','draft_script':'写脚本草稿','organize_format':'整理格式'}.get(a.action_type, a.action_type) }}</span>
       <span class="tag" style="color:{{ 'var(--ink-3)' if a.status=='reverted' else 'var(--up)' }}">{{ '已撤销' if a.status=='reverted' else '已应用' }}</span>
     </div>
     <div class="inner" style="font-size:13px">

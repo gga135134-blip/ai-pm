@@ -38,6 +38,7 @@
     <a class="rv-row" href="/media/content/{{ c.id }}">
       <div style="min-width:0">
         <div class="rv-t">{{ c.title }}</div>
+        {% if c.summary %}<div style="font-size:11.5px; color:var(--ink-3); margin-top:2px">{{ c.summary }}</div>{% endif %}
         <div class="rv-m">
           {% if c.stage == 'reviewed' %}已复盘{% else %}待复盘{% endif %}
           {% if c.is_winner %} · <span style="color:var(--warn)">爆款</span>{% endif %}

@@ -122,7 +122,7 @@ async def media_review_home(request: Request):
             phases = [dict(r) for r in await cur.fetchall()]
             # 已发/已复盘内容：从「发布」步移过来，它们是复盘的输入
             cur = await db.execute(
-                "SELECT id,title,stage,is_winner,published_at,created_at FROM media_content "
+                "SELECT id,title,stage,is_winner,published_at,created_at,summary FROM media_content "
                 "WHERE persona_id=? AND stage IN ('published','reviewed') "
                 "ORDER BY COALESCE(published_at, created_at) DESC", (pid,))
             published = [dict(r) for r in await cur.fetchall()]
