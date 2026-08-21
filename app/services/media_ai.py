@@ -1667,3 +1667,30 @@ async def match_playbook(db, content: dict, model: str = "auto") -> dict:
             "playbook": {"id": p["id"], "name": p["name"], "structure": p["structure"],
                          "when_to_use": p["when_to_use"], "status": p["status"],
                          "reason": (obj.get("reason") or "").strip()}}
+
+
+ORGANIZE_SYSTEM = """给你一条口播/文案正文，做两件事：
+1) summary：一句话说这条讲了啥（≤30字，抓核心，别客套）。
+2) formatted：把正文清理成统一排版——合并被切碎的行、去掉残留序号、统一分段。**只重排版面，别改内容、别扩写、别删信息、别润色措辞。**
+只输出严格 JSON：{"summary":"","formatted":""}"""
+
+
+async def organize_content(script, model: str = "auto") -> dict:
+    """逐条整理：一次调用出一句摘要 + 统一排版的正文。不写库——由路由落库。"""
+    body = (script or "").strip()
+    if not body:
+        return {"ok": False, "summary": "", "formatted": "", "cost": 0, "model": ""}
+    result = await ask_ai(body[:8000], model=model, task_type="media_topic",
+                          system_prompt=ORGANIZE_SYSTEM, json_mode=True)
+    resp = result.get("response", "")
+    if resp.startswith("[错误]") or resp.startswith("[费用保护]"):
+        return {"ok": False, "summary": "", "formatted": "", "error": resp,
+                "cost": result.get("cost", 0), "model": result.get("model", "")}
+    obj = extract_json(resp, expect="object") or {}
+    summary = (obj.get("summary") or "").strip()
+    formatted = (obj.get("formatted") or "").strip()
+    if not summary and not formatted:
+        return {"ok": False, "summary": "", "formatted": "", "error": "整理失败",
+                "cost": result.get("cost", 0), "model": result.get("model", "")}
+    return {"ok": True, "summary": summary, "formatted": formatted,
+            "cost": result.get("cost", 0), "model": result.get("model", "")}
