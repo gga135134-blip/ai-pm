@@ -1,6 +1,9 @@
 # app/services/media_agent_tools.py
 """自媒体助手工具集：查类 + 改草稿类。ctx=persona_id。每个工具返回给 agent 的文本。"""
+import json, uuid
 from app.database import get_db
+from app.services.media_assistant import log_action
+from app.services.ai_router import ask_ai
 
 
 async def _tool_list_contents(args, pid):
@@ -106,6 +109,107 @@ _READ = {
 }
 
 
+async def _tool_create_topic(args, pid):
+    a = args or {}
+    title = (a.get("title") or "").strip()
+    if not title:
+        return "（建选题需要 title）"
+    tid = str(uuid.uuid4())
+    db = await get_db()
+    try:
+        await db.execute(
+            "INSERT INTO media_topic (id,persona_id,title,puzzle,source,reason,status) "
+            "VALUES (?,?,?,?, 'assistant',?, 'pool')",
+            (tid, pid, title, (a.get("puzzle") or "").strip(), (a.get("reason") or "").strip()))
+        await log_action(db, pid, "create_topic", "media_topic", tid, after={"title": title})
+    finally:
+        await db.close()
+    return f"已把选题「{title}」加进选题池（可在改动记录里撤销）。"
+
+
+_NEXT_SYSTEM = """基于给的上一条内容（转写稿+结尾预告），拟这个人设的下一条选题。
+只输出严格 JSON：{"title":"","puzzle":"","reason":"承接上期…"}"""
+
+
+async def _tool_write_next(args, pid):
+    cid = (args or {}).get("from_content_id", "")
+    db = await get_db()
+    try:
+        cur = await db.execute(
+            "SELECT title,script FROM media_content WHERE id=? AND persona_id=?", (cid, pid))
+        src = await cur.fetchone()
+        if not src:
+            await db.close()
+            return "（找不到源内容）"
+        src = dict(src)
+        result = await ask_ai(f"上一条标题：{src['title']}\n转写稿：\n{(src['script'] or '')[:4000]}",
+                              model="auto", task_type="media_topic",
+                              system_prompt=_NEXT_SYSTEM, json_mode=True)
+        obj = {}
+        try:
+            obj = json.loads(result.get("response", "{}"))
+        except Exception:
+            obj = {}
+        title = (obj.get("title") or f"{src['title']}（下一集）").strip()
+        ncid = str(uuid.uuid4())
+        await db.execute(
+            "INSERT INTO media_content (id,persona_id,title,puzzle,stage,idea_source,idea_reason,parent_content_id) "
+            "VALUES (?,?,?,?, 'idea','assistant',?,?)",
+            (ncid, pid, title, (obj.get("puzzle") or "").strip(), (obj.get("reason") or "").strip(), cid))
+        await log_action(db, pid, "write_next", "media_content", ncid,
+                         after={"title": title, "parent": cid})
+    finally:
+        await db.close()
+    return f"已开出续集「{title}」（idea 阶段，承接《{src['title']}》；可在改动记录里撤销）。"
+
+
+async def _tool_draft_script(args, pid):
+    from app.services.media_ai import write_script
+    cid = (args or {}).get("content_id", "")
+    hint = (args or {}).get("hint", "")
+    db = await get_db()
+    try:
+        cur = await db.execute("SELECT ai_draft FROM media_content WHERE id=? AND persona_id=?", (cid, pid))
+        row = await cur.fetchone()
+        if not row:
+            await db.close()
+            return "（找不到这条内容）"
+        before_draft = row["ai_draft"] or ""
+        res = await write_script(db, cid, mode="full", hint=hint)
+        if not res.get("ok"):
+            await db.close()
+            return f"（写稿失败：{res.get('error', '')}）"
+        await log_action(db, pid, "draft_script", "media_content", cid,
+                         before={"ai_draft": before_draft}, after={"ai_draft": res.get("script", "")})
+    finally:
+        await db.close()
+    return "已写好脚本草稿（在内容的口播脚本区，未定稿；可撤销还原）。"
+
+
+async def _tool_match_playbook(args, pid):
+    from app.services.media_ai import match_playbook
+    cid = (args or {}).get("content_id", "")
+    db = await get_db()
+    try:
+        cur = await db.execute("SELECT * FROM media_content WHERE id=? AND persona_id=?", (cid, pid))
+        row = await cur.fetchone()
+        if not row:
+            await db.close()
+            return "（找不到这条内容）"
+        res = await match_playbook(db, dict(row))
+    finally:
+        await db.close()
+    pb = res.get("playbook")
+    return (f"最贴的打法：《{pb['name']}》——{pb.get('reason', '')}" if pb
+            else "（没有匹配到合适的打法）")
+
+
+_WRITE = {
+    "create_topic": _tool_create_topic, "write_next": _tool_write_next,
+    "draft_script": _tool_draft_script, "match_playbook": _tool_match_playbook,
+}
+
+
 def _schema(name, desc, props=None, required=None):
     return {"type": "function", "function": {
         "name": name, "description": desc,
@@ -123,9 +227,20 @@ MEDIA_TOOL_SCHEMAS = [
     _schema("list_anchors", "列出当前人设的锚点。"),
 ]
 
+MEDIA_TOOL_SCHEMAS += [
+    _schema("create_topic", "往选题池加一条选题（草稿·可撤）。",
+            {"title": {"type": "string"}, "puzzle": {"type": "string"}, "reason": {"type": "string"}}, ["title"]),
+    _schema("write_next", "针对某条内容写下一条续集（建 idea 内容+记血缘·可撤）。",
+            {"from_content_id": {"type": "string"}}, ["from_content_id"]),
+    _schema("draft_script", "给某条内容写口播脚本草稿（不定稿·可撤）。",
+            {"content_id": {"type": "string"}, "hint": {"type": "string"}}, ["content_id"]),
+    _schema("match_playbook", "给某条内容匹配最贴的一条打法（读）。",
+            {"content_id": {"type": "string"}}, ["content_id"]),
+]
+
 
 async def dispatch_media_tool(name, args, persona_id):
-    fn = _READ.get(name)
+    fn = _READ.get(name) or _WRITE.get(name)
     if fn:
         return await fn(args, persona_id)
     return f"（未知工具 {name}）"
