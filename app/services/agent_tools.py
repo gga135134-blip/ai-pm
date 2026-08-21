@@ -604,7 +604,8 @@ def _get_tool_client():
 
 
 async def run_agent_loop(prompt: str, system: str, project_id: str | None = None, max_steps: int = 18,
-                          on_step: callable = None) -> dict:
+                          on_step: callable = None, tool_schemas: list = None, dispatch: callable = None,
+                          ctx=None) -> dict:
     """带工具的执行循环：AI 自主调用工具直到完成任务。
     返回 {response, model, tokens, cost, steps}（steps 是工具调用日志，给人看 agent 干了啥）。"""
     client, model_name, price_key = _get_tool_client()
@@ -619,7 +620,7 @@ async def run_agent_loop(prompt: str, system: str, project_id: str | None = None
     for _ in range(max_steps):
         try:
             resp = await client.chat.completions.create(
-                model=model_name, messages=messages, tools=TOOL_SCHEMAS,
+                model=model_name, messages=messages, tools=(tool_schemas or TOOL_SCHEMAS),
                 tool_choice="auto", max_tokens=4096,
             )
         except Exception as e:
@@ -652,7 +653,8 @@ async def run_agent_loop(prompt: str, system: str, project_id: str | None = None
                     on_step({"phase": "calling", "tool": tc.function.name, "args": args, "step": len(steps) + 1})
                 except Exception:
                     pass
-            result = await _dispatch_tool(tc.function.name, args, project_id)
+            _ctx = ctx if ctx is not None else project_id
+            result = await (dispatch or _dispatch_tool)(tc.function.name, args, _ctx)
             steps.append({"tool": tc.function.name, "args": args, "result": result[:500]})
             messages.append({"role": "tool", "tool_call_id": tc.id, "content": result})
             if on_step:
