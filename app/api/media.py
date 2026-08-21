@@ -32,6 +32,10 @@ from app.services.media_review_cycle import (
 from app.services.media_phase_review import (
     run_l3_review, list_phase_reviews, get_phase_review, _next_phase)
 from app.services.ai_router import _load_config
+from app.services.agent_tools import run_agent_loop
+from app.services.media_agent_tools import MEDIA_TOOL_SCHEMAS, dispatch_media_tool
+from app.services.media_assistant import MEDIA_ASSISTANT_SYSTEM, list_actions, revert_action
+from app.services.constitution import with_constitution
 from app.config import BASE_DIR
 
 log = logging.getLogger(__name__)
@@ -1938,3 +1942,78 @@ async def feishu_ignore(request: Request, uid: str):
     finally:
         await db.close()
     return RedirectResponse("/media/feishu/review", status_code=302)
+
+
+@router.get("/media/assistant", response_class=HTMLResponse)
+async def assistant_page(request: Request):
+    db = await get_db()
+    try:
+        pid = await _current_persona_id(request, db)
+        persona, msgs = None, []
+        if pid:
+            cur = await db.execute("SELECT name,one_liner,current_phase FROM media_persona WHERE id=?", (pid,))
+            prow = await cur.fetchone()
+            persona = dict(prow) if prow else None
+            cur = await db.execute("SELECT role,content FROM media_assistant_message "
+                                   "WHERE persona_id=? ORDER BY created_at", (pid,))
+            msgs = [dict(r) for r in await cur.fetchall()]
+    finally:
+        await db.close()
+    return _tpl(request, "media_assistant.html", {"persona": persona, "msgs": msgs})
+
+
+@router.post("/media/assistant/ask")
+async def assistant_ask(request: Request, message: str = Form(...)):
+    msg = message.strip()
+    if not msg:
+        return JSONResponse({"ok": False, "error": "空消息"})
+    db = await get_db()
+    try:
+        pid = await _current_persona_id(request, db)
+        if not pid:
+            return JSONResponse({"ok": False, "error": "请先选人设"})
+        cur = await db.execute("SELECT name,one_liner,current_phase FROM media_persona WHERE id=?", (pid,))
+        p = dict(await cur.fetchone())
+        # 最近 10 条历史
+        cur = await db.execute("SELECT role,content FROM media_assistant_message WHERE persona_id=? "
+                               "ORDER BY created_at DESC LIMIT 10", (pid,))
+        hist = list(reversed([dict(r) for r in await cur.fetchall()]))
+        await db.execute("INSERT INTO media_assistant_message (id,persona_id,role,content) VALUES (?,?, 'user',?)",
+                         (str(uuid.uuid4()), pid, msg))
+        await db.commit()
+    finally:
+        await db.close()
+    persona_line = f"【当前人设】{p['name']}｜{p['one_liner']}｜阶段：{p['current_phase']}"
+    hist_text = "\n".join(f"{h['role']}：{h['content']}" for h in hist)
+    prompt = (f"{persona_line}\n\n对话历史：\n{hist_text}\n\n──────\n用户：{msg}" if hist_text
+              else f"{persona_line}\n\n用户：{msg}")
+    try:
+        result = await run_agent_loop(prompt, system=with_constitution(MEDIA_ASSISTANT_SYSTEM),
+                                      tool_schemas=MEDIA_TOOL_SCHEMAS, dispatch=dispatch_media_tool, ctx=pid)
+    except Exception as e:
+        log.exception("助手对话失败")
+        return JSONResponse({"ok": False, "error": str(e)})
+    reply = result.get("response", "")
+    db = await get_db()
+    try:
+        await db.execute("INSERT INTO media_assistant_message (id,persona_id,role,content,cost) "
+                         "VALUES (?,?, 'assistant',?,?)",
+                         (str(uuid.uuid4()), pid, reply, result.get("cost", 0)))
+        await db.commit()
+    finally:
+        await db.close()
+    steps = [s.get("tool") for s in result.get("steps", [])]
+    return JSONResponse({"ok": True, "reply": reply, "steps": steps, "cost": result.get("cost", 0)})
+
+
+@router.post("/media/assistant/clear")
+async def assistant_clear(request: Request):
+    db = await get_db()
+    try:
+        pid = await _current_persona_id(request, db)
+        if pid:
+            await db.execute("DELETE FROM media_assistant_message WHERE persona_id=?", (pid,))
+            await db.commit()
+    finally:
+        await db.close()
+    return RedirectResponse("/media/assistant", status_code=303)

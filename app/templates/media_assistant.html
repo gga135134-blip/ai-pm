@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% import "_icons.html" as ic %}
+{% block title %}助手{% endblock %}
+{% block topbar %}
+<span class="crumb"><a href="/media" style="color:inherit;text-decoration:none">自媒体</a> {{ ic.icon('chevron') }} <b>助手</b></span>
+{% endblock %}
+{% block content %}
+<div class="card">
+  {% if persona %}
+    <p>当前人设：<b>{{ persona.name }}</b>｜{{ persona.one_liner }}｜阶段：{{ persona.current_phase }}</p>
+  {% else %}
+    <p>尚未选择人设。</p>
+  {% endif %}
+  <p style="color:var(--ink-3);font-size:12px">对话界面待完善（Task 8）。</p>
+  <ul>
+    {% for m in msgs %}
+      <li><b>{{ m.role }}</b>：{{ m.content }}</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endblock %}
