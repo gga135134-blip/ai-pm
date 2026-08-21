@@ -1131,6 +1131,11 @@ async def content_detail(request: Request, cid: str):
         drow = await cur.fetchone()
         latest_review = dict(drow) if drow else None
         playbooks = await list_playbooks(db)
+
+        cur = await db.execute(
+            "SELECT COUNT(*) c FROM media_assistant_action "
+            "WHERE target_table='media_content' AND target_id=? AND status='applied'", (cid,))
+        assistant_touched = (await cur.fetchone())["c"] > 0
     finally:
         await db.close()
 
@@ -1157,7 +1162,8 @@ async def content_detail(request: Request, cid: str):
                  "latest_review": latest_review,
                  "is_reverse": content.get("idea_source") in ("video_reverse", "legacy_text"),
                  "next_stage": next_stage(content["stage"]),
-                 "playbooks": playbooks})
+                 "playbooks": playbooks,
+                 "assistant_touched": assistant_touched})
 
 
 @router.post("/media/content/{cid}/mine")

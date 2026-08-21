@@ -30,7 +30,7 @@
 
   {{ shell.media_shell('content', persona=persona) }}
 
-  <h1 class="pname" style="margin:0 0 6px">{{ content.title }}</h1>
+  <h1 class="pname" style="margin:0 0 6px">{{ content.title }}{% if assistant_touched %}<span class="tag" style="color:var(--ai); margin-left:6px">🤖 助手参与</span>{% endif %}</h1>
   {% if content.puzzle %}
   <div style="font-size:13.5px; color:var(--ai); background:var(--ai-soft); border-radius:var(--r-sm); padding:9px 13px; margin-bottom:8px">
     <b style="font-weight:600">谜题</b> · {{ content.puzzle }}
