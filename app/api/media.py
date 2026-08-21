@@ -19,7 +19,7 @@ from app.services.media_ai import (
     critique_draft, revise_draft,
     persona_interview_questions, persona_interview_extract,
     learn_edit_style, draft_audience_segments, draft_anchors,
-    mine_from_transcript, mine_structure,
+    mine_from_transcript, mine_structure, organize_content,
 )
 from app.services.media_legacy import split_legacy_scripts, create_legacy_contents
 from app.services.media_mine_queue import (
@@ -34,7 +34,7 @@ from app.services.media_phase_review import (
 from app.services.ai_router import _load_config
 from app.services.agent_tools import run_agent_loop
 from app.services.media_agent_tools import MEDIA_TOOL_SCHEMAS, dispatch_media_tool
-from app.services.media_assistant import MEDIA_ASSISTANT_SYSTEM, list_actions, revert_action
+from app.services.media_assistant import MEDIA_ASSISTANT_SYSTEM, list_actions, revert_action, log_action
 from app.services.constitution import with_constitution
 from app.config import BASE_DIR
 
@@ -940,7 +940,7 @@ async def legacy_home(request: Request):
         rows = []
         if pid:
             cur = await db.execute(
-                "SELECT id,title,idea_source,is_winner,mined_signature_at,mined_essence_at "
+                "SELECT id,title,idea_source,is_winner,mined_signature_at,mined_essence_at,summary "
                 "FROM media_content "
                 "WHERE persona_id=? AND idea_source IN ('video_reverse','legacy_text') "
                 "ORDER BY created_at DESC", (pid,))
@@ -1225,6 +1225,36 @@ async def mine_review_discard(candidate_ids: list[str] = Form([])):
         finally:
             await db.close()
     return RedirectResponse("/media/mine-review", status_code=303)
+
+
+@router.post("/media/content/{cid}/organize")
+async def content_organize(cid: str):
+    """老文案整理：一句摘要(另存) + 统一格式(改写script·留痕可撤)。逐条调（前端编排）。"""
+    db = await get_db()
+    try:
+        cur = await db.execute("SELECT persona_id,script FROM media_content WHERE id=?", (cid,))
+        row = await cur.fetchone()
+        if not row:
+            return JSONResponse({"ok": False, "error": "内容不存在"})
+        pid, script = row["persona_id"], row["script"] or ""
+        if not script.strip():
+            return JSONResponse({"ok": False, "error": "无正文"})
+        try:
+            res = await organize_content(script)
+        except Exception as e:
+            log.exception("整理失败")
+            return JSONResponse({"ok": False, "error": str(e)})
+        if not res.get("ok"):
+            return JSONResponse({"ok": False, "error": res.get("error", "整理失败")})
+        formatted = res.get("formatted") or script
+        await log_action(db, pid, "organize_format", "media_content", cid,
+                         before={"script": script}, after={"script": formatted})
+        await db.execute("UPDATE media_content SET summary=?, script=? WHERE id=?",
+                         (res.get("summary", ""), formatted, cid))
+        await db.commit()
+    finally:
+        await db.close()
+    return JSONResponse({"ok": True, "summary": res.get("summary", "")})
 
 
 @router.post("/media/content/{cid}/mine-to-queue")

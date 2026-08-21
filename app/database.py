@@ -600,6 +600,7 @@ MIGRATIONS = [
     # 价值在复盘：能回答「哪个主题最出爆款」，而不只是「哪条视频数据好」。
     "ALTER TABLE media_topic ADD COLUMN theme_id TEXT DEFAULT ''",
     "ALTER TABLE media_content ADD COLUMN parent_content_id TEXT DEFAULT ''",
+    "ALTER TABLE media_content ADD COLUMN summary TEXT DEFAULT ''",
 ]
 
 
