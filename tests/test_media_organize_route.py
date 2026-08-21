@@ -7,6 +7,7 @@ from app.api.auth import get_or_create_session_secret
 from app.database import get_db, init_db
 import app.database as _db_mod
 import app.api.media as media_api
+import app.services.media_batch as media_batch
 from app.services import media_assistant as ma
 
 
@@ -45,7 +46,7 @@ def test_organize_updates_and_logs(monkeypatch):
     _seed()
     async def fake_org(script, model="auto"):
         return {"ok": True, "summary": "一句摘要", "formatted": "整理后的正文", "cost": 0, "model": "x"}
-    monkeypatch.setattr(media_api, "organize_content", fake_org)
+    monkeypatch.setattr(media_batch, "organize_content", fake_org)
     r = _client().post("/media/content/OC/organize")
     assert r.status_code == 200 and r.json()["summary"] == "一句摘要"
 
