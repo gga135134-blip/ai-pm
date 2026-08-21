@@ -7,6 +7,7 @@ from app.api.auth import get_or_create_session_secret
 from app.database import get_db, init_db
 import app.database as _db_mod
 import app.api.media as media_api
+import app.services.media_batch as media_batch
 
 
 def _client():
@@ -44,7 +45,7 @@ def test_signature_enqueues_and_marks(monkeypatch):
     _seed("Q1", 0)
     async def fake_mine(db, pid, transcript, model="auto"):
         return {"ok": True, "materials": [], "signatures": [{"content": "你要知道"}]}
-    monkeypatch.setattr(media_api, "mine_from_transcript", fake_mine)
+    monkeypatch.setattr(media_batch, "mine_from_transcript", fake_mine)
     r = _client().post("/media/content/Q1/mine-to-queue", data={"kind": "signature"})
     assert r.status_code == 200 and r.json()["added"] == 1
     async def chk():
@@ -67,7 +68,7 @@ def test_already_mined_skips_without_force(monkeypatch):
     _seed("Q3", 0)
     async def fake_mine(db, pid, transcript, model="auto"):
         return {"ok": True, "materials": [], "signatures": [{"content": "x"}]}
-    monkeypatch.setattr(media_api, "mine_from_transcript", fake_mine)
+    monkeypatch.setattr(media_batch, "mine_from_transcript", fake_mine)
     _client().post("/media/content/Q3/mine-to-queue", data={"kind": "signature"})
     r = _client().post("/media/content/Q3/mine-to-queue", data={"kind": "signature"})
     assert r.json()["skipped"] == "already"

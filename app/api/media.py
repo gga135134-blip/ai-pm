@@ -24,6 +24,8 @@ from app.services.media_ai import (
 from app.services.media_legacy import split_legacy_scripts, create_legacy_contents
 from app.services.media_mine_queue import (
     enqueue_candidates, list_pending_grouped, adopt_candidates, discard_candidates)
+from app.services.media_batch import (
+    run_organize_one, run_mine_one, start_batch, get_status as batch_get_status)
 from app.services.media_playbook import list_playbooks, get_playbook
 from app.services.media_flow import finalize_updates, clean_body
 from app.services.media_decision import build_decision_context, rank_pool
@@ -1227,78 +1229,66 @@ async def mine_review_discard(candidate_ids: list[str] = Form([])):
     return RedirectResponse("/media/mine-review", status_code=303)
 
 
-@router.post("/media/content/{cid}/organize")
-async def content_organize(cid: str):
-    """老文案整理：一句摘要(另存) + 统一格式(改写script·留痕可撤)。逐条调（前端编排）。"""
+@router.post("/media/legacy/batch")
+async def legacy_batch(request: Request, op: str = Form(...),
+                       content_ids: list[str] = Form([]), force: int = Form(0)):
+    """起后台批量任务（整理/挖矿）。离页不断，服务器重启才中断。"""
     db = await get_db()
     try:
-        cur = await db.execute("SELECT persona_id,script FROM media_content WHERE id=?", (cid,))
-        row = await cur.fetchone()
-        if not row:
-            return JSONResponse({"ok": False, "error": "内容不存在"})
-        pid, script = row["persona_id"], row["script"] or ""
-        if not script.strip():
-            return JSONResponse({"ok": False, "error": "无正文"})
-        try:
-            res = await organize_content(script)
-        except Exception as e:
-            log.exception("整理失败")
-            return JSONResponse({"ok": False, "error": str(e)})
-        if not res.get("ok"):
-            return JSONResponse({"ok": False, "error": res.get("error", "整理失败")})
-        formatted = res.get("formatted") or script
-        await log_action(db, pid, "organize_format", "media_content", cid,
-                         before={"script": script}, after={"script": formatted})
-        await db.execute("UPDATE media_content SET summary=?, script=? WHERE id=?",
-                         (res.get("summary", ""), formatted, cid))
-        await db.commit()
+        pid = await _current_persona_id(request, db)
     finally:
         await db.close()
-    return JSONResponse({"ok": True, "summary": res.get("summary", "")})
+    if not pid:
+        return JSONResponse({"ok": False, "error": "请先选人设"})
+    if not content_ids:
+        return JSONResponse({"ok": False, "error": "先勾选内容"})
+    started = start_batch(pid, op, content_ids)
+    return JSONResponse({"ok": True, "started": started,
+                         "error": "" if started else "已有任务在跑，等它跑完"})
+
+
+@router.get("/media/legacy/batch-status")
+async def legacy_batch_status(request: Request):
+    db = await get_db()
+    try:
+        pid = await _current_persona_id(request, db)
+        st = batch_get_status(pid) if pid else None
+    finally:
+        await db.close()
+    if not st:
+        return JSONResponse({"running": False})
+    return JSONResponse({"running": st.get("running", False), "op": st.get("op_label", ""),
+                         "done": st.get("done", 0), "total": st.get("total", 0)})
+
+
+@router.post("/media/content/{cid}/organize")
+async def content_organize(cid: str):
+    """老文案整理：单条端点，逻辑在 media_batch.run_organize_one。"""
+    db = await get_db()
+    try:
+        try:
+            res = await run_organize_one(db, cid)
+        except Exception as e:
+            log.exception("整理失败")
+            res = {"ok": False, "error": str(e)}
+    finally:
+        await db.close()
+    return JSONResponse(res)
 
 
 @router.post("/media/content/{cid}/mine-to-queue")
 async def content_mine_to_queue(cid: str, kind: str = Form(...), force: int = Form(0)):
-    """批量挖矿：逐条调（前端编排）。kind=signature 从任意内容挖口头禅；essence 仅爆款挖素材+打法。"""
+    """批量挖矿单条端点，逻辑在 media_batch.run_mine_one。"""
     db = await get_db()
     try:
-        cur = await db.execute(
-            "SELECT persona_id,script,is_winner,mined_signature_at,mined_essence_at "
-            "FROM media_content WHERE id=?", (cid,))
-        row = await cur.fetchone()
-        if not row:
-            return JSONResponse({"ok": False, "error": "内容不存在"})
-        pid, script = row["persona_id"], row["script"] or ""
         try:
-            if kind == "signature":
-                if row["mined_signature_at"] and not force:
-                    return JSONResponse({"ok": True, "added": 0, "skipped": "already"})
-                res = await mine_from_transcript(db, pid, script)
-                added = await enqueue_candidates(db, pid, cid, "signature",
-                                                 res.get("signatures") or [])
-                await db.execute("UPDATE media_content SET mined_signature_at=CURRENT_TIMESTAMP WHERE id=?", (cid,))
-                await db.commit()
-                return JSONResponse({"ok": True, "added": added, "skipped": ""})
-            elif kind == "essence":
-                if not row["is_winner"]:
-                    return JSONResponse({"ok": True, "added": 0, "skipped": "not_winner"})
-                if row["mined_essence_at"] and not force:
-                    return JSONResponse({"ok": True, "added": 0, "skipped": "already"})
-                res = await mine_from_transcript(db, pid, script)
-                added = await enqueue_candidates(db, pid, cid, "material",
-                                                 res.get("materials") or [])
-                st = await mine_structure(db, pid, script)
-                if st.get("ok") and st.get("playbook"):
-                    added += await enqueue_candidates(db, pid, cid, "playbook", [st["playbook"]])
-                await db.execute("UPDATE media_content SET mined_essence_at=CURRENT_TIMESTAMP WHERE id=?", (cid,))
-                await db.commit()
-                return JSONResponse({"ok": True, "added": added, "skipped": ""})
-            return JSONResponse({"ok": False, "error": "kind 非法"})
+            res = await run_mine_one(db, cid, kind, force)
         except Exception as e:
             log.exception("批量挖矿失败")
-            return JSONResponse({"ok": False, "error": str(e)})
+            res = {"ok": False, "error": str(e)}
     finally:
         await db.close()
+    return JSONResponse(res)
 
 
 @router.post("/media/content/{cid}/mine/adopt-material")
