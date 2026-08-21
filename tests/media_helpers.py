@@ -1,10 +1,17 @@
 """media 二期测试基建：内存 DB + 假 AI。无 pytest-asyncio，异步用 asyncio.run。"""
 import aiosqlite
+import app.database as _db_mod
 from app.database import SCHEMA, MIGRATIONS
 
 
 async def make_db():
-    """内存 aiosqlite 连接，已应用 SCHEMA + MIGRATIONS，row_factory=Row。"""
+    """内存 aiosqlite 连接，已应用 SCHEMA + MIGRATIONS，row_factory=Row。
+
+    同时把这个连接注册为 app.database.get_db() 的测试期共享连接：被测代码里各自
+    open 一个 get_db() 的工具/服务函数，会拿到指向同一份内存库的（不真正关闭的）代理，
+    从而看到这里 seed 的数据。测试自己对返回的 db 调用 close() 时，会真正关闭连接并
+    清空共享注册，不会污染后续测试。
+    """
     db = await aiosqlite.connect(":memory:")
     db.row_factory = aiosqlite.Row
     await db.executescript(SCHEMA)
@@ -14,6 +21,15 @@ async def make_db():
         except Exception:
             pass
     await db.commit()
+
+    _db_mod._TEST_OVERRIDE_DB = db
+    real_close = db.close
+
+    async def _close_and_unregister():
+        _db_mod._TEST_OVERRIDE_DB = None
+        await real_close()
+
+    db.close = _close_and_unregister
     return db
 
 
