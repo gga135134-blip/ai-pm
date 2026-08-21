@@ -24,7 +24,8 @@ from app.services.media_ai import (
 from app.services.media_legacy import split_legacy_scripts, create_legacy_contents
 from app.services.media_mine_queue import (
     enqueue_candidates, list_pending_grouped, adopt_candidates, discard_candidates)
-from app.services.media_batch import run_organize_one, run_mine_one
+from app.services.media_batch import (
+    run_organize_one, run_mine_one, start_batch, get_status as batch_get_status)
 from app.services.media_playbook import list_playbooks, get_playbook
 from app.services.media_flow import finalize_updates, clean_body
 from app.services.media_decision import build_decision_context, rank_pool
@@ -1226,6 +1227,38 @@ async def mine_review_discard(candidate_ids: list[str] = Form([])):
         finally:
             await db.close()
     return RedirectResponse("/media/mine-review", status_code=303)
+
+
+@router.post("/media/legacy/batch")
+async def legacy_batch(request: Request, op: str = Form(...),
+                       content_ids: list[str] = Form([]), force: int = Form(0)):
+    """起后台批量任务（整理/挖矿）。离页不断，服务器重启才中断。"""
+    db = await get_db()
+    try:
+        pid = await _current_persona_id(request, db)
+    finally:
+        await db.close()
+    if not pid:
+        return JSONResponse({"ok": False, "error": "请先选人设"})
+    if not content_ids:
+        return JSONResponse({"ok": False, "error": "先勾选内容"})
+    started = start_batch(pid, op, content_ids)
+    return JSONResponse({"ok": True, "started": started,
+                         "error": "" if started else "已有任务在跑，等它跑完"})
+
+
+@router.get("/media/legacy/batch-status")
+async def legacy_batch_status(request: Request):
+    db = await get_db()
+    try:
+        pid = await _current_persona_id(request, db)
+        st = batch_get_status(pid) if pid else None
+    finally:
+        await db.close()
+    if not st:
+        return JSONResponse({"running": False})
+    return JSONResponse({"running": st.get("running", False), "op": st.get("op_label", ""),
+                         "done": st.get("done", 0), "total": st.get("total", 0)})
 
 
 @router.post("/media/content/{cid}/organize")
