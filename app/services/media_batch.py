@@ -1,4 +1,7 @@
-"""媒体批量后台跑：per-content 核心（路由与后台跑器共用）+ 后台跑器（Task 2）。"""
+"""媒体批量后台跑：per-content 核心（路由与后台跑器共用）+ 后台跑器。"""
+import asyncio
+import threading
+from app.database import get_db
 from app.services.media_ai import organize_content, mine_from_transcript, mine_structure
 from app.services.media_mine_queue import enqueue_candidates
 from app.services.media_assistant import log_action
@@ -56,3 +59,61 @@ async def run_mine_one(db, cid, kind, force=0) -> dict:
         await db.commit()
         return {"ok": True, "added": added, "skipped": ""}
     return {"ok": False, "error": "kind 非法"}
+
+
+# ─────────────── 后台跑器（每人设一个活跃任务·内存进度） ───────────────
+_jobs = {}
+_lock = threading.Lock()
+_OP_LABEL = {"organize": "整理", "mine_signature": "挖记忆点", "mine_essence": "挖精华"}
+
+
+def get_status(persona_id):
+    with _lock:
+        j = _jobs.get(persona_id)
+        return dict(j) if j else None
+
+
+def start_batch(persona_id, op, content_ids) -> bool:
+    if op not in ("organize", "mine_signature", "mine_essence"):
+        return False
+    ids = [str(c) for c in (content_ids or [])]
+    if not ids:
+        return False
+    with _lock:
+        j = _jobs.get(persona_id)
+        if j and j.get("running"):
+            return False
+        _jobs[persona_id] = {"op": op, "op_label": _OP_LABEL.get(op, op),
+                             "done": 0, "total": len(ids), "running": True, "ok_count": 0}
+    asyncio.create_task(_run_batch(persona_id, op, ids))
+    return True
+
+
+async def _run_batch(persona_id, op, content_ids):
+    try:
+        for cid in content_ids:
+            db = await get_db()
+            try:
+                if op == "organize":
+                    r = await run_organize_one(db, cid)
+                elif op == "mine_signature":
+                    r = await run_mine_one(db, cid, "signature")
+                elif op == "mine_essence":
+                    r = await run_mine_one(db, cid, "essence")
+                else:
+                    r = {"ok": False}
+            except Exception:
+                r = {"ok": False}
+            finally:
+                await db.close()
+            with _lock:
+                j = _jobs.get(persona_id)
+                if j:
+                    j["done"] += 1
+                    if r.get("ok"):
+                        j["ok_count"] += 1
+    finally:
+        with _lock:
+            j = _jobs.get(persona_id)
+            if j:
+                j["running"] = False
