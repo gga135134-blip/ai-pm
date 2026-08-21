@@ -550,28 +550,7 @@ CREATE TABLE IF NOT EXISTS media_assistant_message (
 """
 
 
-# 测试专用：当某个连接需要被多处 get_db() 调用共享时（例如工具函数各自开自己的连接，
-# 但测试用内存库预先 seed 好数据），测试可把连接塞进这里；get_db() 命中时返回一个
-# 不会真正关闭底层连接的包装，交由测试自己在结束时关闭真实连接、并清空这个变量。
-_TEST_OVERRIDE_DB = None
-
-
-class _NoCloseConnProxy:
-    """转发除 close() 外的一切调用；close() 是 no-op，真实连接由测试自己关闭。"""
-
-    def __init__(self, real):
-        self._real = real
-
-    def __getattr__(self, name):
-        return getattr(self._real, name)
-
-    async def close(self):
-        return None
-
-
 async def get_db() -> aiosqlite.Connection:
-    if _TEST_OVERRIDE_DB is not None:
-        return _NoCloseConnProxy(_TEST_OVERRIDE_DB)
     db = await aiosqlite.connect(str(DB_PATH))
     db.row_factory = aiosqlite.Row
     await db.execute("PRAGMA journal_mode=WAL")
