@@ -44,6 +44,12 @@
 
 {{ shell.media_shell('publish' if is_pub else 'content', persona=persona) }}
 
+<a href="/media/assistant" class="card" style="display:flex; align-items:center; gap:10px; margin:12px 0; padding:12px 14px; text-decoration:none; color:inherit; border:1px solid var(--border); border-radius:10px">
+  <span style="font-size:20px">🤖</span>
+  <span><b style="font-size:13.5px">AI 助手</b><span style="color:var(--ink-3); font-size:12px; margin-left:8px">用一句话查/建/写下一条，改动都留痕可撤</span></span>
+  <span style="margin-left:auto; color:var(--ink-3)">→</span>
+</a>
+
 <h1 class="pname" style="margin:0 0 5px">{{ '发布' if is_pub else '内容' }}</h1>
 <p style="font-size:13px;color:var(--ink-3);line-height:1.6;margin:0 0 16px;max-width:620px">
   {% if is_pub %}
