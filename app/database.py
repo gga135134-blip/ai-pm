@@ -522,6 +522,31 @@ CREATE TABLE IF NOT EXISTS media_mine_candidate (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (persona_id) REFERENCES media_persona(id)
 );
+
+CREATE TABLE IF NOT EXISTS media_assistant_action (
+    id TEXT PRIMARY KEY,
+    persona_id TEXT NOT NULL,
+    conversation_ref TEXT DEFAULT '',
+    action_type TEXT NOT NULL,
+    target_table TEXT DEFAULT '',
+    target_id TEXT DEFAULT '',
+    before_json TEXT DEFAULT '',
+    after_json TEXT DEFAULT '',
+    status TEXT DEFAULT 'applied',
+    reversible INTEGER DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (persona_id) REFERENCES media_persona(id)
+);
+
+CREATE TABLE IF NOT EXISTS media_assistant_message (
+    id TEXT PRIMARY KEY,
+    persona_id TEXT NOT NULL,
+    role TEXT DEFAULT 'user',
+    content TEXT DEFAULT '',
+    cost REAL DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (persona_id) REFERENCES media_persona(id)
+);
 """
 
 
@@ -574,6 +599,7 @@ MIGRATIONS = [
     # 选题溯源到主题（可空：AI 自由推的选题没有主题来源）。
     # 价值在复盘：能回答「哪个主题最出爆款」，而不只是「哪条视频数据好」。
     "ALTER TABLE media_topic ADD COLUMN theme_id TEXT DEFAULT ''",
+    "ALTER TABLE media_content ADD COLUMN parent_content_id TEXT DEFAULT ''",
 ]
 
 
