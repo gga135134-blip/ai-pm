@@ -43,6 +43,10 @@ async def revert_action(db, action_id) -> bool:
         # 草稿类 → 还原 ai_draft
         await db.execute("UPDATE media_content SET ai_draft=? WHERE id=?",
                          (before.get("ai_draft", ""), a["target_id"]))
+    elif a["action_type"] == "organize_format":
+        # 整理格式 → 还原 script
+        await db.execute("UPDATE media_content SET script=? WHERE id=?",
+                         (before.get("script", ""), a["target_id"]))
     else:
         return False
     await db.execute("UPDATE media_assistant_action SET status='reverted' WHERE id=?", (action_id,))
