@@ -36,7 +36,10 @@ from app.services.media_phase_review import (
 from app.services.ai_router import _load_config
 from app.services.agent_tools import run_agent_loop
 from app.services.media_agent_tools import MEDIA_TOOL_SCHEMAS, dispatch_media_tool
-from app.services.media_assistant import MEDIA_ASSISTANT_SYSTEM, list_actions, revert_action, log_action
+from app.services.media_assistant import (
+    MEDIA_ASSISTANT_SYSTEM, list_actions, revert_action, log_action,
+    apply_action, cancel_action, list_pending,
+)
 from app.services.constitution import with_constitution
 from app.config import BASE_DIR
 
@@ -2029,7 +2032,13 @@ async def assistant_ask(request: Request, message: str = Form(...)):
     finally:
         await db.close()
     steps = [s.get("tool") for s in result.get("steps", [])]
-    return JSONResponse({"ok": True, "reply": reply, "steps": steps, "cost": result.get("cost", 0)})
+    db = await get_db()
+    try:
+        pend = await list_pending(db, pid)
+    finally:
+        await db.close()
+    return JSONResponse({"ok": True, "reply": reply, "steps": steps,
+                         "cost": result.get("cost", 0), "pending_count": len(pend)})
 
 
 @router.post("/media/assistant/clear")
@@ -2071,3 +2080,39 @@ async def assistant_action_revert(aid: str):
     finally:
         await db.close()
     return RedirectResponse("/media/assistant/actions", status_code=303)
+
+
+@router.post("/media/assistant/action/{aid}/apply")
+async def assistant_action_apply(aid: str):
+    db = await get_db()
+    try:
+        ok = await apply_action(db, aid)
+    finally:
+        await db.close()
+    return JSONResponse({"ok": ok})
+
+
+@router.post("/media/assistant/action/{aid}/cancel")
+async def assistant_action_cancel(aid: str):
+    db = await get_db()
+    try:
+        ok = await cancel_action(db, aid)
+    finally:
+        await db.close()
+    return JSONResponse({"ok": ok})
+
+
+@router.get("/media/assistant/pending")
+async def assistant_pending(request: Request):
+    db = await get_db()
+    try:
+        pid = await _current_persona_id(request, db)
+        items = await list_pending(db, pid) if pid else []
+    finally:
+        await db.close()
+    out = []
+    for a in items:
+        after = json.loads(a["after_json"] or "{}")
+        out.append({"id": a["id"], "action_type": a["action_type"],
+                    "summary": after.get("summary", a["action_type"])})
+    return JSONResponse({"pending": out})
