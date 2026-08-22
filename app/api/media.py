@@ -2116,3 +2116,19 @@ async def assistant_pending(request: Request):
         out.append({"id": a["id"], "action_type": a["action_type"],
                     "summary": after.get("summary", a["action_type"])})
     return JSONResponse({"pending": out})
+
+
+@router.get("/media/assistant/history")
+async def assistant_history(request: Request):
+    db = await get_db()
+    try:
+        pid = await _current_persona_id(request, db)
+        msgs = []
+        if pid:
+            cur = await db.execute(
+                "SELECT role,content FROM media_assistant_message WHERE persona_id=? "
+                "ORDER BY created_at LIMIT 40", (pid,))
+            msgs = [dict(r) for r in await cur.fetchall()]
+    finally:
+        await db.close()
+    return JSONResponse({"messages": msgs})
