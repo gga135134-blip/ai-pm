@@ -326,10 +326,21 @@ async def _tool_adopt_playbook(args, pid):
                               "evidence": a.get("evidence", ""), "similar_to": a.get("similar_to", "")})
 
 
+async def _tool_run_cycle_review(args, pid):
+    return await _core_stage(pid, "run_l2", "media_review_cycle", "",
+                             {"summary": "跑一轮周期复盘 L2（会花 AI 费用）"})
+
+
+async def _tool_run_phase_review(args, pid):
+    return await _core_stage(pid, "run_l3", "media_phase_review", "",
+                             {"summary": "跑一轮阶段复盘 L3（会花 AI 费用）"})
+
+
 _CORE = {
     "mark_winner": _tool_mark_winner, "delete_content": _tool_delete_content,
     "adopt_signature": _tool_adopt_signature, "adopt_material": _tool_adopt_material,
     "adopt_playbook": _tool_adopt_playbook,
+    "run_cycle_review": _tool_run_cycle_review, "run_phase_review": _tool_run_phase_review,
 }
 
 
@@ -377,6 +388,8 @@ MEDIA_TOOL_SCHEMAS += [
             {"name": {"type": "string"}, "structure": {"type": "string"},
              "when_to_use": {"type": "string"}, "evidence": {"type": "string"},
              "similar_to": {"type": "string"}}, ["name"]),
+    _schema("run_cycle_review", "跑一轮周期复盘 L2（需人确认，会花 AI 费用）。"),
+    _schema("run_phase_review", "跑一轮阶段复盘 L3（需人确认，会花 AI 费用）。"),
 ]
 
 

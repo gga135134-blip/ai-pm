@@ -90,6 +90,14 @@ async def apply_action(db, action_id) -> bool:
                 (nid, pid, name, (after.get("structure") or "").strip(),
                  (after.get("when_to_use") or "").strip(), (after.get("evidence") or "").strip()))
             after["created_id"], after["created_table"] = nid, "media_playbook"
+    elif at == "run_l2":
+        from app.services.media_review_cycle import run_l2_cycle
+        await run_l2_cycle(db, pid, force=True)
+        reversible = 0
+    elif at == "run_l3":
+        from app.services.media_phase_review import run_l3_review
+        await run_l3_review(db, pid, force=True)
+        reversible = 0
     else:
         return False
     await db.execute(
