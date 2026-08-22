@@ -1,3 +1,24 @@
+<style>
+#chat .msg{ margin:10px 0; }
+#chat .md{ margin-top:2px; }
+#chat .md-p{ margin:6px 0; }
+#chat .md-h{ font-weight:700; color:var(--ink-1); margin:12px 0 6px; line-height:1.3; }
+#chat .md-h1{ font-size:17px; }
+#chat .md-h2{ font-size:15.5px; }
+#chat .md-h3{ font-size:14px; }
+#chat .md-h4, #chat .md-h5, #chat .md-h6{ font-size:13.5px; color:var(--ink-2); }
+#chat .md-l{ margin:6px 0; padding-left:22px; }
+#chat .md-l li{ margin:3px 0; }
+#chat .md-hr{ border:0; border-top:1px solid var(--border); margin:12px 0; }
+#chat .md-ic{ font-family:var(--mono); font-size:12px; background:var(--panel-2); padding:1px 5px; border-radius:4px; }
+#chat .md-c{ font-family:var(--mono); font-size:12px; background:var(--panel-2); border:1px solid var(--border); border-radius:6px; padding:10px 12px; overflow-x:auto; white-space:pre; margin:8px 0; line-height:1.5; }
+#chat .md-t{ border-collapse:collapse; margin:8px 0; font-size:12.5px; max-width:100%; display:block; overflow-x:auto; }
+#chat .md-t th, #chat .md-t td{ border:1px solid var(--border); padding:5px 10px; text-align:left; vertical-align:top; }
+#chat .md-t th{ background:var(--panel-2); font-weight:600; }
+#chat .md strong{ font-weight:700; color:var(--ink-1); }
+#chat .md em{ font-style:italic; }
+#chat .md a{ color:var(--accent); }
+</style>
 <div id="chat" style="border:1px solid var(--border); border-radius:10px; padding:12px; min-height:280px; max-height:55vh; overflow-y:auto; font-size:13.5px; line-height:1.6">
   <div style="color:var(--ink-3)">加载中…</div>
 </div>
@@ -9,8 +30,61 @@
 <div id="ast-status" style="font-size:12px; color:var(--ai); margin-top:6px; min-height:16px"></div>
 <script>
 const chat=document.getElementById('chat');
-function bubble(who,text){ const d=document.createElement('div'); d.style.margin='8px 0';
-  d.innerHTML='<b style="color:'+(who==='助手'?'var(--ai)':'var(--ink-1)')+'">'+who+'：</b>'+(text||'').replace(/</g,'&lt;'); chat.appendChild(d); chat.scrollTop=chat.scrollHeight; }
+const MD_CODE='';
+function mdEsc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function mdInline(s){
+  return s
+    .replace(/`([^`]+)`/g,'<code class="md-ic">$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>')
+    .replace(/(^|[^*])\*([^*\n]+)\*/g,'$1<em>$2</em>')
+    .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>');
+}
+// 轻量 markdown 渲染：标题/粗细/斜体/行内码/代码块/表格/有序无序列表/分割线/段落。先转义再渲染防 XSS。
+function renderMd(src){
+  src=(src||'').replace(/\r\n/g,'\n');
+  const codes=[];
+  src=src.replace(/```([\s\S]*?)```/g,function(_,c){ codes.push(c.replace(/^[^\n]*\n/,'')); return MD_CODE+'CODE'+(codes.length-1)+MD_CODE; });
+  src=mdEsc(src);
+  const lines=src.split('\n'); const out=[]; let i=0;
+  const isList=l=>/^\s*([-*+]|\d+[.、)）])\s+/.test(l);
+  const isHead=l=>/^#{1,6}\s+/.test(l);
+  const tableSep=l=>/^\s*\|?[\s:|-]+\|?\s*$/.test(l) && /-/.test(l);
+  const cells=r=>r.replace(/^\s*\|/,'').replace(/\|\s*$/,'').split('|').map(c=>mdInline(c.trim()));
+  while(i<lines.length){
+    const ln=lines[i];
+    if(/\|/.test(ln) && i+1<lines.length && tableSep(lines[i+1])){
+      const header=ln; i+=2; const body=[];
+      while(i<lines.length && /\|/.test(lines[i]) && lines[i].trim()){ body.push(lines[i]); i++; }
+      let t='<table class="md-t"><thead><tr>'+cells(header).map(c=>'<th>'+c+'</th>').join('')+'</tr></thead><tbody>';
+      body.forEach(r=>{ t+='<tr>'+cells(r).map(c=>'<td>'+c+'</td>').join('')+'</tr>'; });
+      out.push(t+'</tbody></table>'); continue;
+    }
+    const hm=ln.match(/^(#{1,6})\s+(.*)$/);
+    if(hm){ out.push('<div class="md-h md-h'+hm[1].length+'">'+mdInline(hm[2])+'</div>'); i++; continue; }
+    if(/^\s*([-*_])\1\1[-*_\s]*$/.test(ln)){ out.push('<hr class="md-hr">'); i++; continue; }
+    if(isList(ln)){
+      const ordered=/^\s*\d/.test(ln); const items=[];
+      while(i<lines.length && isList(lines[i])){ items.push('<li>'+mdInline(lines[i].replace(/^\s*([-*+]|\d+[.、)）])\s+/,''))+'</li>'); i++; }
+      out.push('<'+(ordered?'ol':'ul')+' class="md-l">'+items.join('')+'</'+(ordered?'ol':'ul')+'>'); continue;
+    }
+    const cm=ln.match(new RegExp('^'+MD_CODE+'CODE(\\d+)'+MD_CODE+'$'));
+    if(cm){ out.push('<pre class="md-c">'+mdEsc(codes[+cm[1]])+'</pre>'); i++; continue; }
+    if(/^\s*$/.test(ln)){ i++; continue; }
+    const para=[ln]; i++;
+    while(i<lines.length && lines[i].trim() && !isHead(lines[i]) && !isList(lines[i]) &&
+          !(/\|/.test(lines[i]) && i+1<lines.length && tableSep(lines[i+1]))){
+      para.push(lines[i]); i++;
+    }
+    out.push('<p class="md-p">'+para.map(mdInline).join('<br>')+'</p>');
+  }
+  return out.join('').replace(new RegExp(MD_CODE+'CODE(\\d+)'+MD_CODE,'g'),function(_,n){ return '<pre class="md-c">'+mdEsc(codes[+n])+'</pre>'; });
+}
+function bubble(who,text){
+  const d=document.createElement('div'); d.className='msg';
+  const label='<b class="who" style="color:'+(who==='助手'?'var(--ai)':'var(--ink-1)')+'">'+who+'：</b>';
+  d.innerHTML=label+'<div class="md">'+renderMd(text)+'</div>';
+  chat.appendChild(d); chat.scrollTop=chat.scrollHeight;
+}
 async function initHistory(){
   try{
     const d=await (await fetch('/media/assistant/history')).json();
