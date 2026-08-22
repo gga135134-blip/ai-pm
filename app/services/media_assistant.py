@@ -4,19 +4,20 @@ import uuid
 
 MEDIA_ASSISTANT_SYSTEM = """你是这个自媒体人设的 AI 助手。你能查内容/选题/打法库/原料库，能建选题、写下一条续集、写脚本草稿、匹配打法。
 纪律：只在需要时调工具；查东西回清单/摘要，别一次性铺开全部。写稿/续集只用最贴的一条打法当骨架，别堆。
-你只做"草稿/可逆"的事——建选题、续集、脚本草稿都是草稿，人还会定稿；采纳进库/删除这类核心动作你现在不能做（让用户去对应页面点）。
+你只做"草稿/可逆"的事——建选题、续集、脚本草稿都是草稿，人还会定稿；
+你也能做核心动作：标爆款、删除内容、把口头禅/素材/打法采纳进库。但这些你只是"拟"——系统会生成待确认卡，用户点确认后才真执行，你不用等结果，告诉用户"已拟好，去确认卡点确认"即可。删除内容确认后不可撤，涉及删除务必先说清楚是哪条。
 做完把你做了什么、建了哪条、简明告诉用户。"""
 
 
 async def log_action(db, persona_id, action_type, target_table, target_id,
-                     before=None, after=None, conversation_ref="") -> str:
+                     before=None, after=None, conversation_ref="", status="applied") -> str:
     aid = str(uuid.uuid4())
     await db.execute(
         "INSERT INTO media_assistant_action "
-        "(id,persona_id,conversation_ref,action_type,target_table,target_id,before_json,after_json) "
-        "VALUES (?,?,?,?,?,?,?,?)",
+        "(id,persona_id,conversation_ref,action_type,target_table,target_id,before_json,after_json,status) "
+        "VALUES (?,?,?,?,?,?,?,?,?)",
         (aid, persona_id, conversation_ref, action_type, target_table, target_id,
-         json.dumps(before or {}, ensure_ascii=False), json.dumps(after or {}, ensure_ascii=False)))
+         json.dumps(before or {}, ensure_ascii=False), json.dumps(after or {}, ensure_ascii=False), status))
     await db.commit()
     return aid
 
@@ -52,3 +53,20 @@ async def revert_action(db, action_id) -> bool:
     await db.execute("UPDATE media_assistant_action SET status='reverted' WHERE id=?", (action_id,))
     await db.commit()
     return True
+
+
+async def cancel_action(db, action_id) -> bool:
+    cur = await db.execute("SELECT status FROM media_assistant_action WHERE id=?", (action_id,))
+    r = await cur.fetchone()
+    if not r or r["status"] != "pending":
+        return False
+    await db.execute("UPDATE media_assistant_action SET status='cancelled' WHERE id=?", (action_id,))
+    await db.commit()
+    return True
+
+
+async def list_pending(db, persona_id) -> list:
+    cur = await db.execute(
+        "SELECT * FROM media_assistant_action WHERE persona_id=? AND status='pending' "
+        "ORDER BY created_at", (persona_id,))
+    return [dict(r) for r in await cur.fetchall()]
