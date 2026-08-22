@@ -4,6 +4,8 @@ import json, uuid
 from app.database import get_db
 from app.services.media_assistant import log_action
 from app.services.ai_router import ask_ai
+from app.services.media_review_cycle import list_cycles as _list_cycles, get_cycle as _get_cycle
+from app.services.media_phase_review import list_phase_reviews as _list_phase, get_phase_review as _get_phase
 
 
 async def _tool_list_contents(args, pid):
@@ -101,11 +103,58 @@ async def _tool_list_anchors(args, pid):
     return "\n".join(f"{r['name']}（{r['type']}·{r['status']}）" for r in rows) or "（暂无锚点）"
 
 
+async def _tool_list_cycles(args, pid):
+    db = await get_db()
+    try:
+        rows = await _list_cycles(db, pid)
+    finally:
+        await db.close()
+    if not rows:
+        return "（还没有周期复盘 L2）"
+    return "\n".join(f"[{r['id']}] 第{r.get('seq','?')}轮 · {str(r.get('created_at',''))[:10]}" for r in rows[:30])
+
+
+async def _tool_read_cycle(args, pid):
+    db = await get_db()
+    try:
+        r = await _get_cycle(db, (args or {}).get("id", ""))
+    finally:
+        await db.close()
+    if not r or r.get("persona_id") != pid:
+        return "（找不到这轮复盘，或不属于当前人设）"
+    return (f"第{r.get('seq','?')}轮周期复盘\n规律：{str(r.get('patterns') or '')[:800]}\n"
+            f"建议：{str(r.get('advisory') or '')[:500]}")
+
+
+async def _tool_list_phase_reviews(args, pid):
+    db = await get_db()
+    try:
+        rows = await _list_phase(db, pid)
+    finally:
+        await db.close()
+    if not rows:
+        return "（还没有阶段复盘 L3）"
+    return "\n".join(f"[{r['id']}] 第{r.get('seq','?')}轮 · {r.get('phase_reco','')} · {str(r.get('created_at',''))[:10]}" for r in rows[:30])
+
+
+async def _tool_read_phase_review(args, pid):
+    db = await get_db()
+    try:
+        r = await _get_phase(db, (args or {}).get("id", ""))
+    finally:
+        await db.close()
+    if not r or r.get("persona_id") != pid:
+        return "（找不到这轮阶段复盘，或不属于当前人设）"
+    return (f"第{r.get('seq','?')}轮阶段复盘\n建议：{r.get('phase_reco','')}｜{str(r.get('phase_reason') or '')[:500]}")
+
+
 _READ = {
     "list_contents": _tool_list_contents, "read_content": _tool_read_content,
     "list_topics": _tool_list_topics, "list_playbooks": _tool_list_playbooks,
     "list_materials": _tool_list_materials, "list_audiences": _tool_list_audiences,
     "list_anchors": _tool_list_anchors,
+    "list_cycles": _tool_list_cycles, "read_cycle": _tool_read_cycle,
+    "list_phase_reviews": _tool_list_phase_reviews, "read_phase_review": _tool_read_phase_review,
 }
 
 
@@ -277,10 +326,21 @@ async def _tool_adopt_playbook(args, pid):
                               "evidence": a.get("evidence", ""), "similar_to": a.get("similar_to", "")})
 
 
+async def _tool_run_cycle_review(args, pid):
+    return await _core_stage(pid, "run_l2", "media_review_cycle", "",
+                             {"summary": "跑一轮周期复盘 L2（会花 AI 费用）"})
+
+
+async def _tool_run_phase_review(args, pid):
+    return await _core_stage(pid, "run_l3", "media_phase_review", "",
+                             {"summary": "跑一轮阶段复盘 L3（会花 AI 费用）"})
+
+
 _CORE = {
     "mark_winner": _tool_mark_winner, "delete_content": _tool_delete_content,
     "adopt_signature": _tool_adopt_signature, "adopt_material": _tool_adopt_material,
     "adopt_playbook": _tool_adopt_playbook,
+    "run_cycle_review": _tool_run_cycle_review, "run_phase_review": _tool_run_phase_review,
 }
 
 
@@ -299,6 +359,10 @@ MEDIA_TOOL_SCHEMAS = [
     _schema("list_materials", "列出原料库（本人设 + 公司共享料）。"),
     _schema("list_audiences", "列出当前人设的受众。"),
     _schema("list_anchors", "列出当前人设的锚点。"),
+    _schema("list_cycles", "列出周期复盘(L2)历轮。"),
+    _schema("read_cycle", "读某轮周期复盘的规律/建议。", {"id": {"type": "string"}}, ["id"]),
+    _schema("list_phase_reviews", "列出阶段复盘(L3)历轮。"),
+    _schema("read_phase_review", "读某轮阶段复盘的阶段建议。", {"id": {"type": "string"}}, ["id"]),
 ]
 
 MEDIA_TOOL_SCHEMAS += [
@@ -324,6 +388,8 @@ MEDIA_TOOL_SCHEMAS += [
             {"name": {"type": "string"}, "structure": {"type": "string"},
              "when_to_use": {"type": "string"}, "evidence": {"type": "string"},
              "similar_to": {"type": "string"}}, ["name"]),
+    _schema("run_cycle_review", "跑一轮周期复盘 L2（需人确认，会花 AI 费用）。"),
+    _schema("run_phase_review", "跑一轮阶段复盘 L3（需人确认，会花 AI 费用）。"),
 ]
 
 

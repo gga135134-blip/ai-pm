@@ -11,54 +11,7 @@
     <a href="/media/assistant/actions" style="font-size:12.5px; margin-left:auto">改动记录</a>
     <a href="/media" style="font-size:12.5px">← 全部人设</a>
   </div>
-  <p style="font-size:12.5px;color:var(--ink-3);margin:0 0 12px">让它查内容/选题/打法库，或建选题、写下一条续集、写脚本草稿。核心动作（采纳入库/删除）暂时去对应页面点。</p>
-  <div id="chat" style="border:1px solid var(--border); border-radius:10px; padding:12px; min-height:340px; max-height:60vh; overflow-y:auto; font-size:13.5px; line-height:1.6">
-    {% for m in msgs %}
-    <div style="margin:8px 0"><b style="color:{{ 'var(--ai)' if m.role=='assistant' else 'var(--ink-1)' }}">{{ '助手' if m.role=='assistant' else '我' }}：</b>{{ m.content }}</div>
-    {% else %}<div style="color:var(--ink-3)">还没聊过。试试："帮我列一下已发的内容" 或 "针对某条写下一条"。</div>{% endfor %}
-  </div>
-  <div id="ast-pending" style="margin:10px 0"></div>
-  <div style="display:flex; gap:8px; margin-top:10px">
-    <input id="ast-input" placeholder="跟助手说…（回车发送）" style="flex:1; padding:9px 12px" onkeydown="if(event.key==='Enter')astSend()">
-    <button onclick="astSend()" id="ast-btn" class="btn primary">发送</button>
-  </div>
-  <div id="ast-status" style="font-size:12px; color:var(--ai); margin-top:6px; min-height:16px"></div>
+  <p style="font-size:12.5px;color:var(--ink-3);margin:0 0 12px">让它查内容/选题/打法库/复盘，建选题·续集·脚本草稿，或标爆款/删除/采纳入库/跑复盘——核心动作会出待确认卡，点确认才执行。</p>
+  {% include "_media_assistant_box.html" %}
 </div>
-<script>
-const chat=document.getElementById('chat');
-function bubble(who,text){ const d=document.createElement('div'); d.style.margin='8px 0';
-  d.innerHTML='<b style="color:'+(who==='助手'?'var(--ai)':'var(--ink-1)')+'">'+who+'：</b>'+text.replace(/</g,'&lt;'); chat.appendChild(d); chat.scrollTop=chat.scrollHeight; }
-async function astSend(){
-  const inp=document.getElementById('ast-input'); const msg=inp.value.trim(); if(!msg) return;
-  const btn=document.getElementById('ast-btn'), st=document.getElementById('ast-status');
-  bubble('我',msg); inp.value=''; btn.disabled=true; st.textContent='助手在想（可能会调工具）…';
-  try{
-    const fd=new FormData(); fd.append('message',msg);
-    const r=await fetch('/media/assistant/ask',{method:'POST',body:fd});
-    const txt=await r.text(); let d; try{ d=JSON.parse(txt); }catch(_){ st.textContent='没返回内容，稍后重试'; btn.disabled=false; return; }
-    if(d.ok){ bubble('助手',d.reply); st.textContent=(d.steps&&d.steps.length?('调了：'+d.steps.join('、')+' · '):'')+'花费 $'+(d.cost||0).toFixed(4); loadPending(); }
-    else st.textContent='失败：'+(d.error||'');
-  }catch(e){ st.textContent='请求失败：'+e; }
-  btn.disabled=false;
-}
-async function loadPending(){
-  const box=document.getElementById('ast-pending');
-  try{
-    const d=await (await fetch('/media/assistant/pending')).json();
-    if(!d.pending || !d.pending.length){ box.innerHTML=''; return; }
-    box.innerHTML='<div style="font-size:12px;color:var(--ink-3);margin-bottom:4px">待确认（点确认才执行）</div>'+
-      d.pending.map(function(p){
-        return '<div style="border:1px solid var(--ai);border-radius:8px;padding:10px;margin:6px 0;background:var(--ai-soft)">'+
-          '<div style="font-size:13px;margin-bottom:6px">'+p.summary.replace(/</g,'&lt;')+'</div>'+
-          '<button class="btn primary" style="font-size:12px;padding:4px 12px" onclick="confirmAction(\''+p.id+'\',\'apply\')">确认</button> '+
-          '<button class="btn" style="font-size:12px;padding:4px 12px" onclick="confirmAction(\''+p.id+'\',\'cancel\')">取消</button></div>';
-      }).join('');
-  }catch(e){}
-}
-async function confirmAction(id, act){
-  await fetch('/media/assistant/action/'+id+'/'+act,{method:'POST'});
-  loadPending();
-}
-document.addEventListener('DOMContentLoaded', loadPending);
-</script>
 {% endblock %}
