@@ -210,6 +210,80 @@ _WRITE = {
 }
 
 
+async def _core_stage(pid, action_type, target_table, target_id, after):
+    db = await get_db()
+    try:
+        await log_action(db, pid, action_type, target_table, target_id, after=after, status="pending")
+    finally:
+        await db.close()
+    return "已拟好：" + after.get("summary", "") + "。去助手页待确认卡点「确认」才执行。"
+
+
+async def _tool_mark_winner(args, pid):
+    cid = (args or {}).get("content_id", "")
+    db = await get_db()
+    try:
+        cur = await db.execute("SELECT title FROM media_content WHERE id=? AND persona_id=?", (cid, pid))
+        row = await cur.fetchone()
+    finally:
+        await db.close()
+    if not row:
+        return "（找不到这条内容，或不属于当前人设）"
+    return await _core_stage(pid, "mark_winner", "media_content", cid,
+                             {"summary": f"把《{row['title']}》标为爆款", "content_id": cid})
+
+
+async def _tool_delete_content(args, pid):
+    cid = (args or {}).get("content_id", "")
+    db = await get_db()
+    try:
+        cur = await db.execute("SELECT title FROM media_content WHERE id=? AND persona_id=?", (cid, pid))
+        row = await cur.fetchone()
+    finally:
+        await db.close()
+    if not row:
+        return "（找不到这条内容，或不属于当前人设）"
+    return await _core_stage(pid, "delete_content", "media_content", cid,
+                             {"summary": f"删除《{row['title']}》（确认后不可撤）", "content_id": cid})
+
+
+async def _tool_adopt_signature(args, pid):
+    content = ((args or {}).get("content") or "").strip()
+    if not content:
+        return "（要采纳的口头禅内容为空）"
+    return await _core_stage(pid, "adopt_signature", "media_persona_trait", "",
+                             {"summary": f"把口头禅「{content[:20]}」加进人设",
+                              "content": content, "evidence": (args or {}).get("evidence", "")})
+
+
+async def _tool_adopt_material(args, pid):
+    content = ((args or {}).get("content") or "").strip()
+    if not content:
+        return "（要采纳的素材内容为空）"
+    return await _core_stage(pid, "adopt_material", "media_material", "",
+                             {"summary": f"把素材「{content[:20]}」存进原料库",
+                              "type": (args or {}).get("type", "story"), "content": content,
+                              "brief": (args or {}).get("brief", ""), "evidence": (args or {}).get("evidence", "")})
+
+
+async def _tool_adopt_playbook(args, pid):
+    name = ((args or {}).get("name") or "").strip()
+    if not name:
+        return "（打法名为空）"
+    a = args or {}
+    return await _core_stage(pid, "adopt_playbook", "media_playbook", "",
+                             {"summary": f"把打法《{name}》采纳进打法库", "name": name,
+                              "structure": a.get("structure", ""), "when_to_use": a.get("when_to_use", ""),
+                              "evidence": a.get("evidence", ""), "similar_to": a.get("similar_to", "")})
+
+
+_CORE = {
+    "mark_winner": _tool_mark_winner, "delete_content": _tool_delete_content,
+    "adopt_signature": _tool_adopt_signature, "adopt_material": _tool_adopt_material,
+    "adopt_playbook": _tool_adopt_playbook,
+}
+
+
 def _schema(name, desc, props=None, required=None):
     return {"type": "function", "function": {
         "name": name, "description": desc,
@@ -238,9 +312,23 @@ MEDIA_TOOL_SCHEMAS += [
             {"content_id": {"type": "string"}}, ["content_id"]),
 ]
 
+MEDIA_TOOL_SCHEMAS += [
+    _schema("mark_winner", "把某条内容标为爆款（需人确认）。", {"content_id": {"type": "string"}}, ["content_id"]),
+    _schema("delete_content", "删除某条内容（需人确认，确认后不可撤）。", {"content_id": {"type": "string"}}, ["content_id"]),
+    _schema("adopt_signature", "把一句口头禅采纳进人设（需人确认）。",
+            {"content": {"type": "string"}, "evidence": {"type": "string"}}, ["content"]),
+    _schema("adopt_material", "把一条素材采纳进原料库（需人确认）。",
+            {"type": {"type": "string"}, "content": {"type": "string"},
+             "brief": {"type": "string"}, "evidence": {"type": "string"}}, ["content"]),
+    _schema("adopt_playbook", "把一个打法采纳进打法库（需人确认）。",
+            {"name": {"type": "string"}, "structure": {"type": "string"},
+             "when_to_use": {"type": "string"}, "evidence": {"type": "string"},
+             "similar_to": {"type": "string"}}, ["name"]),
+]
+
 
 async def dispatch_media_tool(name, args, persona_id):
-    fn = _READ.get(name) or _WRITE.get(name)
+    fn = _READ.get(name) or _WRITE.get(name) or _CORE.get(name)
     if fn:
         return await fn(args, persona_id)
     return f"（未知工具 {name}）"
