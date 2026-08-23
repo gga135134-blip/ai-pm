@@ -2051,7 +2051,7 @@ async def assistant_clear(request: Request):
             await db.commit()
     finally:
         await db.close()
-    return RedirectResponse("/media/assistant", status_code=303)
+    return JSONResponse({"ok": True})
 
 
 @router.get("/media/assistant/actions", response_class=HTMLResponse)

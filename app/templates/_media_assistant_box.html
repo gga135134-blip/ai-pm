@@ -20,6 +20,9 @@
 #chat .md em{ font-style:italic; }
 #chat .md a{ color:var(--accent); }
 </style>
+<div style="display:flex; justify-content:flex-end; margin-bottom:6px">
+  <button onclick="astClear()" class="btn" style="font-size:12px; padding:3px 10px; color:var(--ink-3)">🧹 清空 / 新话题</button>
+</div>
 <div id="chat" style="border:1px solid var(--border); border-radius:10px; padding:12px; min-height:280px; max-height:55vh; overflow-y:auto; font-size:13.5px; line-height:1.6">
   <div style="color:var(--ink-3)">加载中…</div>
 </div>
@@ -125,6 +128,15 @@ async function loadPending(){
 async function confirmAction(id, act){
   await fetch('/media/assistant/action/'+id+'/'+act,{method:'POST'});
   loadPending();
+}
+async function astClear(){
+  if(!confirm('清空当前人设的助手对话记录？\n\n只删聊天记录，你沉淀进库的打法/素材/爆款标记不受影响。此操作不可撤。')) return;
+  const st=document.getElementById('ast-status');
+  try{
+    await fetch('/media/assistant/clear',{method:'POST'});
+    st.textContent='已清空，新话题开始';
+    initHistory(); loadPending();
+  }catch(e){ st.textContent='清空失败：'+e; }
 }
 document.addEventListener('DOMContentLoaded', function(){ initHistory(); loadPending(); });
 </script>
