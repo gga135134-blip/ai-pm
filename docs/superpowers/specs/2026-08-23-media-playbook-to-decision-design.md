@@ -36,9 +36,10 @@
   - `pb_id = topic.get("playbook_id")`；在 `ctx["playbooks"]` 按 id 查。
   - 查到：`value = _PLAYBOOK_STATUS_W.get(status, 0.0)`；note = `匹配到打法《{name}》（{status}）`。
   - 没标/查不到：`value = 0.0`；note = `无匹配打法`。
-- **关键接线**（当前缺这两处才导致"未计"）：
-  - 把 `"playbook"` 加进 `pos` 正项列表（当前 `pos = ["fit","heat","audience_hit","anchor_distance","material_ready"]`）。
-  - 报告正项循环里加 `playbook`（仅在命中即 value>0 时输出 `＋匹配到打法《X》（proven）`；没命中不输出该行，避免噪音）。
+- **关键接线**（当前缺这几处才导致"未计"）：
+  - **命中才计入分母（重要语义，与用户敲定）**：`playbook` 只在 `value>0`（真匹配到打法）时才加进 `pos` 正项列表参与归一化。没匹配的选题 `pos` 维持现状 `["fit","heat","audience_hit","anchor_distance","material_ready"]`，绝对分与今天完全一致，不被稀释。实现：算完 factor 后 `pos = [...] ; if factors["playbook"]["value"] > 0: pos = pos + ["playbook"]`。理由：playbook 是"加分项/辅助杠杆"，当前爆款少、多数选题无匹配打法；若永久进分母会让整池分数普遍下滑（排序不变但绝对分降 ~13%），造成困惑。命中才计入 = 有打法纯加分、没打法不受影响。
+  - 报告：正项循环保持 `["fit","heat","audience_hit","anchor_distance","material_ready"]` 不变；其后单独加一行 `if factors["playbook"]["value"] > 0: lines.append("＋"+note)`（命中才显示 `＋匹配到打法《X》（proven）`，没命中不输出该行避免噪音）。
+  - C 类报告循环 line 265 从 `["evidence","playbook","gap"]` 改成 `["evidence","gap"]`（playbook 不再是"未计"的降级项，已成真因子，改由上面命中条件行输出）。
 - `WEIGHTS` 三套预设把 `playbook` 从 0 改成 `冷启动1 / 涨粉2 / 转化2`。
 
 ### 4. 调用侧（`app/api/media.py:1062-1068` 决策打分路由）
