@@ -601,6 +601,7 @@ MIGRATIONS = [
     "ALTER TABLE media_topic ADD COLUMN theme_id TEXT DEFAULT ''",
     "ALTER TABLE media_content ADD COLUMN parent_content_id TEXT DEFAULT ''",
     "ALTER TABLE media_content ADD COLUMN summary TEXT DEFAULT ''",
+    "ALTER TABLE media_topic ADD COLUMN playbook_id TEXT DEFAULT ''",
 ]
 
 
