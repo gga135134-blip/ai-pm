@@ -7,6 +7,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, File
 from app.database import get_db
 from app.services.media_overview import persona_overview
 from app.services.media_reverse import reverse_ingest
+from app.services.media_reverse_batch import parse_urls, start_reverse_batch, get_reverse_status
 from app.services.media_metrics import recognize_screenshot, save_metrics
 from app.services.media_feishu_sync import sync_from_feishu
 from app.services.media_flow import (
@@ -894,6 +895,52 @@ async def media_reverse_ingest(request: Request, video_url: str = Form(...)):
     finally:
         await db.close()
     return JSONResponse(result)
+
+
+@router.post("/media/reverse/batch")
+async def media_reverse_batch(request: Request, urls: str = Form("")):
+    """功能C批量：贴多条链接→精确 url 去重→后台逐条反向入库。"""
+    cfg = (_load_config().get("douyin_asr") or {})
+    if not cfg.get("api_key") and not (cfg.get("app_id") and cfg.get("access_key")):
+        return JSONResponse({"ok": False, "error": "未配置豆包 ASR 凭证，去设置页填"})
+    items = parse_urls(urls, 10)
+    if not items:
+        return JSONResponse({"ok": False, "error": "没有有效链接"})
+    db = await get_db()
+    try:
+        pid = await _current_persona_id(request, db)
+        if not pid:
+            return JSONResponse({"ok": False, "error": "请先创建人设"})
+        cur = await db.execute(
+            "SELECT idea_reason FROM media_content "
+            "WHERE persona_id=? AND idea_source='video_reverse'", (pid,))
+        seen = {row["idea_reason"] for row in await cur.fetchall()}
+    finally:
+        await db.close()
+    queued = [u for u in items if u not in seen]
+    skipped = len(items) - len(queued)
+    if not queued:
+        return JSONResponse({"ok": True, "started": False, "queued": 0, "skipped": skipped})
+    public_base = (cfg.get("public_base") or str(request.base_url)).rstrip("/")
+    cookies_file = BASE_DIR / "data" / "douyin_cookies.txt"
+    cookies_path = cookies_file if cookies_file.exists() else None
+    started = start_reverse_batch(pid, queued, cfg, public_base, ASR_PUBLIC_DIR, cookies_path)
+    if not started:
+        return JSONResponse({"ok": True, "started": False, "running": True,
+                             "error": "已有批量任务在跑，等它跑完再起"})
+    return JSONResponse({"ok": True, "started": True, "queued": len(queued), "skipped": skipped})
+
+
+@router.get("/media/reverse/batch-status")
+async def media_reverse_batch_status(request: Request):
+    db = await get_db()
+    try:
+        pid = await _current_persona_id(request, db)
+    finally:
+        await db.close()
+    if not pid:
+        return JSONResponse({"running": False, "op": "reverse", "done": 0, "total": 0, "results": []})
+    return JSONResponse(get_reverse_status(pid))
 
 
 @router.post("/media/reverse/paste-text/preview")

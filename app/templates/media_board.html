@@ -179,6 +179,12 @@ async function feishuSync(btn){
     <input id="rev-url" placeholder="抖音/小红书 视频链接" style="width:100%; margin-bottom:8px">
     <div id="rev-status" style="font-size:12.5px; color:var(--ai); min-height:18px; margin-bottom:8px"></div>
     <button onclick="reverseIngest()" id="rev-btn" class="btn primary" style="width:100%; justify-content:center">开始（可能要 1 分钟）</button>
+    <div style="margin-top:14px; padding-top:12px; border-top:1px solid var(--border)">
+      <p style="font-size:12.5px; color:var(--ink-3); margin-bottom:8px">或一次贴多条（一行一条，最多 10 条，支持整段分享文案）：</p>
+      <textarea id="rev-batch" rows="5" style="width:100%; margin-bottom:8px" placeholder="https://v.douyin.com/aaa/&#10;https://v.douyin.com/bbb/"></textarea>
+      <button onclick="startReverseBatch()" id="rev-batch-btn" class="btn primary" style="width:100%; justify-content:center">批量入库（后台跑，可离开）</button>
+      <div id="rev-batch-status" style="font-size:12.5px; margin-top:8px"></div>
+    </div>
   </div>
 </div>
 
@@ -242,5 +248,39 @@ async function reverseIngest(){
     btn.disabled = false; btn.innerHTML = orig;
   }
 }
+async function startReverseBatch(){
+  const btn=document.getElementById('rev-batch-btn'), st=document.getElementById('rev-batch-status');
+  const text=document.getElementById('rev-batch').value.trim();
+  if(!text){ st.textContent='先贴链接'; return; }
+  btn.disabled=true;
+  const fd=new FormData(); fd.append('urls', text);
+  try{
+    const d=await (await fetch('/media/reverse/batch',{method:'POST',body:fd})).json();
+    if(!d.ok){ st.textContent='失败：'+(d.error||''); btn.disabled=false; return; }
+    if(!d.started){
+      st.textContent = d.skipped ? ('这些链接都已入库过（跳过 '+d.skipped+' 条）') : (d.error||'未起任务');
+      btn.disabled=false; return;
+    }
+    st.textContent='已在后台开始：入库 '+d.queued+' 条'+(d.skipped?('（跳过 '+d.skipped+' 条已入库）'):'')+'，可离开这页';
+    pollReverseBatch();
+  }catch(e){ st.textContent='请求失败：'+e; btn.disabled=false; }
+}
+let _revTimer=null;
+async function pollReverseBatch(){
+  const st=document.getElementById('rev-batch-status'), btn=document.getElementById('rev-batch-btn');
+  if(!st) return;
+  try{
+    const d=await (await fetch('/media/reverse/batch-status')).json();
+    if(d.running){ st.textContent='入库中… '+d.done+'/'+d.total+'（后台跑，可离开这页）'; _revTimer=setTimeout(pollReverseBatch,3000); }
+    else if(d.total){
+      const rows=(d.results||[]).map(function(r){
+        return r.ok ? ('✅ '+((r.title||r.url)).replace(/</g,'&lt;'))
+                    : ('❌ '+((r.error||'失败')+'（'+r.url+'）').replace(/</g,'&lt;')); }).join('<br>');
+      st.innerHTML='完成 '+d.done+'/'+d.total+'：<br>'+rows+'<br><a href="/media/legacy" style="color:var(--ai)">→ 去标爆款</a>';
+      if(btn) btn.disabled=false;
+    }
+  }catch(e){}
+}
+document.addEventListener('DOMContentLoaded', pollReverseBatch);
 </script>
 {% endblock %}
