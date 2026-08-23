@@ -981,6 +981,14 @@ async def write_script(db, content_id: str, mode: str = "full",
     result = await ask_ai(prompt, model=model, task_type="media_script",
                           system_prompt=SCRIPT_SYSTEM)
     resp = result.get("response", "")
+    # 模型偶尔返回空（花了钱没吐字）——不是明确报错/费用保护时，悄悄重试一次再放弃。
+    # 两次费用都合计进 result（都真花了钱），只重试一次不死循环。
+    if not resp.strip() and not resp.startswith("[错误]") and not resp.startswith("[费用保护]"):
+        first_cost = result.get("cost", 0)
+        result = await ask_ai(prompt, model=model, task_type="media_script",
+                              system_prompt=SCRIPT_SYSTEM)
+        resp = result.get("response", "")
+        result["cost"] = result.get("cost", 0) + first_cost
     if resp.startswith("[错误]") or resp.startswith("[费用保护]"):
         return {"ok": False, "error": resp, "script": "",
                 "cost": result.get("cost", 0), "model": result.get("model", ""),

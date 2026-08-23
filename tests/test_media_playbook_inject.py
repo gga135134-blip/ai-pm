@@ -91,3 +91,52 @@ def test_lean_no_inject(monkeypatch):
     r = asyncio.run(media_ai.write_script(db, "WC", mode="lean"))
     assert r["playbook"] is None and "【打法骨架】" not in cap["prompt"]
     asyncio.run(db.close())
+
+
+def test_empty_response_retries_once_then_succeeds(monkeypatch):
+    """DeepSeek 偶发返空：第一次空→悄悄重试一次→拿到内容算成功，两次都算钱。"""
+    db = _setup()
+    calls = []
+    async def flaky(prompt, model="auto", task_type="", system_prompt="", json_mode=False):
+        calls.append(1)
+        if len(calls) == 1:
+            return {"response": "   ", "model": "deepseek", "tokens": 0, "cost": 0.001}
+        return {"response": "重试后的脚本正文。", "model": "deepseek", "tokens": 9, "cost": 0.002}
+    monkeypatch.setattr(media_ai, "ask_ai", flaky)
+    monkeypatch.setattr(media_ai, "match_playbook", _fixed_match(_pb()))
+    r = asyncio.run(media_ai.write_script(db, "WC"))
+    assert r["ok"] is True and r["script"] == "重试后的脚本正文。"
+    assert len(calls) == 2                          # 空响应触发了一次重试
+    assert abs(r["cost"] - 0.003) < 1e-9            # 两次调用都算钱
+    asyncio.run(db.close())
+
+
+def test_empty_both_times_reports_error(monkeypatch):
+    """两次都空：如实报错、合计两次费用、只重试一次不无限刷。"""
+    db = _setup()
+    calls = []
+    async def always_empty(prompt, model="auto", task_type="", system_prompt="", json_mode=False):
+        calls.append(1)
+        return {"response": "", "model": "deepseek", "tokens": 0, "cost": 0.001}
+    monkeypatch.setattr(media_ai, "ask_ai", always_empty)
+    monkeypatch.setattr(media_ai, "match_playbook", _fixed_match(_pb()))
+    r = asyncio.run(media_ai.write_script(db, "WC"))
+    assert r["ok"] is False and "空内容" in r["error"]
+    assert len(calls) == 2                          # 重试一次后就放弃，不死循环
+    assert abs(r["cost"] - 0.002) < 1e-9            # 两次费用合计
+    asyncio.run(db.close())
+
+
+def test_error_response_not_retried(monkeypatch):
+    """返回的是 [错误]/[费用保护] 不是空——不重试，直接把错误透出。"""
+    db = _setup()
+    calls = []
+    async def err(prompt, model="auto", task_type="", system_prompt="", json_mode=False):
+        calls.append(1)
+        return {"response": "[错误] 上游超时", "model": "deepseek", "tokens": 0, "cost": 0.001}
+    monkeypatch.setattr(media_ai, "ask_ai", err)
+    monkeypatch.setattr(media_ai, "match_playbook", _fixed_match(_pb()))
+    r = asyncio.run(media_ai.write_script(db, "WC"))
+    assert r["ok"] is False and r["error"] == "[错误] 上游超时"
+    assert len(calls) == 1                          # 明确错误不触发重试
+    asyncio.run(db.close())
