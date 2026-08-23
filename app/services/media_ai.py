@@ -294,6 +294,11 @@ def _clean_ids(raw, valid_set) -> list:
     return out
 
 
+def _clean_one_id(v, valid) -> str:
+    """单个 id 清洗：合法字符串且在 valid 集里才留，否则空串。"""
+    return v if isinstance(v, str) and v in valid else ""
+
+
 async def _build_asset_menu(db, persona_id: str) -> dict:
     """拼给 AI 打标用的资产菜单（受众/可标锚点/已放弃方向三段），并返回合法 id 集。
 
@@ -311,6 +316,10 @@ async def _build_asset_menu(db, persona_id: str) -> dict:
         "SELECT id,name,value_prop FROM media_anchor "
         "WHERE persona_id=? AND status='dropped'", (persona_id,))
     dropped = [dict(r) for r in await cur.fetchall()]
+    cur = await db.execute(
+        "SELECT id,name,structure,status FROM media_playbook "
+        "WHERE persona_id=? AND status IN ('validating','proven')", (persona_id,))
+    playbooks = [dict(r) for r in await cur.fetchall()]
 
     lines = []
     if auds:
@@ -325,6 +334,11 @@ async def _build_asset_menu(db, persona_id: str) -> dict:
         lines.append("【⛔ 已放弃方向】话题若往这些方向飘才填进 dropped_drift_ids：")
         for a in dropped:
             lines.append(f"- id={a['id']}｜{a['name']}｜{a['value_prop']}")
+    if playbooks:
+        lines.append("【打法库】选题若能套用某条已验证结构/打法，挑最贴的一条填进 playbook_id：")
+        for pb in playbooks:
+            struct = (pb.get("structure") or "")[:60]
+            lines.append(f"- id={pb['id']}｜{pb['name']}｜结构:{struct}｜{pb['status']}")
     menu = "\n".join(lines) if lines else "（当前无受众/锚点资产可标，三个 id 列都留空）"
 
     return {
@@ -332,6 +346,7 @@ async def _build_asset_menu(db, persona_id: str) -> dict:
         "valid_aud": {a["id"] for a in auds},
         "valid_anc": {a["id"] for a in anchors},
         "valid_dropped": {a["id"] for a in dropped},
+        "valid_pb": {p["id"] for p in playbooks},
     }
 
 
@@ -343,9 +358,10 @@ TAG_SYSTEM = """你是自媒体选题的资产标注员。给每个话题标注�
 3. dropped_drift_ids 只在话题明显往「已放弃方向」飘时才填该 id，默认空。
 4. 每个话题都要在结果里出现，用它原样的 id 对应。
 5. 只输出 JSON 数组，不要任何解释文字。
+6. playbook_id 只填一条最贴的打法 id（真能套用该结构才填，不沾留空字符串 ""），只能从【打法库】给的 id 里选，绝不编造。
 
 输出格式：
-[{"id":"话题原样id","audience_ids":[],"anchor_ids":[],"dropped_drift_ids":[]}]"""
+[{"id":"话题原样id","audience_ids":[],"anchor_ids":[],"dropped_drift_ids":[],"playbook_id":""}]"""
 
 
 async def tag_topics(db, persona_id: str, model: str = "auto") -> dict:
@@ -387,15 +403,16 @@ async def tag_topics(db, persona_id: str, model: str = "auto") -> dict:
         aud = _clean_ids(it.get("audience_ids"), menu["valid_aud"])
         anc = _clean_ids(it.get("anchor_ids"), menu["valid_anc"])
         drift = _clean_ids(it.get("dropped_drift_ids"), menu["valid_dropped"])
+        pb = _clean_one_id(it.get("playbook_id"), menu["valid_pb"])
         await db.execute(
             "UPDATE media_topic SET audience_ids=?, anchor_ids=?, "
-            "dropped_drift_ids=?, tagged=1 WHERE id=?",
+            "dropped_drift_ids=?, playbook_id=?, tagged=1 WHERE id=?",
             (json.dumps(aud, ensure_ascii=False), json.dumps(anc, ensure_ascii=False),
-             json.dumps(drift, ensure_ascii=False), tid))
+             json.dumps(drift, ensure_ascii=False), pb, tid))
         count += 1
     await db.commit()
 
-    all_ids = list(menu["valid_aud"] | menu["valid_anc"] | menu["valid_dropped"])
+    all_ids = list(menu["valid_aud"] | menu["valid_anc"] | menu["valid_dropped"] | menu["valid_pb"])
     await log_injection(db, "", "tag_topics", all_ids, result.get("tokens", 0))
 
     return {"ok": True, "count": count, "cost": result.get("cost", 0),
