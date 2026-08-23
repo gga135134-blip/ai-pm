@@ -1063,8 +1063,13 @@ async def topics_rank(request: Request):
             "SELECT * FROM media_topic WHERE persona_id=? AND status='pool'", (pid,))
         topics = [dict(r) for r in await cur.fetchall()]
 
+        cur = await db.execute(
+            "SELECT id,name,status FROM media_playbook "
+            "WHERE persona_id=? AND status IN ('validating','proven')", (pid,))
+        playbooks = [dict(r) for r in await cur.fetchall()]
+
         ctx = build_decision_context(traits, audiences, anchors, materials,
-                                     recent, history, dropped_anchors)
+                                     recent, history, dropped_anchors, playbooks=playbooks)
         ranked = rank_pool(topics, ctx, phase)
         for t in ranked:
             await db.execute(
