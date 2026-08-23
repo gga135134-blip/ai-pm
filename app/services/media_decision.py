@@ -12,15 +12,15 @@ WEIGHTS = {
     "冷启动": {"fit": 3, "heat": 3, "audience_hit": 3, "anchor_distance": 2,
               "material_ready": 1, "risk": 3, "fatigue": 1, "dup_penalty": 2,
               "dropped_drift": 2,
-              "evidence": 0, "playbook": 0, "gap": 0},
+              "evidence": 0, "playbook": 1, "gap": 0},
     "涨粉":   {"fit": 4, "heat": 1, "audience_hit": 4, "anchor_distance": 2,
               "material_ready": 2, "risk": 3, "fatigue": 2, "dup_penalty": 2,
               "dropped_drift": 2,
-              "evidence": 0, "playbook": 0, "gap": 0},
+              "evidence": 0, "playbook": 2, "gap": 0},
     "转化":   {"fit": 3, "heat": 1, "audience_hit": 4, "anchor_distance": 4,
               "material_ready": 2, "risk": 3, "fatigue": 2, "dup_penalty": 2,
               "dropped_drift": 3,
-              "evidence": 0, "playbook": 0, "gap": 0},
+              "evidence": 0, "playbook": 2, "gap": 0},
 }
 
 # fit 分两半：定位(权重高) + 一致(权重低)。定位看"射程"，一致看"一贯人设/调性"。
@@ -55,6 +55,8 @@ def _clamp15(v) -> int:
 
 _ANCHOR_STATUS_W = {"proven": 1.0, "validating": 0.7, "dropped": 0.3}
 
+_PLAYBOOK_STATUS_W = {"proven": 1.0, "validating": 0.6}
+
 
 def _as_id_list(v) -> list:
     """话题上的 id 列可能是 list 或 JSON 字符串，都转成 list。容错。"""
@@ -71,7 +73,7 @@ def _as_id_list(v) -> list:
 
 def build_decision_context(traits, audiences, anchors, materials,
                            recent_contents, history_contents,
-                           dropped_anchors=None) -> dict:
+                           dropped_anchors=None, playbooks=None) -> dict:
     """把该人设的资产打包成打分上下文（纯数据）。调用方从 DB 查好传入。
 
     dropped_anchors：已放弃(dropped)的锚点，单独传——供 anchor 状态兜底 +
@@ -85,6 +87,7 @@ def build_decision_context(traits, audiences, anchors, materials,
         "recent_contents": list(recent_contents or []),
         "history_contents": list(history_contents or []),
         "dropped_anchors": list(dropped_anchors or []),
+        "playbooks": list(playbooks or []),
     }
 
 
@@ -105,6 +108,7 @@ def score_topic(topic: dict, ctx: dict, phase: str) -> dict:
     aud_by_id = {a.get("id"): a for a in ctx["audiences"]}
     anc_by_id = {a.get("id"): a for a in ctx["anchors"]}
     anc_by_id.update({a.get("id"): a for a in ctx.get("dropped_anchors", [])})
+    pb_by_id = {p.get("id"): p for p in ctx.get("playbooks", [])}
 
     # ── 热度：已存字段（AI 生成时给，暂无真实热度源，见 spec/记忆软肋条）──
     heat = (_clamp15(topic.get("heat", 3)) - 1) / 4
@@ -239,7 +243,13 @@ def score_topic(topic: dict, ctx: dict, phase: str) -> dict:
 
     # ── C 类：缺数据源，降级 ──
     factors["evidence"] = {"value": 0.0, "note": "⚙️ 历史数据不足，此项未计"}
-    factors["playbook"] = {"value": 0.0, "note": "⚙️ 打法库未建，此项未计"}
+    pb = pb_by_id.get(topic.get("playbook_id"))
+    if pb:
+        factors["playbook"] = {
+            "value": _PLAYBOOK_STATUS_W.get(pb.get("status"), 0.0),
+            "note": f"匹配到打法《{pb.get('name', '')}》（{pb.get('status', '')}）"}
+    else:
+        factors["playbook"] = {"value": 0.0, "note": "无匹配打法"}
     factors["gap"] = {"value": 0.0, "note": "⚙️ 内容缺口分析待补，此项未计"}
 
     # ── 归一化：正项均值 − 负项均值。正负各自归一，避免负项权重挤进正项分母
@@ -247,6 +257,8 @@ def score_topic(topic: dict, ctx: dict, phase: str) -> dict:
     #    注意：负项常驻分母——即使某负项 value=0（如未触发的 dropped_drift）其权重
     #    仍占 neg_w，这是有意的（与 risk/fatigue/dup 一致），只影响绝对分不影响同质排序。──
     pos = ["fit", "heat", "audience_hit", "anchor_distance", "material_ready"]
+    if factors["playbook"]["value"] > 0:
+        pos = pos + ["playbook"]
     neg = ["risk", "fatigue", "dup_penalty", "dropped_drift"]
     pos_w = sum(W[k] for k in pos)
     neg_w = sum(W[k] for k in neg)
@@ -259,10 +271,12 @@ def score_topic(topic: dict, ctx: dict, phase: str) -> dict:
     lines = [f"决策得分 {score}/10（{phase}期权重）"]
     for k in ["fit", "heat", "audience_hit", "anchor_distance", "material_ready"]:
         lines.append(f"＋{factors[k]['note']}")
+    if factors["playbook"]["value"] > 0:
+        lines.append(f"＋{factors['playbook']['note']}")
     for k in ["risk", "fatigue", "dup_penalty", "dropped_drift"]:
         if factors[k]["value"] > 0:
             lines.append(f"－{factors[k]['note']}")
-    for k in ["evidence", "playbook", "gap"]:
+    for k in ["evidence", "gap"]:
         lines.append(factors[k]["note"])
     report = "\n".join(lines)
 

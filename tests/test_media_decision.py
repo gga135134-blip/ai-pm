@@ -5,11 +5,11 @@ from app.services.media_decision import (
 
 
 def _ctx(traits=None, audiences=None, anchors=None, materials=None,
-         recent=None, history=None, dropped_anchors=None):
+         recent=None, history=None, dropped_anchors=None, playbooks=None):
     return build_decision_context(
         traits or [], audiences or [], anchors or [],
         materials or [], recent or [], history or [],
-        dropped_anchors or [])
+        dropped_anchors or [], playbooks=playbooks or [])
 
 
 def test_overlap_identical_and_disjoint():
@@ -200,3 +200,54 @@ def test_id_columns_accept_json_string():
 def test_build_context_carries_dropped_anchors():
     ctx = build_decision_context([], [], [], [], [], [], dropped_anchors=[{"id": "D1"}])
     assert ctx["dropped_anchors"] == [{"id": "D1"}]
+
+
+def test_playbook_proven_matched_full_value():
+    pb = {"id": "PB1", "name": "反常识开场", "status": "proven"}
+    t = {"title": "随便", "puzzle": "", "heat": 3, "playbook_id": "PB1"}
+    res = score_topic(t, _ctx(playbooks=[pb]), "涨粉")
+    assert res["factors"]["playbook"]["value"] == 1.0
+    assert "反常识开场" in res["factors"]["playbook"]["note"]
+    assert "匹配到打法《反常识开场》" in res["report"]
+
+
+def test_playbook_validating_partial_value():
+    pb = {"id": "PB2", "name": "痛点先行", "status": "validating"}
+    t = {"title": "随便", "puzzle": "", "heat": 3, "playbook_id": "PB2"}
+    res = score_topic(t, _ctx(playbooks=[pb]), "涨粉")
+    assert res["factors"]["playbook"]["value"] == 0.6
+
+
+def test_playbook_no_match_zero_and_no_report_line():
+    t = {"title": "随便", "puzzle": "", "heat": 3}  # 无 playbook_id
+    res = score_topic(t, _ctx(playbooks=[
+        {"id": "PB1", "name": "反常识开场", "status": "proven"}]), "涨粉")
+    assert res["factors"]["playbook"]["value"] == 0.0
+    assert "匹配到打法" not in res["report"]
+
+
+def test_playbook_bogus_id_zero():
+    t = {"title": "随便", "puzzle": "", "heat": 3, "playbook_id": "NOPE"}
+    res = score_topic(t, _ctx(playbooks=[
+        {"id": "PB1", "name": "x", "status": "proven"}]), "涨粉")
+    assert res["factors"]["playbook"]["value"] == 0.0
+
+
+def test_playbook_matched_boosts_score_unmatched_unchanged():
+    """命中才计入分母：没匹配的选题分数与今天(无 playbook 参与)一致；命中的更高。"""
+    pb = {"id": "PB1", "name": "反常识开场", "status": "proven"}
+    base = {"title": "中小企业AI落地", "puzzle": "", "heat": 3}
+    matched = dict(base, playbook_id="PB1")
+    r_unmatched = score_topic(base, _ctx(playbooks=[pb]), "涨粉")
+    r_matched = score_topic(matched, _ctx(playbooks=[pb]), "涨粉")
+    r_no_pb_ctx = score_topic(base, _ctx(playbooks=[]), "涨粉")
+    # 没匹配：有没有打法库在 ctx 里都一样（不进分母）
+    assert r_unmatched["score"] == r_no_pb_ctx["score"]
+    # 命中：分更高
+    assert r_matched["score"] > r_unmatched["score"]
+
+
+def test_weights_playbook_by_phase():
+    assert WEIGHTS["冷启动"]["playbook"] == 1
+    assert WEIGHTS["涨粉"]["playbook"] == 2
+    assert WEIGHTS["转化"]["playbook"] == 2
