@@ -46,9 +46,9 @@
       <button type="button" onclick="startBatch('mine_essence')" class="btn ai" style="font-size:12.5px">批量挖精华（选中爆款）</button>
       <button type="button" onclick="startBatch('organize')" class="btn ai" style="font-size:12.5px">批量整理（摘要+排版）</button>
       <label style="font-size:12px; color:var(--ink-3)"><input type="checkbox" id="mine-force"> 已挖也重挖</label>
-      <a href="/media/mine-review" style="font-size:12.5px; margin-left:auto">去复核采纳 →</a>
+      <a href="/media/mine-review" class="btn" style="font-size:13.5px; font-weight:600; padding:6px 14px; margin-left:auto">去复核采纳 →</a>
     </div>
-    <div id="mine-progress" style="font-size:12.5px; color:var(--ai); margin-top:8px"></div>
+    <div id="mine-progress" style="font-size:15.5px; font-weight:600; color:var(--ai); margin-top:12px; min-height:24px"></div>
   </form>
 
   {{ shell.step_nav(back={'href':'/media/board','label':'内容看板'}) }}
@@ -71,9 +71,9 @@ async function pollBatch(){
   const prog=document.getElementById('mine-progress');
   try{
     const d=await (await fetch('/media/legacy/batch-status')).json();
-    if(d.running){ prog.textContent=d.op+'中… '+d.done+'/'+d.total+'（后台跑，可离开）';
+    if(d.running){ prog.innerHTML='<span style="display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border:1px solid var(--ai);border-radius:8px;background:var(--ai-soft)">⏳ '+d.op+'中… '+d.done+'/'+d.total+'（后台跑，可离开这页）</span>';
       _batchTimer=setTimeout(pollBatch,2000); }
-    else if(d.total){ prog.innerHTML='完成 '+d.done+'/'+d.total+' → 刷新看结果（挖矿去 <a href="/media/mine-review">复核采纳</a>）'; }
+    else if(d.total){ prog.innerHTML='<span style="display:inline-flex;align-items:center;gap:10px;padding:10px 16px;border:1px solid var(--ai);border-radius:8px;background:var(--ai-soft);font-size:16px">✅ 完成 '+d.done+'/'+d.total+' · 刷新看结果 · <a href="/media/mine-review" style="text-decoration:underline;font-weight:700">去复核采纳 →</a></span>'; }
   }catch(e){}
 }
 document.addEventListener('DOMContentLoaded', pollBatch);
