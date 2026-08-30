@@ -28,6 +28,10 @@ from app.services.media_mine_queue import (
 from app.services.media_batch import (
     run_organize_one, run_mine_one, start_batch, get_status as batch_get_status)
 from app.services.media_playbook import list_playbooks, get_playbook
+from app.services.media_lesson import (
+    list_lessons, create_lesson, update_lesson,
+    set_lesson_status, delete_lesson, count_redlines)
+from app.services.media_context import INJECTION_BUDGET
 from app.services.media_flow import finalize_updates, clean_body
 from app.services.media_decision import build_decision_context, rank_pool
 from app.services.media_review_cycle import (
@@ -1022,6 +1026,77 @@ async def playbook_set_status(pid: str, status: str = Form(...)):
         finally:
             await db.close()
     return RedirectResponse("/media/playbook", status_code=302)
+
+
+# ─────────────── 教训/红线库 ───────────────
+# 「不要做什么」的库。写稿时红线无条件注入（≤2），教训按 trigger_context
+# 匹配注入（≤3）。人拍板才入库（宪法第 2 条）。
+
+@router.get("/media/lessons", response_class=HTMLResponse)
+async def lessons_home(request: Request):
+    db = await get_db()
+    try:
+        pid = await _current_persona_id(request, db)
+        rows = await list_lessons(db, pid, include_archived=True) if pid else []
+        red_n = await count_redlines(db, pid) if pid else 0
+    finally:
+        await db.close()
+    active = [r for r in rows if r["status"] == "active"]
+    return _tpl(request, "media_lessons.html", {
+        "persona_id": pid,
+        "redlines": [r for r in active if r["kind"] == "redline"],
+        "lessons": [r for r in active if r["kind"] == "lesson"],
+        "archived": [r for r in rows if r["status"] == "archived"],
+        "redline_cap": INJECTION_BUDGET.get("redline", 2),
+        "redline_n": red_n,
+    })
+
+
+@router.post("/media/lesson/create")
+async def lesson_create(request: Request, kind: str = Form("lesson"),
+                        brief: str = Form(...), detail: str = Form(""),
+                        trigger_context: str = Form(""), evidence: str = Form("")):
+    db = await get_db()
+    try:
+        pid = await _current_persona_id(request, db)
+        if pid:
+            await create_lesson(db, pid, kind, brief, detail,
+                                trigger_context, evidence, source="manual")
+    finally:
+        await db.close()
+    return RedirectResponse("/media/lessons", status_code=302)
+
+
+@router.post("/media/lesson/{lid}/update")
+async def lesson_update(lid: str, brief: str = Form(...), detail: str = Form(""),
+                        trigger_context: str = Form(""), evidence: str = Form("")):
+    db = await get_db()
+    try:
+        await update_lesson(db, lid, brief=brief, detail=detail,
+                            trigger_context=trigger_context, evidence=evidence)
+    finally:
+        await db.close()
+    return RedirectResponse("/media/lessons", status_code=302)
+
+
+@router.post("/media/lesson/{lid}/status")
+async def lesson_status(lid: str, status: str = Form(...)):
+    db = await get_db()
+    try:
+        await set_lesson_status(db, lid, status)
+    finally:
+        await db.close()
+    return RedirectResponse("/media/lessons", status_code=302)
+
+
+@router.post("/media/lesson/{lid}/delete")
+async def lesson_delete(lid: str):
+    db = await get_db()
+    try:
+        await delete_lesson(db, lid)
+    finally:
+        await db.close()
+    return RedirectResponse("/media/lessons", status_code=302)
 
 
 @router.get("/media/asr-audio/{token}")

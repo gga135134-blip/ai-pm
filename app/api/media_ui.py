@@ -78,6 +78,9 @@ async def media_ui_steps(request: Request):
             "legacy": await _scalar(
                 db, "SELECT COUNT(*) FROM media_content WHERE persona_id=? "
                     "AND idea_source='legacy_text'", (pid,)),
+            "lesson": await _scalar(
+                db, "SELECT COUNT(*) FROM media_lesson WHERE persona_id=? "
+                    "AND COALESCE(status,'active')<>'archived'", (pid,)),
         }
 
         steps = {
