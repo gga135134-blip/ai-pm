@@ -35,7 +35,7 @@ from app.services.media_context import INJECTION_BUDGET
 from app.services.media_flow import finalize_updates, clean_body
 from app.services.media_decision import build_decision_context, rank_pool
 from app.services.media_review_cycle import (
-    run_l2_cycle, list_cycles, get_cycle, delete_cycle)
+    run_l2_cycle, list_cycles, get_cycle, delete_cycle, normalize_advisory_items)
 from app.services.media_phase_review import (
     run_l3_review, list_phase_reviews, get_phase_review, _next_phase)
 from app.services.ai_router import _load_config
@@ -1099,6 +1099,24 @@ async def lesson_delete(lid: str):
     return RedirectResponse("/media/lessons", status_code=302)
 
 
+@router.post("/media/lesson/adopt")
+async def lesson_adopt(request: Request, kind: str = Form("lesson"),
+                       brief: str = Form(...), trigger_context: str = Form(""),
+                       evidence: str = Form(""), cycle_id: str = Form("")):
+    """从 L2 复盘的 advisory 采纳一条进本子。人点才入库（宪法第 2 条）。"""
+    db = await get_db()
+    try:
+        pid = await _current_persona_id(request, db)
+        if pid:
+            await create_lesson(db, pid, kind, brief, detail="",
+                                trigger_context=trigger_context,
+                                evidence=evidence, source="l2_advisory")
+    finally:
+        await db.close()
+    back = f"/media/review-cycle/{cycle_id}" if cycle_id else "/media/lessons"
+    return RedirectResponse(back, status_code=302)
+
+
 @router.get("/media/asr-audio/{token}")
 async def media_asr_audio(token: str):
     """公开免登录返回临时音频（供豆包 ASR 抓）。防目录穿越。"""
@@ -1843,6 +1861,13 @@ async def review_cycle_detail(cid: str, request: Request):
         await db.close()
     if not cyc:
         return RedirectResponse("/media/persona", status_code=302)
+    # 老复盘的 advisory.lessons 是纯字符串数组，归一化成 dict 供模板取
+    # x.brief / x.trigger_context（spec §5.3，不做数据迁移）
+    adv = cyc.get("advisory")
+    if isinstance(adv, dict):
+        adv["lessons"] = normalize_advisory_items(adv.get("lessons"))
+        adv["redlines"] = normalize_advisory_items(adv.get("redlines"))
+        cyc["advisory"] = adv
     return _tpl(request, "media_review_cycle.html", {"cyc": cyc})
 
 
