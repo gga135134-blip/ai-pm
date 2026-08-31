@@ -7,7 +7,17 @@ MEDIA_ASSISTANT_SYSTEM = """你是这个自媒体人设的 AI 助手。你能查
 你只做"草稿/可逆"的事——建选题、续集、脚本草稿都是草稿，人还会定稿；
 你也能做核心动作：标爆款、删除内容、把口头禅/素材/打法采纳进库。但这些你只是"拟"——系统会生成待确认卡，用户点确认后才真执行，你不用等结果，告诉用户"已拟好，去确认卡点确认"即可。删除内容确认后不可撤，涉及删除务必先说清楚是哪条。
 做完把你做了什么、建了哪条、简明告诉用户。
-排版（前端会渲染 markdown）：小标题用 ## 分段、要点用 - 列表、对比/评分用表格、关键处 **加粗**；段落短一点别一大坨，段与段之间空一行。适当点缀表情让重点更醒目（如 ✅⚠️📊🎯💡🔥），别滥用、别每句都加。"""
+排版（前端会渲染 markdown）：小标题用 ## 分段、要点用 - 列表、对比/评分用表格、关键处 **加粗**；段落短一点别一大坨，段与段之间空一行。适当点缀表情让重点更醒目（如 ✅⚠️📊🎯💡🔥），别滥用、别每句都加。
+
+【顺手记本子】
+当用户表达的是**否定性判断**（「这样不行」「别这么写」「我们的人不吃这套」
+「太软了」），而不只是一次性的改稿要求（「加个案例」「换个开头」）时，
+在完成改动后调 propose_lesson 提议记进本子，并在回复末尾一句话告诉用户。
+
+纪律：
+- 一次只提一条，提完就停。用户不点就算了，**绝不追问、绝不重复提**。
+- 只在用户主动开口的对话里提，**永远不主动发起会话**。
+- 拿不准是「一次性要求」还是「长期判断」时，倾向于不提。宁可漏记，不要吵。"""
 
 
 async def log_action(db, persona_id, action_type, target_table, target_id,
@@ -91,6 +101,19 @@ async def apply_action(db, action_id) -> bool:
                 (nid, pid, name, (after.get("structure") or "").strip(),
                  (after.get("when_to_use") or "").strip(), (after.get("evidence") or "").strip()))
             after["created_id"], after["created_table"] = nid, "media_playbook"
+    elif at == "propose_lesson":
+        nid = str(uuid.uuid4())
+        kind = (after.get("kind") or "lesson").strip()
+        if kind not in ("lesson", "redline"):
+            kind = "lesson"
+        await db.execute(
+            "INSERT INTO media_lesson "
+            "(id,persona_id,kind,brief,trigger_context,evidence,source) "
+            "VALUES (?,?,?,?,?,?, 'assistant')",
+            (nid, pid, kind, (after.get("brief") or "").strip(),
+             (after.get("trigger_context") or "").strip(),
+             (after.get("evidence") or "").strip()))
+        after["created_id"], after["created_table"] = nid, "media_lesson"
     elif at == "run_l2":
         from app.services.media_review_cycle import run_l2_cycle
         await run_l2_cycle(db, pid, force=True)
@@ -131,7 +154,8 @@ async def revert_action(db, action_id) -> bool:
     elif a["action_type"] == "mark_winner":
         await db.execute("UPDATE media_content SET is_winner=? WHERE id=?",
                          (before.get("is_winner", 0), a["target_id"]))
-    elif a["action_type"] in ("adopt_signature", "adopt_material", "adopt_playbook"):
+    elif a["action_type"] in ("adopt_signature", "adopt_material",
+                              "adopt_playbook", "propose_lesson"):
         after = json.loads(a["after_json"] or "{}")
         tbl, nid = after.get("created_table"), after.get("created_id")
         if not tbl or not nid:

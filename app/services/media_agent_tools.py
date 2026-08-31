@@ -336,11 +336,28 @@ async def _tool_run_phase_review(args, pid):
                              {"summary": "跑一轮阶段复盘 L3（会花 AI 费用）"})
 
 
+async def _tool_propose_lesson(args, pid):
+    a = args or {}
+    brief = (a.get("brief") or "").strip()
+    if not brief:
+        return "（brief 不能为空——这句话就是要塞给写稿 AI 看的那句）"
+    kind = (a.get("kind") or "lesson").strip()
+    if kind not in ("lesson", "redline"):
+        kind = "lesson"
+    label = "红线" if kind == "redline" else "教训"
+    return await _core_stage(pid, "propose_lesson", "media_lesson", "", {
+        "summary": f"把{label}「{brief}」记进本子",
+        "kind": kind, "brief": brief,
+        "trigger_context": (a.get("trigger_context") or "").strip(),
+        "evidence": (a.get("evidence") or "").strip()})
+
+
 _CORE = {
     "mark_winner": _tool_mark_winner, "delete_content": _tool_delete_content,
     "adopt_signature": _tool_adopt_signature, "adopt_material": _tool_adopt_material,
     "adopt_playbook": _tool_adopt_playbook,
     "run_cycle_review": _tool_run_cycle_review, "run_phase_review": _tool_run_phase_review,
+    "propose_lesson": _tool_propose_lesson,
 }
 
 
@@ -390,6 +407,16 @@ MEDIA_TOOL_SCHEMAS += [
              "similar_to": {"type": "string"}}, ["name"]),
     _schema("run_cycle_review", "跑一轮周期复盘 L2（需人确认，会花 AI 费用）。"),
     _schema("run_phase_review", "跑一轮阶段复盘 L3（需人确认，会花 AI 费用）。"),
+    _schema("propose_lesson",
+            "把一条教训或红线记进本子（需人确认）。写稿时红线无条件带上、"
+            "教训按 trigger_context 匹配带上。",
+            {"kind": {"type": "string", "description": "lesson=要注意 / redline=绝对不许"},
+             "brief": {"type": "string", "description": "一句话，短而狠——这句会原样塞给写稿 AI"},
+             "trigger_context": {"type": "string",
+                                 "description": "什么情况下适用。用会出现在选题标题里的词，"
+                                                "匹配看字面重合不认同义词。红线可留空"},
+             "evidence": {"type": "string", "description": "出处：用户哪句话/哪条内容"}},
+            ["brief"]),
 ]
 
 
