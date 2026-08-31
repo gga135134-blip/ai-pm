@@ -121,7 +121,11 @@ L2_SYSTEM = """你是资深自媒体操盘手，看一批已发内容的对比�
 落点分流：
 - 人设特征候选 → proposed_traits（dimension 用 tone/signature/positioning 等）。
 - 受众修正 → proposed_audience。
-- 打法/教训/红线/权重调整建议 → advisory（这些暂无自动落点，先当文字建议）。
+- 打法 / 权重调整建议 → advisory（这两项暂无自动落点，先当文字建议）。
+- 教训 → advisory.lessons，每条给 brief（一句话，短而狠）+ trigger_context
+  （什么情况下适用，用会出现在选题标题里的词，匹配看字面重合）+ evidence。
+- 红线（绝对不许再犯的）→ advisory.redlines，给 brief + evidence。
+  红线要少而硬，最多 2 条，宁缺毋滥；够不上「绝对不许」的一律放 lessons。
 
 只输出严格 JSON，结构：
 {"patterns":[{"pattern":"","evidence":"","confidence":"high|medium|low"}],
@@ -129,7 +133,38 @@ L2_SYSTEM = """你是资深自媒体操盘手，看一批已发内容的对比�
  "hypotheses_tested":[{"ref_id":"","verdict":"confirmed|refuted|inconclusive","evidence":""}],
  "proposed_traits":[{"dimension":"","content":"","brief":"","evidence":"","confidence":3}],
  "proposed_audience":[{"segment":"","field":"","new_value":"","evidence":""}],
- "advisory":{"playbooks":[],"lessons":[],"redlines":[],"weight_suggestion":""}}"""
+ "advisory":{"playbooks":[],
+  "lessons":[{"brief":"","trigger_context":"","evidence":""}],
+  "redlines":[{"brief":"","evidence":""}],
+  "weight_suggestion":""}}"""
+
+
+def normalize_advisory_items(raw) -> list:
+    """把 advisory.lessons / advisory.redlines 归一成统一 dict 形状。
+
+    向后兼容：老复盘记录里这两个字段是**纯字符串数组**（没有 trigger_context
+    和 evidence）。遇到字符串就当只填了 brief。不做数据迁移 —— 老记录照常
+    显示、照常可采纳，只是采纳时需人工补适用场景（spec §5.3）。
+
+    垃圾项（空 brief、非 dict 非 str）直接丢掉，绝不抛异常打断复盘页渲染。
+    """
+    if not isinstance(raw, list):
+        return []
+    out = []
+    for item in raw:
+        if isinstance(item, str):
+            item = {"brief": item}
+        if not isinstance(item, dict):
+            continue
+        brief = (item.get("brief") or "").strip()
+        if not brief:
+            continue
+        out.append({
+            "brief": brief,
+            "trigger_context": (item.get("trigger_context") or "").strip(),
+            "evidence": (item.get("evidence") or "").strip(),
+        })
+    return out
 
 
 def _build_l2_prompt(contents, summary, prev):
@@ -254,4 +289,11 @@ async def get_cycle(db, cycle_id: str):
                               and f != "advisory" else "{}"))
         except Exception:
             d[f] = [] if f not in ("metrics_summary", "advisory") else {}
+    # 老复盘的 advisory.lessons/redlines 是纯字符串数组，归一化成 dict 供调用方取
+    # x.brief / x.trigger_context（spec §5.3，不做数据迁移）
+    adv = d.get("advisory")
+    if isinstance(adv, dict):
+        adv["lessons"] = normalize_advisory_items(adv.get("lessons"))
+        adv["redlines"] = normalize_advisory_items(adv.get("redlines"))
+        d["advisory"] = adv
     return d

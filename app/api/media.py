@@ -28,6 +28,10 @@ from app.services.media_mine_queue import (
 from app.services.media_batch import (
     run_organize_one, run_mine_one, start_batch, get_status as batch_get_status)
 from app.services.media_playbook import list_playbooks, get_playbook
+from app.services.media_lesson import (
+    list_lessons, create_lesson, update_lesson,
+    set_lesson_status, delete_lesson, count_redlines)
+from app.services.media_context import INJECTION_BUDGET
 from app.services.media_flow import finalize_updates, clean_body
 from app.services.media_decision import build_decision_context, rank_pool
 from app.services.media_review_cycle import (
@@ -1024,6 +1028,106 @@ async def playbook_set_status(pid: str, status: str = Form(...)):
     return RedirectResponse("/media/playbook", status_code=302)
 
 
+# ─────────────── 教训/红线库 ───────────────
+# 「不要做什么」的库。写稿时红线无条件注入（≤2），教训按 trigger_context
+# 匹配注入（≤3）。人拍板才入库（宪法第 2 条）。
+
+@router.get("/media/lessons", response_class=HTMLResponse)
+async def lessons_home(request: Request):
+    db = await get_db()
+    try:
+        pid = await _current_persona_id(request, db)
+        rows = await list_lessons(db, pid, include_archived=True) if pid else []
+        red_n = await count_redlines(db, pid) if pid else 0
+    finally:
+        await db.close()
+    active = [r for r in rows if r["status"] == "active"]
+    return _tpl(request, "media_lessons.html", {
+        "persona_id": pid,
+        "redlines": [r for r in active if r["kind"] == "redline"],
+        "lessons": [r for r in active if r["kind"] == "lesson"],
+        "archived": [r for r in rows if r["status"] == "archived"],
+        "redline_cap": INJECTION_BUDGET.get("redline", 2),
+        "redline_n": red_n,
+    })
+
+
+@router.post("/media/lesson/create")
+async def lesson_create(request: Request, kind: str = Form("lesson"),
+                        brief: str = Form(...), detail: str = Form(""),
+                        trigger_context: str = Form(""), evidence: str = Form("")):
+    db = await get_db()
+    try:
+        pid = await _current_persona_id(request, db)
+        if pid:
+            await create_lesson(db, pid, kind, brief, detail,
+                                trigger_context, evidence, source="manual")
+    finally:
+        await db.close()
+    return RedirectResponse("/media/lessons", status_code=302)
+
+
+@router.post("/media/lesson/{lid}/update")
+async def lesson_update(lid: str, brief: str = Form(...), detail: str = Form(""),
+                        trigger_context: str = Form(""), evidence: str = Form("")):
+    db = await get_db()
+    try:
+        await update_lesson(db, lid, brief=brief, detail=detail,
+                            trigger_context=trigger_context, evidence=evidence)
+    finally:
+        await db.close()
+    return RedirectResponse("/media/lessons", status_code=302)
+
+
+@router.post("/media/lesson/{lid}/status")
+async def lesson_status(lid: str, status: str = Form(...)):
+    db = await get_db()
+    try:
+        await set_lesson_status(db, lid, status)
+    finally:
+        await db.close()
+    return RedirectResponse("/media/lessons", status_code=302)
+
+
+@router.post("/media/lesson/{lid}/delete")
+async def lesson_delete(lid: str):
+    db = await get_db()
+    try:
+        await delete_lesson(db, lid)
+    finally:
+        await db.close()
+    return RedirectResponse("/media/lessons", status_code=302)
+
+
+@router.post("/media/lesson/adopt")
+async def lesson_adopt(request: Request, kind: str = Form("lesson"),
+                       brief: str = Form(...), trigger_context: str = Form(""),
+                       evidence: str = Form(""), cycle_id: str = Form("")):
+    """从 L2 复盘的 advisory 采纳一条进本子。人点才入库（宪法第 2 条）。
+    去重：同人设+同 kind+同 brief 已有 active 记录则跳过，避免红线预算被重复条目吃满。
+    留痕：走 log_action，action_type='adopt_lesson'，可撤（revert_action 已收编）。"""
+    brief = (brief or "").strip()
+    db = await get_db()
+    try:
+        pid = await _current_persona_id(request, db)
+        if pid:
+            existing = await list_lessons(db, pid)
+            dup = any(r["kind"] == kind and r["brief"] == brief for r in existing)
+            if not dup:
+                lid = await create_lesson(db, pid, kind, brief, detail="",
+                                          trigger_context=trigger_context,
+                                          evidence=evidence, source="l2_advisory")
+                if lid:
+                    await log_action(db, pid, "adopt_lesson", "media_lesson", lid,
+                                     after={"summary": brief, "created_id": lid,
+                                            "created_table": "media_lesson"},
+                                     status="applied")
+    finally:
+        await db.close()
+    back = f"/media/review-cycle/{cycle_id}" if cycle_id else "/media/lessons"
+    return RedirectResponse(back, status_code=302)
+
+
 @router.get("/media/asr-audio/{token}")
 async def media_asr_audio(token: str):
     """公开免登录返回临时音频（供豆包 ASR 抓）。防目录穿越。"""
@@ -1764,11 +1868,17 @@ async def review_cycle_detail(cid: str, request: Request):
     db = await get_db()
     try:
         cyc = await get_cycle(db, cid)
+        adopted = set()
+        if cyc:
+            pid = cyc.get("persona_id")
+            if pid:
+                existing = await list_lessons(db, pid)
+                adopted = {(r["kind"], r["brief"]) for r in existing}
     finally:
         await db.close()
     if not cyc:
         return RedirectResponse("/media/persona", status_code=302)
-    return _tpl(request, "media_review_cycle.html", {"cyc": cyc})
+    return _tpl(request, "media_review_cycle.html", {"cyc": cyc, "adopted": adopted})
 
 
 @router.post("/media/review-cycle/{cid}/delete")
@@ -2120,7 +2230,7 @@ async def assistant_actions(request: Request):
             data = json.loads(a.get("after_json") or "{}") or json.loads(a.get("before_json") or "{}")
         except (TypeError, ValueError):
             data = {}
-        a["summary"] = data.get("title") or data.get("content") or data.get("ai_draft") or ""
+        a["summary"] = data.get("summary") or data.get("title") or data.get("content") or data.get("ai_draft") or ""
     return _tpl(request, "media_assistant_actions.html", {"actions": acts})
 
 

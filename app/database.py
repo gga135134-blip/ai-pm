@@ -511,6 +511,21 @@ CREATE TABLE IF NOT EXISTS media_playbook (
     FOREIGN KEY (persona_id) REFERENCES media_persona(id)
 );
 
+CREATE TABLE IF NOT EXISTS media_lesson (
+    id TEXT PRIMARY KEY,
+    persona_id TEXT NOT NULL,
+    kind TEXT DEFAULT 'lesson',
+    brief TEXT DEFAULT '',
+    detail TEXT DEFAULT '',
+    trigger_context TEXT DEFAULT '',
+    evidence TEXT DEFAULT '',
+    source TEXT DEFAULT '',
+    status TEXT DEFAULT 'active',
+    hit_count INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (persona_id) REFERENCES media_persona(id)
+);
+
 CREATE TABLE IF NOT EXISTS media_mine_candidate (
     id TEXT PRIMARY KEY,
     persona_id TEXT NOT NULL,

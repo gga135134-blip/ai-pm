@@ -103,8 +103,39 @@
       <div style="color:var(--ink-3); margin-bottom:8px">待打法库 / 权重 UI 建成后可落地</div>
       {% if cyc.advisory.weight_suggestion %}<div>权重：{{ cyc.advisory.weight_suggestion }}</div>{% endif %}
       {% for x in cyc.advisory.playbooks or [] %}<div>打法：{{ x }}</div>{% endfor %}
-      {% for x in cyc.advisory.lessons or [] %}<div>教训：{{ x }}</div>{% endfor %}
-      {% for x in cyc.advisory.redlines or [] %}<div>红线：{{ x }}</div>{% endfor %}
+      {% for x in cyc.advisory.redlines or [] %}
+      <div style="display:flex; gap:8px; align-items:baseline; padding:3px 0{% if ('redline', x.brief) in adopted %}; opacity:.5{% endif %}">
+        <span>🚫 {{ x.brief }}</span>
+        {% if ('redline', x.brief) in adopted %}
+        <span style="color:var(--ink-3); font-size:12px">已采纳</span>
+        {% else %}
+        <form method="post" action="/media/lesson/adopt" style="display:inline">
+          <input type="hidden" name="kind" value="redline">
+          <input type="hidden" name="brief" value="{{ x.brief }}">
+          <input type="hidden" name="evidence" value="{{ x.evidence }}">
+          <input type="hidden" name="cycle_id" value="{{ cyc.id }}">
+          <button class="btn ghost" style="font-size:12px">采纳进本子</button>
+        </form>
+        {% endif %}
+      </div>
+      {% endfor %}
+      {% for x in cyc.advisory.lessons or [] %}
+      <div style="display:flex; gap:8px; align-items:baseline; padding:3px 0{% if ('lesson', x.brief) in adopted %}; opacity:.5{% endif %}">
+        <span>⚠️ {{ x.brief }}{% if x.trigger_context %}<span style="color:var(--ink-3); font-size:12px">（{{ x.trigger_context }}）</span>{% endif %}</span>
+        {% if ('lesson', x.brief) in adopted %}
+        <span style="color:var(--ink-3); font-size:12px">已采纳</span>
+        {% else %}
+        <form method="post" action="/media/lesson/adopt" style="display:inline">
+          <input type="hidden" name="kind" value="lesson">
+          <input type="hidden" name="brief" value="{{ x.brief }}">
+          <input type="hidden" name="trigger_context" value="{{ x.trigger_context }}">
+          <input type="hidden" name="evidence" value="{{ x.evidence }}">
+          <input type="hidden" name="cycle_id" value="{{ cyc.id }}">
+          <button class="btn ghost" style="font-size:12px">采纳进本子</button>
+        </form>
+        {% endif %}
+      </div>
+      {% endfor %}
     </div>
   </div>
 

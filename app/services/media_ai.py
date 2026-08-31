@@ -14,6 +14,7 @@ from app.services.media_context import extract_json, log_injection
 from app.services.media_context import (
     build_script_context, render_evidence_block, render_angle_block,
     select_materials, render_material_block,
+    select_redlines, select_lessons, render_lesson_block,
 )
 from app.services.media_flow import (
     PERSONA_MODULES, module_dims, default_phase_tag,
@@ -954,6 +955,22 @@ async def write_script(db, content_id: str, mode: str = "full",
             m = await match_playbook(db, content, model=model)
             playbook = m.get("playbook")
 
+    # ── 教训/红线库：红线无条件带，教训按 trigger_context 匹配 ──
+    lesson_ids, lesson_block = [], ""
+    if mode != "lean":
+        cur = await db.execute(
+            "SELECT * FROM media_lesson WHERE persona_id=? AND status='active' "
+            "ORDER BY created_at",
+            (content["persona_id"],))
+        all_lessons = [dict(r) for r in await cur.fetchall()]
+        topic_text = " ".join(x for x in (content.get("title"),
+                                          content.get("puzzle"),
+                                          content.get("idea_reason")) if x)
+        picked_red = select_redlines(all_lessons)
+        picked_les = select_lessons(all_lessons, topic_text)
+        lesson_ids = [x["id"] for x in picked_red] + [x["id"] for x in picked_les]
+        lesson_block = render_lesson_block(picked_red, picked_les)
+
     parts = [context_text]
     ev_block = render_evidence_block(evidence)
     if ev_block:
@@ -975,6 +992,9 @@ async def write_script(db, content_id: str, mode: str = "full",
         parts.append(f"【为什么做这条】{content['idea_reason']}")
     if hint and hint.strip():
         parts.append(f"【本次重写要求（务必满足）】{hint.strip()}")
+    # 本子放最末尾：近因效应，AI 对靠近末尾的约束更敏感（spec §4.5）
+    if lesson_block:
+        parts.append(lesson_block)
     parts.append("请写出这条内容的口播脚本。")
 
     prompt = "\n\n".join(parts)
@@ -1009,7 +1029,14 @@ async def write_script(db, content_id: str, mode: str = "full",
         (resp, gap_text, json.dumps(used_pb), content_id))
     await db.commit()
 
-    all_injected = injected_ids + material_ids
+    all_injected = injected_ids + material_ids + lesson_ids
+    # hit_count 只在 AI 成功出稿后递增：它回答的是「这条真的参与过一次
+    # 成品生产吗」，不是「被拼进过几次提示词」。报错/费用保护/空返回都不计。
+    for lid in lesson_ids:
+        await db.execute(
+            "UPDATE media_lesson SET hit_count = hit_count + 1 WHERE id=?", (lid,))
+    if lesson_ids:
+        await db.commit()
     await log_injection(db, content_id, f"write_script:{mode}",
                         all_injected, result.get("tokens", 0))
 

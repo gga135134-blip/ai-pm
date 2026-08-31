@@ -10,6 +10,7 @@ import re
 import uuid
 
 from app.services.media_flow import is_injectable
+from app.services.media_decision import _overlap as _text_overlap
 
 log = logging.getLogger(__name__)
 
@@ -19,7 +20,8 @@ INJECTION_BUDGET = {
     "signature": 3,   # 记忆点，单独占槽，少而硬
     "playbook": 2,    # 二期：只给最匹配的已验证打法
     "material": 3,    # 二期：只给未用过且最匹配的原料
-    "lesson": 3,      # 二期：只给 trigger_context 命中的
+    "lesson": 3,      # 教训：按 trigger_context 与选题文本的重合度取前 3
+    "redline": 2,     # 红线：无条件带，不做匹配。单独占槽不与 lesson 竞争
     "audience": 1,    # 二期：只注本条瞄准的那个 segment
 }
 
@@ -185,3 +187,59 @@ def render_material_block(materials: list[dict]) -> str:
         if brief:
             lines.append(f"- {brief}")
     return "\n".join(lines) if len(lines) > 1 else ""
+
+
+# ─────────────── 教训/红线库注入 ───────────────
+# 红线与教训分槽，互不挤占 —— 照 signature（记忆点）的先例：
+# 硬约束不能被一条恰好匹配度高的软建议挤掉（spec §4.2）。
+
+def select_redlines(lessons: list[dict]) -> list[dict]:
+    """红线：无条件取前 INJECTION_BUDGET['redline'] 条（created_at 升序）。
+
+    不做适用性匹配 —— 红线语义就是「任何时候都不许」，对它做匹配自相矛盾。
+    上限 2 是有意的设计压力：红线一多就不值钱。
+    """
+    cap = INJECTION_BUDGET.get("redline")
+    if not cap:
+        log.warning("select_redlines: redline 槽位未登记，拒绝注入")
+        return []
+    reds = [x for x in lessons if (x.get("kind") or "") == "redline"]
+    reds.sort(key=lambda x: x.get("created_at") or "")
+    return reds[:cap]
+
+
+def select_lessons(lessons: list[dict], topic_text: str) -> list[dict]:
+    """教训：按 trigger_context 与 topic_text 的 bigram 重合度降序取前 N。
+
+    trigger_context 为空视为 0 分，排最后（配额有余时仍可进，不主动排除）。
+    sorted 是稳定排序，同分保持原有顺序。
+    """
+    cap = INJECTION_BUDGET.get("lesson")
+    if not cap:
+        log.warning("select_lessons: lesson 槽位未登记，拒绝注入")
+        return []
+    items = [x for x in lessons if (x.get("kind") or "") == "lesson"]
+    ranked = sorted(
+        items,
+        key=lambda x: _text_overlap(x.get("trigger_context") or "", topic_text or ""),
+        reverse=True)
+    return ranked[:cap]
+
+
+def _brief_lines(items: list[dict], title: str) -> str:
+    lines = [title]
+    lines += [f"- {b}" for b in
+              ((x.get("brief") or "").strip() for x in items) if b]
+    return "\n".join(lines) if len(lines) > 1 else ""
+
+
+def render_lesson_block(redlines: list[dict], lessons: list[dict]) -> str:
+    """渲染本子注入块。只放 brief —— detail 永不进提示词（注意力纪律）。
+
+    两者皆空（或 brief 全空）返回空串，绝不产生只有标题的空块。
+    """
+    parts = [t for t in (
+        _brief_lines(redlines, "【红线（绝对不许违反）】"),
+        _brief_lines(lessons, "【教训（这次特别注意）】"),
+    ) if t]
+    return "\n\n".join(parts)
