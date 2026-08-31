@@ -1106,6 +1106,7 @@ async def lesson_adopt(request: Request, kind: str = Form("lesson"),
     """从 L2 复盘的 advisory 采纳一条进本子。人点才入库（宪法第 2 条）。
     去重：同人设+同 kind+同 brief 已有 active 记录则跳过，避免红线预算被重复条目吃满。
     留痕：走 log_action，action_type='adopt_lesson'，可撤（revert_action 已收编）。"""
+    brief = (brief or "").strip()
     db = await get_db()
     try:
         pid = await _current_persona_id(request, db)

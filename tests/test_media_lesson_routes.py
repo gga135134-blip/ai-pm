@@ -91,6 +91,33 @@ def test_lesson_adopt_dedupes():
     asyncio.run(check())
 
 
+def test_lesson_adopt_dedupes_ignores_whitespace():
+    """advisory brief 带尾随空格时，第二次采纳传不带空格的同一句话，
+    应仍判重命中（比较前双方都要 strip），不能建出重复记录。"""
+    trimmed = {
+        "kind": "redline", "brief": "开头别铺垫",
+        "trigger_context": "", "evidence": "", "cycle_id": "",
+    }
+    r1 = _client().post("/media/lesson/adopt", data=trimmed, follow_redirects=False)
+    assert r1.status_code in (302, 303)
+
+    padded = dict(trimmed, brief="开头别铺垫  ")
+    r2 = _client().post("/media/lesson/adopt", data=padded, follow_redirects=False)
+    assert r2.status_code in (302, 303)
+
+    async def check():
+        db = await get_db()
+        try:
+            cur = await db.execute(
+                "SELECT * FROM media_lesson WHERE persona_id='LSP' AND kind='redline' "
+                "AND brief='开头别铺垫'")
+            rows = await cur.fetchall()
+            assert len(rows) == 1
+        finally:
+            await db.close()
+    asyncio.run(check())
+
+
 def test_review_cycle_detail_handles_legacy_string_advisory():
     cid = str(uuid.uuid4())
 
