@@ -7,13 +7,25 @@ CONFIG_FILE = BASE_DIR / "data" / "settings.json"
 log = logging.getLogger(__name__)
 
 PRICE_TABLE = {
-    "claude": {"input": 0.003 / 1000, "output": 0.015 / 1000, "label": "Claude Sonnet"},
+    "claude": {"input": 0.005 / 1000, "output": 0.025 / 1000, "label": "Claude Opus 5"},
     "openai": {"input": 0.005 / 1000, "output": 0.015 / 1000, "label": "GPT-4o"},
     "deepseek": {"input": 0.00014 / 1000, "output": 0.00028 / 1000, "label": "DeepSeek V3"},
     "qwen": {"input": 0.00011 / 1000, "output": 0.00028 / 1000, "label": "通义千问 Plus"},
 }
 
+CLAUDE_MODEL = "claude-opus-5"
+
 QWEN_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+
+
+def _claude_text(content) -> str:
+    """从 Claude 响应里取正文。
+
+    Opus 5 默认开着自适应思考，content 里会混进 thinking 块，
+    直接取 content[0].text 会拿到思考块（没有 .text 属性）而炸。
+    只收 type=="text" 的块，按顺序拼起来。
+    """
+    return "".join(b.text for b in content if getattr(b, "type", "") == "text")
 
 DEFAULT_FALLBACK_ORDER = ["claude", "openai", "deepseek", "qwen"]
 
@@ -184,12 +196,12 @@ async def _call_claude_vision(prompt: str, images: list[dict], system_prompt: st
             "source": {"type": "base64", "media_type": img["media_type"], "data": img["data"]},
         })
     content.append({"type": "text", "text": prompt})
-    kwargs = {"model": "claude-sonnet-4-20250514", "max_tokens": 4096, "messages": [{"role": "user", "content": content}]}
+    kwargs = {"model": CLAUDE_MODEL, "max_tokens": 4096, "messages": [{"role": "user", "content": content}]}
     if system_prompt:
         kwargs["system"] = system_prompt
 
     resp = await client.messages.create(**kwargs)
-    text = resp.content[0].text
+    text = _claude_text(resp.content)
     inp, out = resp.usage.input_tokens, resp.usage.output_tokens
     prices = PRICE_TABLE["claude"]
     cost = inp * prices["input"] + out * prices["output"]
@@ -261,12 +273,12 @@ async def _call_claude(prompt: str, system_prompt: str, config: dict) -> dict:
 
     client = anthropic.AsyncAnthropic(api_key=api_key)
     messages = [{"role": "user", "content": prompt}]
-    kwargs = {"model": "claude-sonnet-4-20250514", "max_tokens": 4096, "messages": messages}
+    kwargs = {"model": CLAUDE_MODEL, "max_tokens": 4096, "messages": messages}
     if system_prompt:
         kwargs["system"] = system_prompt
 
     resp = await client.messages.create(**kwargs)
-    text = resp.content[0].text
+    text = _claude_text(resp.content)
     inp, out = resp.usage.input_tokens, resp.usage.output_tokens
     prices = PRICE_TABLE["claude"]
     cost = inp * prices["input"] + out * prices["output"]
