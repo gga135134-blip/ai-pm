@@ -408,7 +408,8 @@ document.addEventListener('DOMContentLoaded', function(){
 fetch('/media/ui/steps').then(function(r){ return r.json(); }).then(function(d){
   if(!d || !d.ok) return;
   var L = d.libs, parts = [];
-  [['persona','人设'],['material','原料'],['playbook','打法']].forEach(function(p){
+  [['persona','人设'],['material','原料'],['playbook','打法'],
+   ['lesson','教训/红线']].forEach(function(p){
     var v = L[p[0]] || 0;
     parts.push(v ? ('<b>' + p[1] + ' ' + v + ' 条</b>')
                  : ('<span class="zero">' + p[1] + ' 0</span>'));
