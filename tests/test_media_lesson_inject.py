@@ -6,11 +6,11 @@ from app.services import media_ai
 from tests.media_helpers import make_db, fake_ai, seed_content
 
 
-async def _seed_lesson(db, persona_id, kind, brief, trigger="", status="active"):
+async def _seed_lesson(db, persona_id, kind, brief, trigger="", status="active", detail=""):
     lid = str(uuid.uuid4())
     await db.execute(
-        "INSERT INTO media_lesson (id,persona_id,kind,brief,trigger_context,status) "
-        "VALUES (?,?,?,?,?,?)", (lid, persona_id, kind, brief, trigger, status))
+        "INSERT INTO media_lesson (id,persona_id,kind,brief,trigger_context,status,detail) "
+        "VALUES (?,?,?,?,?,?,?)", (lid, persona_id, kind, brief, trigger, status, detail))
     await db.commit()
     return lid
 
@@ -76,12 +76,39 @@ def test_lean_mode_skips_lessons(monkeypatch):
     async def run():
         db = await make_db()
         cid = await seed_content(db)
-        await _seed_lesson(db, "P1", "redline", "不许编造数据")
+        lid = await _seed_lesson(db, "P1", "redline", "不许编造数据")
         await media_ai.write_script(db, cid, mode="lean")
+        cur = await db.execute("SELECT hit_count FROM media_lesson WHERE id=?", (lid,))
+        n = (await cur.fetchone())["hit_count"]
+        await db.close()
+        return n
+
+    n = asyncio.run(run())
+    assert "不许编造数据" not in seen["prompt"]
+    assert n == 0
+
+
+def test_detail_never_enters_prompt(monkeypatch):
+    """项目宪法核心不变量：只有 brief 进提示词，detail 永不进——即便它被 SELECT * 读进内存。"""
+    seen = {}
+
+    async def _spy(prompt, model="auto", task_type="", system_prompt="", json_mode=False):
+        seen["prompt"] = prompt
+        return {"response": "稿子正文", "model": "deepseek", "tokens": 10, "cost": 0.0}
+
+    monkeypatch.setattr(media_ai, "ask_ai", _spy)
+
+    async def run():
+        db = await make_db()
+        cid = await seed_content(db)
+        await _seed_lesson(db, "P1", "redline", "不许编造数据",
+                           detail="这是一段很长的详情文字，只用于内部参考，绝不该出现在给写稿AI的提示词里")
+        await media_ai.write_script(db, cid)
         await db.close()
 
     asyncio.run(run())
-    assert "不许编造数据" not in seen["prompt"]
+    assert "不许编造数据" in seen["prompt"]
+    assert "这是一段很长的详情文字，只用于内部参考，绝不该出现在给写稿AI的提示词里" not in seen["prompt"]
 
 
 def test_archived_lesson_not_injected(monkeypatch):

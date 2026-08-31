@@ -35,7 +35,7 @@ from app.services.media_context import INJECTION_BUDGET
 from app.services.media_flow import finalize_updates, clean_body
 from app.services.media_decision import build_decision_context, rank_pool
 from app.services.media_review_cycle import (
-    run_l2_cycle, list_cycles, get_cycle, delete_cycle, normalize_advisory_items)
+    run_l2_cycle, list_cycles, get_cycle, delete_cycle)
 from app.services.media_phase_review import (
     run_l3_review, list_phase_reviews, get_phase_review, _next_phase)
 from app.services.ai_router import _load_config
@@ -1877,13 +1877,6 @@ async def review_cycle_detail(cid: str, request: Request):
         await db.close()
     if not cyc:
         return RedirectResponse("/media/persona", status_code=302)
-    # 老复盘的 advisory.lessons 是纯字符串数组，归一化成 dict 供模板取
-    # x.brief / x.trigger_context（spec §5.3，不做数据迁移）
-    adv = cyc.get("advisory")
-    if isinstance(adv, dict):
-        adv["lessons"] = normalize_advisory_items(adv.get("lessons"))
-        adv["redlines"] = normalize_advisory_items(adv.get("redlines"))
-        cyc["advisory"] = adv
     return _tpl(request, "media_review_cycle.html", {"cyc": cyc, "adopted": adopted})
 
 
@@ -2236,7 +2229,7 @@ async def assistant_actions(request: Request):
             data = json.loads(a.get("after_json") or "{}") or json.loads(a.get("before_json") or "{}")
         except (TypeError, ValueError):
             data = {}
-        a["summary"] = data.get("title") or data.get("content") or data.get("ai_draft") or ""
+        a["summary"] = data.get("summary") or data.get("title") or data.get("content") or data.get("ai_draft") or ""
     return _tpl(request, "media_assistant_actions.html", {"actions": acts})
 
 

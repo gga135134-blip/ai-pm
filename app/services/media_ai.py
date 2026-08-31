@@ -959,7 +959,8 @@ async def write_script(db, content_id: str, mode: str = "full",
     lesson_ids, lesson_block = [], ""
     if mode != "lean":
         cur = await db.execute(
-            "SELECT * FROM media_lesson WHERE persona_id=? AND status='active'",
+            "SELECT * FROM media_lesson WHERE persona_id=? AND status='active' "
+            "ORDER BY created_at",
             (content["persona_id"],))
         all_lessons = [dict(r) for r in await cur.fetchall()]
         topic_text = " ".join(x for x in (content.get("title"),

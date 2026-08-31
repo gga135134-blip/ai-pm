@@ -102,6 +102,9 @@ async def apply_action(db, action_id) -> bool:
                  (after.get("when_to_use") or "").strip(), (after.get("evidence") or "").strip()))
             after["created_id"], after["created_table"] = nid, "media_playbook"
     elif at == "propose_lesson":
+        brief = (after.get("brief") or "").strip()
+        if not brief:
+            return False
         nid = str(uuid.uuid4())
         kind = (after.get("kind") or "lesson").strip()
         if kind not in ("lesson", "redline"):

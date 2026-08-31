@@ -82,7 +82,7 @@ def test_update_changes_fields():
 
 
 def test_update_rejects_unknown_column():
-    """白名单防注入：不在允许列表里的字段一律忽略，不拼进 SQL。"""
+    """白名单防注入：只要有字段不在允许列表里，整条更新都拒绝（不是静默忽略该字段）。"""
     async def run():
         db = await make_db()
         await _persona(db)

@@ -289,4 +289,11 @@ async def get_cycle(db, cycle_id: str):
                               and f != "advisory" else "{}"))
         except Exception:
             d[f] = [] if f not in ("metrics_summary", "advisory") else {}
+    # 老复盘的 advisory.lessons/redlines 是纯字符串数组，归一化成 dict 供调用方取
+    # x.brief / x.trigger_context（spec §5.3，不做数据迁移）
+    adv = d.get("advisory")
+    if isinstance(adv, dict):
+        adv["lessons"] = normalize_advisory_items(adv.get("lessons"))
+        adv["redlines"] = normalize_advisory_items(adv.get("redlines"))
+        d["advisory"] = adv
     return d

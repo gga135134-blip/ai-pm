@@ -3,9 +3,14 @@ import asyncio
 import json
 import uuid
 
+import pytest
+
+import app.database as _db_mod
+from app.database import get_db, init_db
 from app.services.media_assistant import (
     log_action, apply_action, revert_action, list_pending)
 from app.services.media_lesson import list_lessons
+from app.services import media_agent_tools as mat
 from tests.media_helpers import make_db
 
 
@@ -107,3 +112,100 @@ def test_apply_twice_is_noop():
 
     second, rows = asyncio.run(run())
     assert second is False and len(rows) == 1
+
+
+def test_apply_rejects_empty_brief():
+    """apply_action 是另一个入口，空 brief 不该插进库（工具侧拦了，这里也要拦）。"""
+    async def run():
+        db = await make_db()
+        await _persona(db)
+        aid = str(uuid.uuid4())
+        await db.execute(
+            "INSERT INTO media_assistant_action "
+            "(id,persona_id,action_type,target_table,target_id,after_json,status) "
+            "VALUES (?,?, 'propose_lesson','media_lesson','',?, 'pending')",
+            (aid, "P1", json.dumps({"summary": "记个空的", "kind": "lesson", "brief": ""},
+                                    ensure_ascii=False)))
+        await db.commit()
+        ok = await apply_action(db, aid)
+        rows = await list_lessons(db, "P1")
+        await db.close()
+        return ok, rows
+
+    ok, rows = asyncio.run(run())
+    assert ok is False
+    assert rows == []
+
+
+@pytest.fixture(scope="module", autouse=False)
+def _tool_db(tmp_path_factory):
+    """_tool_propose_lesson 内部自己 await get_db()，用不了内存库，得用 tmp-DB_PATH。"""
+    tmp = tmp_path_factory.mktemp("propose_lesson_tool_db") / "t.db"
+    orig = _db_mod.DB_PATH
+    _db_mod.DB_PATH = tmp
+    asyncio.run(init_db())
+    yield
+    _db_mod.DB_PATH = orig
+
+
+def _tool_seed():
+    """每个 test 前清空重种，避免 module-scoped db 跨 test 串数据。"""
+    async def go():
+        db = await get_db()
+        await db.execute("DELETE FROM media_assistant_action WHERE persona_id='P1'")
+        await db.execute("DELETE FROM media_persona WHERE id='P1'")
+        await db.execute("INSERT INTO media_persona (id,name,one_liner,current_phase,status) "
+                         "VALUES ('P1','嘉姐','帮中小企业落地AI','涨粉','active')")
+        await db.commit()
+        await db.close()
+    asyncio.run(go())
+
+
+def test_tool_propose_lesson_stages_pending(_tool_db):
+    _tool_seed()
+    async def go():
+        out = await mat._tool_propose_lesson(
+            {"brief": "开头别铺垫", "kind": "lesson", "trigger_context": "口播"}, "P1")
+        db = await get_db()
+        cur = await db.execute(
+            "SELECT status,action_type FROM media_assistant_action WHERE persona_id='P1'")
+        row = dict(await cur.fetchone())
+        await db.close()
+        return out, row
+
+    out, row = asyncio.run(go())
+    assert "确认" in out
+    assert row["status"] == "pending"
+    assert row["action_type"] == "propose_lesson"
+
+
+def test_tool_propose_lesson_rejects_empty_brief(_tool_db):
+    _tool_seed()
+    async def go():
+        out = await mat._tool_propose_lesson({"brief": "  ", "kind": "lesson"}, "P1")
+        db = await get_db()
+        cur = await db.execute(
+            "SELECT COUNT(*) c FROM media_assistant_action WHERE persona_id='P1'")
+        n = (await cur.fetchone())["c"]
+        await db.close()
+        return out, n
+
+    out, n = asyncio.run(go())
+    assert "brief" in out
+    assert n == 0
+
+
+def test_tool_propose_lesson_falls_back_to_lesson_kind(_tool_db):
+    _tool_seed()
+    async def go():
+        await mat._tool_propose_lesson({"brief": "非法kind测试", "kind": "foo"}, "P1")
+        db = await get_db()
+        cur = await db.execute(
+            "SELECT after_json FROM media_assistant_action WHERE persona_id='P1' "
+            "AND action_type='propose_lesson' ORDER BY created_at DESC LIMIT 1")
+        after = json.loads((await cur.fetchone())["after_json"])
+        await db.close()
+        return after
+
+    after = asyncio.run(go())
+    assert after["kind"] == "lesson"
