@@ -6,6 +6,13 @@
 <span class="crumb"><a href="/media" style="color:inherit;text-decoration:none">自媒体</a> {{ ic.icon('chevron') }} 体系库 {{ ic.icon('chevron') }} <b>教训 / 红线</b></span>
 {% endblock %}
 {% block content %}
+<style>
+  /* .input 本身没有 display/width，默认 inline-block 会挤成一行。
+     本子页的表单要求每个控件独占一行、通栏——给个页面局部类。 */
+  .lsn-f{ display:block; width:100%; box-sizing:border-box; font-family:var(--sans); }
+  textarea.lsn-f{ resize:vertical; min-height:52px; }
+  .lsn-form-actions{ margin-top:8px; display:flex; gap:8px; align-items:center; }
+</style>
 <div style="max-width:820px; margin:0 auto">
   {{ shell.media_shell('lib', persona_id=persona_id, here='教训/红线') }}
 
@@ -33,9 +40,9 @@
           <div>来源：{{ r.source }}</div>
         </div>
         <form method="post" action="/media/lesson/{{ r.id }}/update" style="margin-top:8px">
-          <input name="brief" class="inp" value="{{ r.brief }}" required maxlength="60" style="margin-bottom:6px">
-          <textarea name="detail" class="inp" rows="2" style="margin-bottom:6px" placeholder="展开说明">{{ r.detail }}</textarea>
-          <input name="evidence" class="inp" value="{{ r.evidence }}" style="margin-bottom:6px" placeholder="出处/证据">
+          <input name="brief" class="input lsn-f" value="{{ r.brief }}" required maxlength="60" style="margin-bottom:6px">
+          <textarea name="detail" class="input lsn-f" rows="2" style="margin-bottom:6px" placeholder="展开说明">{{ r.detail }}</textarea>
+          <input name="evidence" class="input lsn-f" value="{{ r.evidence }}" style="margin-bottom:6px" placeholder="出处/证据">
           <button type="submit" class="btn ghost" style="font-size:12px">保存修改</button>
         </form>
         <form method="post" action="/media/lesson/{{ r.id }}/status" style="display:inline">
@@ -71,10 +78,10 @@
           <div>来源：{{ l.source }}</div>
         </div>
         <form method="post" action="/media/lesson/{{ l.id }}/update" style="margin-top:8px">
-          <input name="brief" class="inp" value="{{ l.brief }}" required maxlength="60" style="margin-bottom:6px">
-          <input name="trigger_context" class="inp" value="{{ l.trigger_context }}" style="margin-bottom:6px" placeholder="什么时候适用">
-          <textarea name="detail" class="inp" rows="2" style="margin-bottom:6px" placeholder="展开说明">{{ l.detail }}</textarea>
-          <input name="evidence" class="inp" value="{{ l.evidence }}" style="margin-bottom:6px" placeholder="出处/证据">
+          <input name="brief" class="input lsn-f" value="{{ l.brief }}" required maxlength="60" style="margin-bottom:6px">
+          <input name="trigger_context" class="input lsn-f" value="{{ l.trigger_context }}" style="margin-bottom:6px" placeholder="什么时候适用">
+          <textarea name="detail" class="input lsn-f" rows="2" style="margin-bottom:6px" placeholder="展开说明">{{ l.detail }}</textarea>
+          <input name="evidence" class="input lsn-f" value="{{ l.evidence }}" style="margin-bottom:6px" placeholder="出处/证据">
           <button type="submit" class="btn ghost" style="font-size:12px">保存修改</button>
         </form>
         <form method="post" action="/media/lesson/{{ l.id }}/status" style="display:inline">
@@ -96,20 +103,20 @@
     <div class="mh"><span class="ttl">＋ 手动加一条</span></div>
     <div class="inner">
       <form method="post" action="/media/lesson/create">
-        <select name="kind" class="inp" style="font-size:13px; margin-bottom:6px">
+        <select name="kind" class="input lsn-f" style="font-size:13px; margin-bottom:6px">
           <option value="lesson">教训（要注意）</option>
           <option value="redline">红线（绝对不许）</option>
         </select>
-        <input name="brief" class="inp" required maxlength="60" style="margin-bottom:6px"
+        <input name="brief" class="input lsn-f" required maxlength="60" style="margin-bottom:6px"
                placeholder="一句话（这句就是塞给 AI 看的，写短写狠）">
-        <input name="trigger_context" class="inp" style="margin-bottom:6px"
+        <input name="trigger_context" class="input lsn-f" style="margin-bottom:6px"
                placeholder="什么时候适用（教训必填；红线可空）">
         <p style="font-size:11.5px; color:var(--ink-3); margin:0 0 6px">
           💡 「什么时候适用」用<b>会出现在选题标题里的词</b>——匹配看的是字面重合，不认同义词。
         </p>
-        <textarea name="detail" class="inp" rows="2" style="margin-bottom:6px"
+        <textarea name="detail" class="input lsn-f" rows="2" style="margin-bottom:6px"
                   placeholder="展开说明（只给你自己看，不会进提示词）"></textarea>
-        <input name="evidence" class="inp" style="margin-bottom:8px"
+        <input name="evidence" class="input lsn-f" style="margin-bottom:8px"
                placeholder="出处/证据（哪条内容、哪次复盘）">
         <button type="submit" class="btn primary" style="font-size:13px">加进本子</button>
       </form>
