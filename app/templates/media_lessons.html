@@ -32,6 +32,12 @@
           {% if r.evidence %}<div>出处：{{ r.evidence }}</div>{% endif %}
           <div>来源：{{ r.source }}</div>
         </div>
+        <form method="post" action="/media/lesson/{{ r.id }}/update" style="margin-top:8px">
+          <input name="brief" class="inp" value="{{ r.brief }}" required maxlength="60" style="margin-bottom:6px">
+          <textarea name="detail" class="inp" rows="2" style="margin-bottom:6px" placeholder="展开说明">{{ r.detail }}</textarea>
+          <input name="evidence" class="inp" value="{{ r.evidence }}" style="margin-bottom:6px" placeholder="出处/证据">
+          <button type="submit" class="btn ghost" style="font-size:12px">保存修改</button>
+        </form>
         <form method="post" action="/media/lesson/{{ r.id }}/status" style="display:inline">
           <input type="hidden" name="status" value="archived">
           <button class="btn ghost" style="font-size:12px">归档</button>
@@ -64,6 +70,13 @@
           {% if l.evidence %}<div>出处：{{ l.evidence }}</div>{% endif %}
           <div>来源：{{ l.source }}</div>
         </div>
+        <form method="post" action="/media/lesson/{{ l.id }}/update" style="margin-top:8px">
+          <input name="brief" class="inp" value="{{ l.brief }}" required maxlength="60" style="margin-bottom:6px">
+          <input name="trigger_context" class="inp" value="{{ l.trigger_context }}" style="margin-bottom:6px" placeholder="什么时候适用">
+          <textarea name="detail" class="inp" rows="2" style="margin-bottom:6px" placeholder="展开说明">{{ l.detail }}</textarea>
+          <input name="evidence" class="inp" value="{{ l.evidence }}" style="margin-bottom:6px" placeholder="出处/证据">
+          <button type="submit" class="btn ghost" style="font-size:12px">保存修改</button>
+        </form>
         <form method="post" action="/media/lesson/{{ l.id }}/status" style="display:inline">
           <input type="hidden" name="status" value="archived">
           <button class="btn ghost" style="font-size:12px">归档</button>

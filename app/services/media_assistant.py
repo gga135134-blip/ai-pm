@@ -155,7 +155,7 @@ async def revert_action(db, action_id) -> bool:
         await db.execute("UPDATE media_content SET is_winner=? WHERE id=?",
                          (before.get("is_winner", 0), a["target_id"]))
     elif a["action_type"] in ("adopt_signature", "adopt_material",
-                              "adopt_playbook", "propose_lesson"):
+                              "adopt_playbook", "propose_lesson", "adopt_lesson"):
         after = json.loads(a["after_json"] or "{}")
         tbl, nid = after.get("created_table"), after.get("created_id")
         if not tbl or not nid:

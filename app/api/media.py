@@ -1103,14 +1103,24 @@ async def lesson_delete(lid: str):
 async def lesson_adopt(request: Request, kind: str = Form("lesson"),
                        brief: str = Form(...), trigger_context: str = Form(""),
                        evidence: str = Form(""), cycle_id: str = Form("")):
-    """从 L2 复盘的 advisory 采纳一条进本子。人点才入库（宪法第 2 条）。"""
+    """从 L2 复盘的 advisory 采纳一条进本子。人点才入库（宪法第 2 条）。
+    去重：同人设+同 kind+同 brief 已有 active 记录则跳过，避免红线预算被重复条目吃满。
+    留痕：走 log_action，action_type='adopt_lesson'，可撤（revert_action 已收编）。"""
     db = await get_db()
     try:
         pid = await _current_persona_id(request, db)
         if pid:
-            await create_lesson(db, pid, kind, brief, detail="",
-                                trigger_context=trigger_context,
-                                evidence=evidence, source="l2_advisory")
+            existing = await list_lessons(db, pid)
+            dup = any(r["kind"] == kind and r["brief"] == brief for r in existing)
+            if not dup:
+                lid = await create_lesson(db, pid, kind, brief, detail="",
+                                          trigger_context=trigger_context,
+                                          evidence=evidence, source="l2_advisory")
+                if lid:
+                    await log_action(db, pid, "adopt_lesson", "media_lesson", lid,
+                                     after={"summary": brief, "created_id": lid,
+                                            "created_table": "media_lesson"},
+                                     status="applied")
     finally:
         await db.close()
     back = f"/media/review-cycle/{cycle_id}" if cycle_id else "/media/lessons"
@@ -1857,6 +1867,12 @@ async def review_cycle_detail(cid: str, request: Request):
     db = await get_db()
     try:
         cyc = await get_cycle(db, cid)
+        adopted = set()
+        if cyc:
+            pid = cyc.get("persona_id")
+            if pid:
+                existing = await list_lessons(db, pid)
+                adopted = {(r["kind"], r["brief"]) for r in existing}
     finally:
         await db.close()
     if not cyc:
@@ -1868,7 +1884,7 @@ async def review_cycle_detail(cid: str, request: Request):
         adv["lessons"] = normalize_advisory_items(adv.get("lessons"))
         adv["redlines"] = normalize_advisory_items(adv.get("redlines"))
         cyc["advisory"] = adv
-    return _tpl(request, "media_review_cycle.html", {"cyc": cyc})
+    return _tpl(request, "media_review_cycle.html", {"cyc": cyc, "adopted": adopted})
 
 
 @router.post("/media/review-cycle/{cid}/delete")
