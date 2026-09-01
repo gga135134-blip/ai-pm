@@ -237,7 +237,12 @@
         var beforeTexts = [].map.call(
           zone.querySelectorAll('.draft-text'), function(e){ return e.textContent.trim(); });
         try {
-          var html = await (await fetch('/media/content/{{ content.id }}/drafts-html')).text();
+          var res = await fetch('/media/content/{{ content.id }}/drafts-html');
+          /* 只有真拿到片段才替换。不检查状态码的话，后端一 500 就会把
+             「Internal Server Error」那张错误页原样塞进草稿区（真机踩到）。 */
+          if (!res.ok) return;
+          var html = await res.text();
+          if (!html.trim()) return;
           zone.innerHTML = html;
         } catch (e) { return; }
 
