@@ -193,6 +193,21 @@ function astToggle(){
 document.addEventListener('keydown', function(e){
   if (e.key === 'Escape' && document.getElementById('ast-drawer').classList.contains('on')) astToggle();
 });
+/* 避让页面自己的悬浮按钮（看板页右下角有个「+」新建，.fab-root）。
+   不写死偏移量——那个按钮有 media query 在小屏时会从 bottom:24px 跳到 80px，
+   写死了会在某个宽度又撞上。改成运行时量它的位置，摞在它上面。
+   .fab-root 在文档里排在 shell 宏之后，所以要等 DOM 齐了再量。 */
+function astDodgeFab(){
+  var fab = document.getElementById('ast-fab');
+  var pageFab = document.querySelector('.fab-root');
+  if (!fab) return;
+  if (!pageFab) { fab.style.bottom = ''; return; }
+  var r = pageFab.getBoundingClientRect();
+  fab.style.bottom = Math.round(window.innerHeight - r.top + 12) + 'px';
+}
+document.addEventListener('DOMContentLoaded', astDodgeFab);
+window.addEventListener('resize', astDodgeFab);
+
 /* 有待确认卡时给按钮点个红点，不用打开也知道有事等你 */
 fetch('/media/assistant/pending').then(function(r){ return r.json(); }).then(function(d){
   if (d && d.pending && d.pending.length) document.getElementById('ast-dot').style.display = 'block';
