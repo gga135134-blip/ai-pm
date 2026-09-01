@@ -347,9 +347,12 @@
         .step.locked{ opacity:.45; cursor:not-allowed; pointer-events:none; }
         .step.locked .t{ color:var(--ink-3); }
         /* 「你在这」卡：体系库页用，紫色系与主线四步区分开 */
-        .step.here{ border-color:var(--ai); background:var(--ai-soft); cursor:default; }
+        /* 体系库页的返回卡。原来是不可点的 span（cursor:default），
+           现在是真的返回键，得让人看出来能点。 */
+        .step.here{ border-color:var(--ai); background:var(--ai-soft); cursor:pointer;
+                    text-decoration:none; transition:filter .12s, transform .12s; }
         .step.here .n, .step.here .t{ color:var(--ai); }
-        .step.here:hover{ border-color:var(--ai); }
+        .step.here:hover{ border-color:var(--ai); filter:brightness(1.18); transform:translateX(-2px); }
 
         .stepnav{ display:flex; align-items:center; gap:10px; margin-top:22px; padding-top:16px;
           border-top:1px solid var(--border); flex-wrap:wrap; }

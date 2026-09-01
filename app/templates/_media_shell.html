@@ -57,13 +57,16 @@
 </div>
 
 <div class="rail" id="ms-rail">
-  {#- 体系库页不属于主线任何一步；给它一张「你在这」的卡，否则四步全灰、看不出位置 -#}
+  {#- 体系库页不属于主线任何一步；给它一张「你在这」的卡，否则四步全灰、看不出位置。
+      这张卡以前是个不可点的 <span>，上面却写着「随时可回」——而面包屑上唯一能点的
+      「自媒体」会把人踢回人设总览（工作区都出去了）。用户原话：「我想出去或回到
+      上一个页面，没有地方回去…无形中点多了很多下」。现在它是真的返回键。 -#}
   {% if current == 'lib' %}
-  <span class="step here">
-    <span class="n">{{ ic.icon('kanban') }}你在这</span>
+  <a class="step here" href="#" onclick="msBack(event)" title="回到你进体系库之前那一页">
+    <span class="n">{{ ic.icon('chevron', 'flip') }}返回</span>
     <span class="t">体系库{% if here %} · {{ here }}{% endif %}</span>
-    <span class="c">不在主线上，随时可回</span>
-  </span>
+    <span class="c" id="ms-back-hint">回上一页</span>
+  </a>
   {% endif %}
   {% for key, label, href in steps %}
   <a class="step {% if key == current %}now{% else %}todo{% endif %}" data-step="{{ key }}" href="{{ href }}">
@@ -217,6 +220,42 @@ document.addEventListener('keydown', function(e){
    不写死偏移量——那个按钮有 media query 在小屏时会从 bottom:24px 跳到 80px，
    写死了会在某个宽度又撞上。改成运行时量它的位置，摞在它上面。
    .fab-root 在文档里排在 shell 宏之后，所以要等 DOM 齐了再量。 */
+/* ── 返回上一页 ──
+   体系库页是「岔出主线」的页面，进来之后要能回到离开的地方。
+   优先级：①记下的最后一个主线页（最准，且不受表单 POST→重定向干扰）
+          ②同源 referrer → history.back()（保留滚动位置）
+          ③兜底回内容看板
+   只在主线页记，体系库页之间互相跳不覆盖，否则从 A 库跳 B 库就把主线位置丢了。 */
+var MS_LAST_KEY = 'ms_last_main';
+(function(){
+  var cur = '{{ current }}';
+  if (cur === 'lib') return;
+  try { sessionStorage.setItem(MS_LAST_KEY, location.pathname + location.search); } catch (e) {}
+})();
+function msBack(e){
+  if (e) e.preventDefault();
+  var last = null;
+  try { last = sessionStorage.getItem(MS_LAST_KEY); } catch (err) {}
+  if (last && last !== location.pathname + location.search) { location.href = last; return; }
+  try {
+    if (document.referrer && new URL(document.referrer).origin === location.origin
+        && document.referrer !== location.href) { history.back(); return; }
+  } catch (err) {}
+  location.href = '/media/board';
+}
+/* 把返回目标写在卡片副标题上——让人点之前就知道会去哪，不用赌 */
+document.addEventListener('DOMContentLoaded', function(){
+  var hint = document.getElementById('ms-back-hint');
+  if (!hint) return;
+  var last = null;
+  try { last = sessionStorage.getItem(MS_LAST_KEY); } catch (e) {}
+  var names = {'/media/topics': '选题', '/media/board': '内容看板', '/media/review': '复盘'};
+  if (last) {
+    var base = last.split('?')[0];
+    hint.textContent = '回' + (names[base] || (base.indexOf('/media/content/') === 0 ? '刚才那条内容' : '上一页'));
+  }
+});
+
 function astDodgeFab(){
   var fab = document.getElementById('ast-fab');
   var tip = document.getElementById('ast-tip');
