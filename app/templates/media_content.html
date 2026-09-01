@@ -221,18 +221,35 @@
                   border:1px solid var(--ai); border-radius:var(--r-sm);
                   padding:9px 12px; margin-bottom:10px; display:flex;
                   align-items:center; gap:10px; flex-wrap:wrap">
-        <span>{{ ic.icon('robot') }} AI 写过一版草稿（{{ content.ai_draft|length }} 字），还没填进下面的脚本框</span>
+        <span>{{ ic.icon('robot') }} AI 写过一版草稿（<b>{{ content.ai_draft|length }}</b> 字），
+          跟下面框里这版（<b>{{ content.script|length }}</b> 字）不一样</span>
+        <button type="button" onclick="draftPeek()" id="draft-peek-btn" class="btn"
+                style="font-size:12px; padding:3px 10px">先看看 ↓</button>
         <button type="button" onclick="draftFill()" class="btn primary" style="font-size:12px; padding:3px 10px">填进来 ↓</button>
-        <span style="color:var(--ink-3)">填进来后改成你要念的话，点「保存脚本」即定稿</span>
+        <span style="color:var(--ink-3)">填进来只是填到框里，<b>不会保存</b>——刷新页面就回到现在这版</span>
       </div>
+      {#- 预览区：以前只有「填进来」一个动作，等于逼人在没看见新稿的情况下
+          覆盖掉手上这版。用户原话：「ai 又写了一篇，但脚本这里看到的还是旧的」。
+          现在可以先展开读完再决定填不填。 -#}
+      <div id="draft-peek" style="display:none; margin:-4px 0 10px; border:1px solid var(--ai);
+           border-radius:var(--r-sm); background:var(--panel-2); padding:12px;
+           max-height:320px; overflow-y:auto; font-family:var(--mono); font-size:12.5px;
+           line-height:1.7; white-space:pre-wrap">{{ content.ai_draft }}</div>
       <textarea id="ai-draft-store" style="display:none">{{ content.ai_draft }}</textarea>
       <script>
       /* 自带填充逻辑，不依赖「创作辅助」模块里的 fillFromDraft()——那个会随阶段消失 */
+      function draftPeek(){
+        var p = document.getElementById('draft-peek');
+        var btn = document.getElementById('draft-peek-btn');
+        var open = p.style.display === 'none';
+        p.style.display = open ? 'block' : 'none';
+        btn.textContent = open ? '收起 ↑' : '先看看 ↓';
+      }
       function draftFill(){
         var c = document.getElementById('ai-draft-store');
         var b = document.getElementById('script-box');
         if (!c || !b) return;
-        if (b.value.trim() && !confirm('脚本框里已有内容，填进来会覆盖，继续？')) return;
+        if (b.value.trim() && !confirm('脚本框里已有内容，填进来会覆盖。\n（只是覆盖输入框，没保存——刷新就能回到现在这版）\n继续？')) return;
         b.value = c.value;
         b.focus();
       }
