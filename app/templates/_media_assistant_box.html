@@ -183,6 +183,13 @@ async function astSend(){
       bubble('助手',d.reply);
       st.textContent=(d.steps&&d.steps.length?('调了：'+d.steps.join('、')+' · '):'')+'花费 $'+(d.cost||0).toFixed(4);
       loadPending();
+      /* 助手调过工具时喊一声，让当前页面自己去刷新。
+         以前助手在抽屉里写完稿，你眼前那页纹丝不动——得刷新、还得点「填进来」。
+         用户原话：「我是要助手跟脚本框及时同步」。
+         抽屉只管喊，页面自己决定怎么响应，两边不耦合。 */
+      if(d.steps && d.steps.length && typeof window.onAssistantWrote === 'function'){
+        try{ window.onAssistantWrote(d.steps); }catch(e){}
+      }
     }
     else st.textContent='失败：'+(d.error||'');
   }catch(e){ st.textContent='请求失败：'+e; }

@@ -1606,6 +1606,32 @@ async def metrics_screenshot(pubid: str, file: UploadFile = File(...)):
     return JSONResponse(result)
 
 
+@router.get("/media/content/{cid}/drafts-html", response_class=HTMLResponse)
+async def content_drafts_html(cid: str, request: Request):
+    """只渲染草稿区那一块，给助手写完之后的实时刷新用。
+
+    复用同一个片段模板，避免把同样的卡片标记在 Jinja 和 JS 里各写一遍
+    （两份迟早会走样）。
+    """
+    db = await get_db()
+    try:
+        cur = await db.execute(
+            "SELECT ai_draft, script FROM media_content WHERE id=?", (cid,))
+        row = await cur.fetchone()
+        if not row:
+            return HTMLResponse("")
+        script = row["script"] or ""
+        drafts = await list_drafts(db, cid)
+        cur_draft = (row["ai_draft"] or "").strip()
+        if cur_draft and not any(d["text"].strip() == cur_draft for d in drafts):
+            await add_draft(db, cid, cur_draft, model="（本次之前写的）")
+            drafts = await list_drafts(db, cid)
+    finally:
+        await db.close()
+    return _tpl(request, "_media_drafts.html",
+                {"drafts": drafts, "content": {"script": script}})
+
+
 @router.post("/media/content/{cid}/ai-script")
 async def content_ai_script(cid: str, mode: str = Form("full"),
                             hint: str = Form(""), playbook_id: str = Form("")):
