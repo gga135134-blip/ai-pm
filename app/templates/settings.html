@@ -176,7 +176,7 @@
             <!-- AI 路由规则 -->
             <div class="st-subhead">AI 路由规则</div>
             <p class="st-note" style="margin:-4px 0 12px">按任务类型自动选择模型（"自动"使用默认模型）</p>
-            {% for rule_name, rule_label in [('code', '代码/编程'), ('writing', '文案/写作'), ('analysis', '分析/研究'), ('review', '审核/质检')] %}
+            {% for rule_name, rule_label in [('media_script', '写口播稿（自媒体）'), ('code', '代码/编程'), ('writing', '文案/写作'), ('analysis', '分析/研究'), ('review', '审核/质检')] %}
             <div class="st-rtrow">
                 <span class="rl">{{ rule_label }}</span>
                 <select name="route_{{ rule_name }}" class="input" style="flex:1">

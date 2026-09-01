@@ -81,11 +81,26 @@ async def settings_save(
     route_analysis: str = Form("auto"),
     route_review: str = Form("auto"),
     route_vision: str = Form("auto"),
+    route_media_script: str = Form("auto"),
 ):
     fallback_order = []
     for m in [fallback_1, fallback_2, fallback_3, fallback_4]:
         if m and m not in fallback_order:
             fallback_order.append(m)
+
+    # 路由要「合并」不能「重建」。以前这里直接写死一个只含表单那几个键的
+    # 字典，任何没上表单的路由（media_script、media_topic…）一保存就被抹掉。
+    # 真机踩到：用户配好 media_script→claude，后来去设置页填了个 API Key，
+    # 一保存写稿就悄悄退回 deepseek，稿子质量掉了还查不出原因。
+    routes = dict(load_settings().get("routes") or {})
+    routes.update({
+        "code": route_code,
+        "writing": route_writing,
+        "analysis": route_analysis,
+        "review": route_review,
+        "vision": route_vision,
+        "media_script": route_media_script,
+    })
 
     data = {
         "anthropic_api_key": anthropic_api_key,
@@ -97,13 +112,7 @@ async def settings_save(
         "serverchan_key": serverchan_key,
         "pushplus_token": pushplus_token,
         "feishu_webhook": feishu_webhook,
-        "routes": {
-            "code": route_code,
-            "writing": route_writing,
-            "analysis": route_analysis,
-            "review": route_review,
-            "vision": route_vision,
-        },
+        "routes": routes,
     }
     save_settings(data)
     return RedirectResponse("/settings", status_code=303)
