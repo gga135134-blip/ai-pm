@@ -235,6 +235,36 @@ async def _tool_draft_script(args, pid):
     return "已写好脚本草稿（在内容的口播脚本区，未定稿；可撤销还原）。"
 
 
+async def _tool_adopt_topic(args, pid):
+    """把选题池里的一条采纳成内容库条目（写稿的前提）。
+
+    这是主线「选题 → 内容」那一步。缺了它助手就只能拿 write_next 硬凑，
+    续出带错误血缘的内容（2026-09-01 真机踩到）。
+    """
+    from app.services.media_topic import adopt_topic
+    tid = ((args or {}).get("topic_id") or "").strip()
+    db = await get_db()
+    try:
+        cur = await db.execute(
+            "SELECT title, status FROM media_topic WHERE id=? AND persona_id=?", (tid, pid))
+        row = await cur.fetchone()
+        if not row:
+            return "（找不到这条选题，或它不属于当前人设）"
+        if row["status"] != "pool":
+            return f"（《{row['title']}》状态是 {row['status']}，不在池子里，不能采纳）"
+        title = row["title"]
+        cid = await adopt_topic(db, tid)
+        if not cid:
+            return "（采纳失败，选题可能刚被别处改过）"
+        await log_action(db, pid, "adopt_topic", "media_content", cid,
+                         after={"created_id": cid, "created_table": "media_content",
+                                "topic_id": tid, "title": title})
+    finally:
+        await db.close()
+    return (f"已把《{title}》采纳成内容（idea 阶段，content_id={cid}）。"
+            f"可以对它写脚本草稿了。这步可撤销。")
+
+
 async def _tool_match_playbook(args, pid):
     from app.services.media_ai import match_playbook
     cid = (args or {}).get("content_id", "")
@@ -255,7 +285,7 @@ async def _tool_match_playbook(args, pid):
 
 _WRITE = {
     "create_topic": _tool_create_topic, "write_next": _tool_write_next,
-    "draft_script": _tool_draft_script, "match_playbook": _tool_match_playbook,
+    "draft_script": _tool_draft_script, "adopt_topic": _tool_adopt_topic, "match_playbook": _tool_match_playbook,
 }
 
 
@@ -389,6 +419,10 @@ MEDIA_TOOL_SCHEMAS += [
             {"from_content_id": {"type": "string"}}, ["from_content_id"]),
     _schema("draft_script", "给某条内容写口播脚本草稿（不定稿·可撤）。",
             {"content_id": {"type": "string"}, "hint": {"type": "string"}}, ["content_id"]),
+    _schema("adopt_topic",
+            "把选题池里的一条选题采纳成内容库条目（草稿·可撤）。"
+            "这是写稿的前提——draft_script 只认内容库条目，选题池里的写不了。",
+            {"topic_id": {"type": "string"}}, ["topic_id"]),
     _schema("match_playbook", "给某条内容匹配最贴的一条打法（读）。",
             {"content_id": {"type": "string"}}, ["content_id"]),
 ]

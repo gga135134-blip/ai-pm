@@ -209,6 +209,36 @@
         </span>
       </div>
       <div id="supply-result" style="display:none; margin-top:8px"></div>
+
+      {#- AI 草稿存在但没进脚本框时的提示。
+          必须放在这个模块里：「创作辅助」模块（原来那个「填进脚本框」按钮的家）
+          带 {% if content.stage == 'idea' %} 门禁，阶段一过整块消失，连隐藏的
+          草稿缓存和 fillFromDraft() 函数一起没了 —— 草稿在库里但页面零入口，
+          用户看到的是一个写着「点 AI 写脚本生成」的空框，页面等于在骗人。
+          助手调 draft_script 只写 ai_draft，所以它写的稿子以前你根本看不到。 -#}
+      {% if content.ai_draft and content.ai_draft != content.script %}
+      <div style="font-size:12.5px; color:var(--ai); background:var(--ai-soft);
+                  border:1px solid var(--ai); border-radius:var(--r-sm);
+                  padding:9px 12px; margin-bottom:10px; display:flex;
+                  align-items:center; gap:10px; flex-wrap:wrap">
+        <span>{{ ic.icon('robot') }} AI 写过一版草稿（{{ content.ai_draft|length }} 字），还没填进下面的脚本框</span>
+        <button type="button" onclick="draftFill()" class="btn primary" style="font-size:12px; padding:3px 10px">填进来 ↓</button>
+        <span style="color:var(--ink-3)">填进来后改成你要念的话，点「保存脚本」即定稿</span>
+      </div>
+      <textarea id="ai-draft-store" style="display:none">{{ content.ai_draft }}</textarea>
+      <script>
+      /* 自带填充逻辑，不依赖「创作辅助」模块里的 fillFromDraft()——那个会随阶段消失 */
+      function draftFill(){
+        var c = document.getElementById('ai-draft-store');
+        var b = document.getElementById('script-box');
+        if (!c || !b) return;
+        if (b.value.trim() && !confirm('脚本框里已有内容，填进来会覆盖，继续？')) return;
+        b.value = c.value;
+        b.focus();
+      }
+      </script>
+      {% endif %}
+
       <form method="post" action="/media/content/{{ content.id }}/script">
         <textarea name="script" id="script-box" rows="22"
                   placeholder="点「AI 写脚本」生成，或直接手写"

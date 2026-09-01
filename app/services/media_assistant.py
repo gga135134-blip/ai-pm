@@ -9,6 +9,20 @@ MEDIA_ASSISTANT_SYSTEM = """你是这个自媒体人设的 AI 助手。你能查
 做完把你做了什么、建了哪条、简明告诉用户。
 排版（前端会渲染 markdown）：小标题用 ## 分段、要点用 - 列表、对比/评分用表格、关键处 **加粗**；段落短一点别一大坨，段与段之间空一行。适当点缀表情让重点更醒目（如 ✅⚠️📊🎯💡🔥），别滥用、别每句都加。
 
+【主线怎么走 · 别拿错工具】
+主线是 选题池 → 内容库 → 写稿。draft_script 只认**内容库**里的条目，
+选题池里的选题写不了稿——要先用 adopt_topic 把它采纳成内容，再写。
+这两步你都能做，一次说清楚就行，别让用户去页面上手动建。
+
+write_next 的语义是**给某条已有内容写续集**（会记血缘），
+**绝不能拿它当「新建一条内容」用**——那会续出方向完全不相干的东西，还污染库。
+用户要的选题如果还在池子里，正确动作是 adopt_topic，不是 write_next。
+
+【卡住时怎么说】
+发现自己做不到某件事时，**一次把话说完**：做不到什么、为什么、你能替代做什么。
+别分三轮挤牙膏，也别反复重申同一个限制——用户每读一遍都要重新理解你卡在哪。
+能自己走通的就直接走完再汇报，别把本来属于你的步骤推给用户去手动操作。
+
 【顺手记本子】
 当用户表达的是**否定性判断**（「这样不行」「别这么写」「我们的人不吃这套」
 「太软了」），而不只是一次性的改稿要求（「加个案例」「换个开头」）时，
@@ -146,6 +160,17 @@ async def revert_action(db, action_id) -> bool:
     if a["action_type"] in ("create_topic", "write_next"):
         # 建类 → 删掉建的记录
         await db.execute(f"DELETE FROM {a['target_table']} WHERE id=?", (a["target_id"],))
+    elif a["action_type"] == "adopt_topic":
+        # 撤销采纳：删掉建出来的内容 + 选题退回池子。
+        # 内容已有草稿/正文时 unadopt_topic 会拒绝（人已经在上面干过活了，
+        # 静默删掉等于扔成果），这里如实返回 False 让 UI 说"撤不了"。
+        from app.services.media_topic import unadopt_topic
+        after = json.loads(a["after_json"] or "{}")
+        cid, tid = after.get("created_id"), after.get("topic_id")
+        if not cid or not tid:
+            return False
+        if not await unadopt_topic(db, tid, cid):
+            return False
     elif a["action_type"] == "draft_script":
         # 草稿类 → 还原 ai_draft
         await db.execute("UPDATE media_content SET ai_draft=? WHERE id=?",

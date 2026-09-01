@@ -28,6 +28,7 @@ from app.services.media_mine_queue import (
 from app.services.media_batch import (
     run_organize_one, run_mine_one, start_batch, get_status as batch_get_status)
 from app.services.media_playbook import list_playbooks, get_playbook
+from app.services.media_topic import adopt_topic
 from app.services.media_lesson import (
     list_lessons, create_lesson, update_lesson,
     set_lesson_status, delete_lesson, count_redlines)
@@ -731,31 +732,11 @@ async def topic_create(persona_id: str = Form(...), title: str = Form(...),
     return RedirectResponse("/media/topics", status_code=302)
 
 
-async def _adopt_topic(db, topic_id: str) -> str | None:
-    """话题 → 内容。把谜题和理由一起带过去，开工时不用重新想。"""
-    cur = await db.execute("SELECT * FROM media_topic WHERE id=?", (topic_id,))
-    row = await cur.fetchone()
-    if not row or row["status"] != "pool":
-        return None
-    t = dict(row)
-    cid = str(uuid.uuid4())
-    await db.execute(
-        "INSERT INTO media_content "
-        "(id,persona_id,title,puzzle,stage,idea_source,idea_reason) "
-        "VALUES (?,?,?,?,'idea',?,?)",
-        (cid, t["persona_id"], t["title"], t["puzzle"], t["source"], t["reason"]))
-    await db.execute(
-        "UPDATE media_topic SET status='adopted', adopted_content_id=? WHERE id=?",
-        (cid, topic_id))
-    await db.commit()
-    return cid
-
-
 @router.post("/media/topic/{tid}/adopt")
 async def topic_adopt(tid: str):
     db = await get_db()
     try:
-        cid = await _adopt_topic(db, tid)
+        cid = await adopt_topic(db, tid)
     finally:
         await db.close()
     if not cid:
