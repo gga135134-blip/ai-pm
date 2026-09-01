@@ -138,5 +138,11 @@ async function astClear(){
     initHistory(); loadPending();
   }catch(e){ st.textContent='清空失败：'+e; }
 }
-document.addEventListener('DOMContentLoaded', function(){ initHistory(); loadPending(); });
+/* 懒加载开关：全局抽屉里嵌这个框时会先置 window.AST_LAZY=true，
+   等用户真点开抽屉才调 astInit()——否则 15 个媒体页每次打开都白发两个请求。
+   页面内联嵌（助手页/复盘首页）不设这个标志，保持进页就加载。 */
+window.astInit = function(){ initHistory(); loadPending(); };
+if (!window.AST_LAZY) {
+  document.addEventListener('DOMContentLoaded', window.astInit);
+}
 </script>

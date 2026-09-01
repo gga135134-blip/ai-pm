@@ -4,7 +4,7 @@
     current: topic|content|publish|review|lib（lib = 体系库页，不高亮主线步）
     persona: 人设 dict（可空）；persona_id: 没有 persona 对象时传 id
     步骤的完成度/存量由 /media/ui/steps 前端填充（各页 context 数据不齐，见 spec §3.2） -#}
-{% macro media_shell(current, persona=None, persona_id=None, here='') -%}
+{% macro media_shell(current, persona=None, persona_id=None, here='', assistant=True) -%}
 {% set steps = [
    ('topic','1 · 选题','/media/topics'),
    ('content','2 · 内容','/media/board'),
@@ -133,6 +133,72 @@ function msToggleLibs(){ document.getElementById('ms-libs').classList.toggle('op
   }).catch(function(){});
 })();
 </script>
+
+{#- 全局 AI 助手抽屉：右下角常驻按钮，就地展开，不跳页。
+    「智能体化」的前提是助手随时在手边，而不是一个你要「去」的页面——
+    以前只有 /media/assistant 独立页，从任何页面点过去再返回都回到主页，白点好几下。
+    助手页 / 复盘首页已经内联嵌了对话框，那两页传 assistant=false 关掉抽屉，避免 id 撞车。 -#}
+{% if assistant %}
+<style>
+  #ast-fab{ position:fixed; right:22px; bottom:22px; z-index:60; width:52px; height:52px;
+    border-radius:50%; border:1px solid var(--ai); background:var(--ai-soft); color:var(--ai);
+    font-size:22px; cursor:pointer; box-shadow:0 4px 16px rgba(0,0,0,.35);
+    display:flex; align-items:center; justify-content:center; transition:transform .12s; }
+  #ast-fab:hover{ transform:scale(1.06); }
+  #ast-fab .dot{ position:absolute; top:2px; right:2px; width:10px; height:10px; border-radius:50%;
+    background:var(--warn); display:none; }
+  #ast-mask{ position:fixed; inset:0; z-index:70; background:rgba(0,0,0,.45); display:none; }
+  #ast-drawer{ position:fixed; top:0; right:0; z-index:71; height:100%; width:min(560px,94vw);
+    background:var(--bg); border-left:1px solid var(--border); display:none;
+    flex-direction:column; padding:16px 18px; overflow-y:auto; }
+  #ast-drawer.on, #ast-mask.on{ display:flex; }
+  #ast-drawer .hd{ display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+  #ast-drawer .hd b{ font-size:15px; white-space:nowrap; }
+  /* 副标题在窄屏先让位，别把标题挤换行 */
+  #ast-drawer .hd .sub{ font-size:12px; color:var(--ink-3); overflow:hidden;
+    text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+  @media (max-width:520px){ #ast-drawer .hd .sub{ display:none; } }
+  /* 对话框自带 min-height:280 / max-height:55vh，那是给页面内联嵌用的；
+     抽屉是整屏高，让它撑满，否则输入框下面空一大片 */
+  #ast-drawer #chat{ flex:1; max-height:none; }
+</style>
+
+<button id="ast-fab" onclick="astToggle()" title="AI 助手（Esc 关闭）" aria-label="AI 助手">
+  {{ ic.icon('robot') }}<span class="dot" id="ast-dot"></span>
+</button>
+<div id="ast-mask" onclick="astToggle()"></div>
+<div id="ast-drawer" role="dialog" aria-label="AI 助手">
+  <div class="hd">
+    <b>AI 助手</b>
+    <span class="sub">查内容/选题/库 · 建选题草稿 · 核心动作走待确认卡</span>
+    <span style="flex:1"></span>
+    <button class="iconbtn" onclick="astToggle()" aria-label="关闭">{{ ic.icon('x') }}</button>
+  </div>
+  <script>window.AST_LAZY = true;</script>
+  {% include "_media_assistant_box.html" %}
+</div>
+
+<script>
+/* 抽屉开关。首次打开才真正加载历史+待确认卡（懒加载，见 _media_assistant_box.html 末尾）。 */
+var _astLoaded = false;
+function astToggle(){
+  var d = document.getElementById('ast-drawer'), m = document.getElementById('ast-mask');
+  var open = !d.classList.contains('on');
+  d.classList.toggle('on', open); m.classList.toggle('on', open);
+  if (open) {
+    if (!_astLoaded) { _astLoaded = true; window.astInit(); }
+    var i = document.getElementById('ast-input'); if (i) i.focus();
+  }
+}
+document.addEventListener('keydown', function(e){
+  if (e.key === 'Escape' && document.getElementById('ast-drawer').classList.contains('on')) astToggle();
+});
+/* 有待确认卡时给按钮点个红点，不用打开也知道有事等你 */
+fetch('/media/assistant/pending').then(function(r){ return r.json(); }).then(function(d){
+  if (d && d.pending && d.pending.length) document.getElementById('ast-dot').style.display = 'block';
+}).catch(function(){});
+</script>
+{% endif %}
 {%- endmacro %}
 
 {#- 底部步骤导航。back/next 传 {'href':..., 'label':...}；
