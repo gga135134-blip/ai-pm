@@ -65,6 +65,20 @@ def test_all_fail_reports_last_error(monkeypatch):
     assert out["response"].startswith("[错误]")
     assert "OpenAI" in out["response"]
     assert called == ["qwen", "claude", "openai"]
+    # 三家都配了 key，就没有「去配谁」这句提示
+    assert "还没配" not in out["response"]
+
+
+def test_failure_hints_at_unconfigured_providers(monkeypatch):
+    """真机踩过的场景：千问没配 key → 只剩 Claude → Claude 被中转 403 挡下。
+    光报「Claude 识图失败 403」看不懂，得直说还有哪家没配。"""
+    called = _patch(monkeypatch, {"anthropic_api_key": "a"}, fail=("claude",))
+    out = _ask()
+    assert called == ["claude"]
+    assert "Claude 识图调用失败" in out["response"]
+    assert "还没配" in out["response"]
+    assert "通义千问" in out["response"]
+    assert "OpenAI" in out["response"]
 
 
 def test_no_key_at_all(monkeypatch):

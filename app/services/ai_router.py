@@ -176,7 +176,15 @@ async def ask_ai_vision(prompt: str, images: list[dict], system_prompt: str = ""
         except Exception as e:
             last = f"{_VISION_NAME[name]} 识图调用失败: {e}"
             log.warning("%s vision failed: %s", name, e)
-    return {"response": f"[错误] {last}", "model": chain[-1], "tokens": 0, "cost": 0}
+
+    # 全试完还是不行。这时候最有用的信息不是最后那条堆栈，而是「你还有没配的家」——
+    # 真机踩到过：千问没配 key → 只剩 Claude → Claude 走中转被 403 挡下，
+    # 报错只说「Claude 识图失败 403」，跟真正的原因（千问没配）隔了三层，看不懂。
+    missing = [_VISION_NAME[m] for m in _VISION_ORDER if not config.get(_VISION_KEY[m])]
+    hint = ""
+    if missing:
+        hint = f"（还没配 {'、'.join(missing)} 的 API Key，去「设置」页补上就能换一家试）"
+    return {"response": f"[错误] {last}{hint}", "model": chain[-1], "tokens": 0, "cost": 0}
 
 
 async def _call_qwen_vision(prompt: str, images: list[dict], system_prompt: str, config: dict) -> dict:
