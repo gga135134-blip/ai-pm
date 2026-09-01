@@ -115,3 +115,49 @@ def test_backfill_from_legacy_ai_draft():
     assert before == []
     assert [r["text"] for r in after] == ["老草稿正文"]
     assert after[0]["model"] == "（本次之前写的）"
+
+
+def test_backfill_when_history_has_other_versions():
+    """回填的判断依据是「内容比对」，不是「表空不空」。
+
+    第一版写成「表为空才回填」是错的：表里只要已有任意一条（哪怕是别的版本），
+    ai_draft 里那版就永远浮不上来——页面上看着就是「助手明明写了，脚本页却没有」。
+    """
+    async def run():
+        db, cid = await _mk()
+        await add_draft(db, cid, "页面写的那版", model="deepseek")
+        await db.execute(
+            "UPDATE media_content SET ai_draft=? WHERE id=?", ("助手写的那版", cid))
+        await db.commit()
+
+        cur = await db.execute("SELECT ai_draft FROM media_content WHERE id=?", (cid,))
+        cur_draft = (await cur.fetchone())["ai_draft"].strip()
+        drafts = await list_drafts(db, cid)
+        # 复刻路由里的回填判断
+        if cur_draft and not any(d["text"].strip() == cur_draft for d in drafts):
+            await add_draft(db, cid, cur_draft, model="（本次之前写的）")
+        out = await list_drafts(db, cid)
+        await db.close()
+        return [r["text"] for r in out]
+
+    assert asyncio.run(run()) == ["助手写的那版", "页面写的那版"]
+
+
+def test_backfill_skips_when_already_recorded():
+    """ai_draft 跟历史表里某版一样时别重复补，否则每刷一次页面就多一条。"""
+    async def run():
+        db, cid = await _mk()
+        await add_draft(db, cid, "同一版", model="claude")
+        await db.execute(
+            "UPDATE media_content SET ai_draft=? WHERE id=?", ("同一版", cid))
+        await db.commit()
+
+        drafts = await list_drafts(db, cid)
+        cur_draft = "同一版"
+        if cur_draft and not any(d["text"].strip() == cur_draft for d in drafts):
+            await add_draft(db, cid, cur_draft)
+        out = await list_drafts(db, cid)
+        await db.close()
+        return out
+
+    assert len(asyncio.run(run())) == 1

@@ -1281,13 +1281,16 @@ async def content_detail(request: Request, cid: str):
             "SELECT COUNT(*) c FROM media_assistant_action "
             "WHERE target_table='media_content' AND target_id=? AND status='applied'", (cid,))
         assistant_touched = (await cur.fetchone())["c"] > 0
+        # 不变量：ai_draft 里当前那一版，必须永远能在列表里看到。
+        #
+        # 草稿历史表是 2026-09-01 才建的，在那之前写的草稿只存在 ai_draft 这个
+        # 老字段里。第一版回填只在「历史表为空」时才跑——那是错的：表里只要已经
+        # 有任意一条（哪怕是别的版本），ai_draft 里那版就永远浮不上来，页面上
+        # 看着就是「助手明明写了，脚本页却没有」。改成按内容比对。
         drafts = await list_drafts(db, cid)
-        # 回填：草稿历史表是 2026-09-01 才建的，在那之前写的草稿只存在
-        # media_content.ai_draft 这个老字段里。不补的话新界面拿到空列表，
-        # 老草稿在页面上凭空消失（数据其实还在）。第一次打开这条内容时自愈，
-        # 只补有草稿、且历史表里还没有记录的那些。
-        if not drafts and (content.get("ai_draft") or "").strip():
-            await add_draft(db, cid, content["ai_draft"], model="（本次之前写的）")
+        cur_draft = (content.get("ai_draft") or "").strip()
+        if cur_draft and not any(d["text"].strip() == cur_draft for d in drafts):
+            await add_draft(db, cid, cur_draft, model="（本次之前写的）")
             drafts = await list_drafts(db, cid)
     finally:
         await db.close()
