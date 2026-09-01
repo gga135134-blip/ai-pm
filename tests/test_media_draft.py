@@ -28,17 +28,18 @@ def test_add_then_list():
 def test_newest_first():
     async def run():
         db, cid = await _mk()
-        for t in ("一", "二", "三"):
+        for t in ("一", "二"):
             await add_draft(db, cid, t)
         rows = await list_drafts(db, cid)
         await db.close()
         return [r["text"] for r in rows]
 
-    assert asyncio.run(run()) == ["三", "二", "一"]
+    assert asyncio.run(run()) == ["二", "一"]
 
 
-def test_keeps_only_latest_three():
-    """写第 4 版时最老那版要被删掉——这是用户明确要求的上限。"""
+def test_keeps_only_latest_two():
+    """写第 3 版时最老那版要被删掉——用户 2026-09-01 把上限从 3 调成 2
+    （三版全列出来加上脚本框，页面太长：「看得我头都晕了」）。"""
     async def run():
         db, cid = await _mk()
         for i in range(1, 6):
@@ -48,8 +49,8 @@ def test_keeps_only_latest_three():
         return [r["text"] for r in rows]
 
     texts = asyncio.run(run())
-    assert len(texts) == KEEP == 3
-    assert texts == ["第5版", "第4版", "第3版"]
+    assert len(texts) == KEEP == 2
+    assert texts == ["第5版", "第4版"]
 
 
 def test_prune_is_per_content():
@@ -94,7 +95,7 @@ def test_same_second_writes_keep_order():
         await db.close()
         return [r["text"] for r in rows]
 
-    assert asyncio.run(run()) == ["v4", "v3", "v2"]
+    assert asyncio.run(run()) == ["v4", "v3"]
 
 
 def test_backfill_from_legacy_ai_draft():
@@ -161,3 +162,20 @@ def test_backfill_skips_when_already_recorded():
         return out
 
     assert len(asyncio.run(run())) == 1
+
+
+def test_created_at_is_local_time_not_utc():
+    """列的 DEFAULT 是 CURRENT_TIMESTAMP（UTC），东八区会显示成早 8 小时。
+    add_draft 必须显式写本地时间。"""
+    import datetime as _dt
+
+    async def run():
+        db, cid = await _mk()
+        await add_draft(db, cid, "看时间")
+        rows = await list_drafts(db, cid)
+        await db.close()
+        return rows[0]["created_at"]
+
+    got = _dt.datetime.strptime(asyncio.run(run()), "%Y-%m-%d %H:%M:%S")
+    # 跟本地时钟差不超过 2 分钟；如果误存成 UTC，东八区会差 8 小时
+    assert abs((_dt.datetime.now() - got).total_seconds()) < 120

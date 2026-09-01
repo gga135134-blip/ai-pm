@@ -1,4 +1,4 @@
-"""AI 口播草稿的历史版本。只留最新几版，老的自动删。
+"""AI 口播草稿的历史版本。只留最新两版，老的自动删。
 
 以前 `media_content.ai_draft` 是**单个字段**，AI 重写一次就把上一版覆盖掉——
 用户想对比两版、或者回到上一版，都做不到（2026-09-01 用户要求：
@@ -9,7 +9,7 @@
 """
 import uuid
 
-KEEP = 3
+KEEP = 2
 
 
 async def add_draft(db, content_id: str, text: str,
@@ -19,8 +19,11 @@ async def add_draft(db, content_id: str, text: str,
     if not text:
         return ""
     did = str(uuid.uuid4())
+    # 显式写本地时间：列的 DEFAULT CURRENT_TIMESTAMP 存的是 **UTC**，
+    # 服务器在东八区，页面上会显示成早 8 小时（真机踩到：01:40 显示成 17:40）。
     await db.execute(
-        "INSERT INTO media_draft (id,content_id,text,model,cost) VALUES (?,?,?,?,?)",
+        "INSERT INTO media_draft (id,content_id,text,model,cost,created_at) "
+        "VALUES (?,?,?,?,?, datetime('now','localtime'))",
         (did, content_id, text, model or "", cost or 0))
     # 保留最新 keep 版。按 created_at 再按 rowid 排——同一秒内写入的两版
     # created_at 会一模一样，只靠时间排会随机丢版本。
