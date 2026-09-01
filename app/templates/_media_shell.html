@@ -135,6 +135,54 @@ function msToggleLibs(){ document.getElementById('ms-libs').classList.toggle('op
     }
   }).catch(function(){});
 })();
+
+/* ── 返回上一页 ──
+   体系库页是「岔出主线」的页面，进来之后要能回到离开的地方。
+   优先级：①记下的最后一个主线页（最准，且不受表单 POST→重定向干扰）
+          ②同源 referrer → history.back()（保留滚动位置）
+          ③兜底回内容看板
+   只在主线页记，体系库页之间互相跳不覆盖，否则从 A 库跳 B 库就把主线位置丢了。
+
+   ⚠️ 这段必须留在主 script 块里，不能放进下面那个 assistant 条件块——
+   复盘首页传 assistant=false（它自己内联嵌了对话框），放进去那页就永远不记录
+   自己，从复盘进体系库再返回会跑到内容看板。这个 bug 真机踩到过。
+   （另注：注释里也别写 Jinja 标签的字面量，模板引擎不认 JS 注释，照样解析。） */
+var MS_LAST_KEY = 'ms_last_main';
+(function(){
+  if ('{{ current }}' === 'lib') return;
+  try { sessionStorage.setItem(MS_LAST_KEY, location.pathname + location.search); } catch (e) {}
+})();
+function msBack(e){
+  if (e) e.preventDefault();
+  var here = location.pathname + location.search;
+  var last = null;
+  try { last = sessionStorage.getItem(MS_LAST_KEY); } catch (err) {}
+  if (last && last !== here) { location.href = last; return; }
+  try {
+    if (document.referrer && new URL(document.referrer).origin === location.origin
+        && document.referrer !== location.href) { history.back(); return; }
+  } catch (err) {}
+  location.href = '/media/board';
+}
+/* 主线四步的地址→名字。发布跟内容共用 /media/board，靠 ?view=publish 区分，
+   所以要连查询串一起认，不能只看路径——否则从发布进体系库，提示会写成「回内容看板」。 */
+function msBackLabel(last){
+  if (!last) return '回上一页';
+  var full = {'/media/board?view=publish': '发布'};
+  var base = {'/media/topics': '选题', '/media/board': '内容看板', '/media/review': '复盘'};
+  if (full[last]) return '回' + full[last];
+  var p = last.split('?')[0];
+  if (base[p]) return '回' + base[p];
+  if (p.indexOf('/media/content/') === 0) return '回刚才那条内容';
+  return '回上一页';
+}
+document.addEventListener('DOMContentLoaded', function(){
+  var hint = document.getElementById('ms-back-hint');
+  if (!hint) return;
+  var last = null;
+  try { last = sessionStorage.getItem(MS_LAST_KEY); } catch (e) {}
+  hint.textContent = msBackLabel(last);
+});
 </script>
 
 {#- 全局 AI 助手抽屉：右下角常驻按钮，就地展开，不跳页。
@@ -220,41 +268,6 @@ document.addEventListener('keydown', function(e){
    不写死偏移量——那个按钮有 media query 在小屏时会从 bottom:24px 跳到 80px，
    写死了会在某个宽度又撞上。改成运行时量它的位置，摞在它上面。
    .fab-root 在文档里排在 shell 宏之后，所以要等 DOM 齐了再量。 */
-/* ── 返回上一页 ──
-   体系库页是「岔出主线」的页面，进来之后要能回到离开的地方。
-   优先级：①记下的最后一个主线页（最准，且不受表单 POST→重定向干扰）
-          ②同源 referrer → history.back()（保留滚动位置）
-          ③兜底回内容看板
-   只在主线页记，体系库页之间互相跳不覆盖，否则从 A 库跳 B 库就把主线位置丢了。 */
-var MS_LAST_KEY = 'ms_last_main';
-(function(){
-  var cur = '{{ current }}';
-  if (cur === 'lib') return;
-  try { sessionStorage.setItem(MS_LAST_KEY, location.pathname + location.search); } catch (e) {}
-})();
-function msBack(e){
-  if (e) e.preventDefault();
-  var last = null;
-  try { last = sessionStorage.getItem(MS_LAST_KEY); } catch (err) {}
-  if (last && last !== location.pathname + location.search) { location.href = last; return; }
-  try {
-    if (document.referrer && new URL(document.referrer).origin === location.origin
-        && document.referrer !== location.href) { history.back(); return; }
-  } catch (err) {}
-  location.href = '/media/board';
-}
-/* 把返回目标写在卡片副标题上——让人点之前就知道会去哪，不用赌 */
-document.addEventListener('DOMContentLoaded', function(){
-  var hint = document.getElementById('ms-back-hint');
-  if (!hint) return;
-  var last = null;
-  try { last = sessionStorage.getItem(MS_LAST_KEY); } catch (e) {}
-  var names = {'/media/topics': '选题', '/media/board': '内容看板', '/media/review': '复盘'};
-  if (last) {
-    var base = last.split('?')[0];
-    hint.textContent = '回' + (names[base] || (base.indexOf('/media/content/') === 0 ? '刚才那条内容' : '上一页'));
-  }
-});
 
 function astDodgeFab(){
   var fab = document.getElementById('ast-fab');
