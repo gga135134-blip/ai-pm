@@ -30,7 +30,7 @@ from app.services.media_batch import (
     run_organize_one, run_mine_one, start_batch, get_status as batch_get_status)
 from app.services.media_playbook import list_playbooks, get_playbook
 from app.services.ai_router import ask_ai_vision
-from app.services.media_draft import list_drafts
+from app.services.media_draft import add_draft, list_drafts
 from app.services.media_topic import adopt_topic
 from app.services.media_lesson import (
     list_lessons, create_lesson, update_lesson,
@@ -1282,6 +1282,13 @@ async def content_detail(request: Request, cid: str):
             "WHERE target_table='media_content' AND target_id=? AND status='applied'", (cid,))
         assistant_touched = (await cur.fetchone())["c"] > 0
         drafts = await list_drafts(db, cid)
+        # 回填：草稿历史表是 2026-09-01 才建的，在那之前写的草稿只存在
+        # media_content.ai_draft 这个老字段里。不补的话新界面拿到空列表，
+        # 老草稿在页面上凭空消失（数据其实还在）。第一次打开这条内容时自愈，
+        # 只补有草稿、且历史表里还没有记录的那些。
+        if not drafts and (content.get("ai_draft") or "").strip():
+            await add_draft(db, cid, content["ai_draft"], model="（本次之前写的）")
+            drafts = await list_drafts(db, cid)
     finally:
         await db.close()
 

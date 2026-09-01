@@ -95,3 +95,23 @@ def test_same_second_writes_keep_order():
         return [r["text"] for r in rows]
 
     assert asyncio.run(run()) == ["v4", "v3", "v2"]
+
+
+def test_backfill_from_legacy_ai_draft():
+    """草稿历史表 2026-09-01 才建，之前的草稿只在 media_content.ai_draft 里。
+    回填一版，新界面才看得见——否则老草稿在页面上凭空消失。"""
+    async def run():
+        db, cid = await _mk()
+        await db.execute(
+            "UPDATE media_content SET ai_draft=? WHERE id=?", ("老草稿正文", cid))
+        await db.commit()
+        before = await list_drafts(db, cid)
+        await add_draft(db, cid, "老草稿正文", model="（本次之前写的）")
+        after = await list_drafts(db, cid)
+        await db.close()
+        return before, after
+
+    before, after = asyncio.run(run())
+    assert before == []
+    assert [r["text"] for r in after] == ["老草稿正文"]
+    assert after[0]["model"] == "（本次之前写的）"
