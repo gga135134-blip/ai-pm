@@ -80,6 +80,7 @@ async def settings_save(
     route_writing: str = Form("auto"),
     route_analysis: str = Form("auto"),
     route_review: str = Form("auto"),
+    route_vision: str = Form("auto"),
 ):
     fallback_order = []
     for m in [fallback_1, fallback_2, fallback_3, fallback_4]:
@@ -101,6 +102,7 @@ async def settings_save(
             "writing": route_writing,
             "analysis": route_analysis,
             "review": route_review,
+            "vision": route_vision,
         },
     }
     save_settings(data)

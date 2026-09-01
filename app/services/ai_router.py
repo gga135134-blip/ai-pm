@@ -135,33 +135,48 @@ async def ask_ai(prompt: str, model: str = "auto", task_type: str = "", system_p
     return last_error or {"response": "[错误] 所有模型均不可用", "model": "none", "tokens": 0, "cost": 0}
 
 
+# 识图能用的三家（DeepSeek 不支持）。值是 (调用函数名, 该家的 key 字段, 报错时显示的名字)。
+# 顺序即 auto 时的优先级：**千问排第一**——它是三家里最便宜的识图模型，
+# 跟 get_model_for_task 里「auto 选最便宜」是同一个原则。要更准就去设置页显式指定。
+_VISION_ORDER = ["qwen", "claude", "openai"]
+_VISION_KEY = {"qwen": "qwen_api_key", "claude": "anthropic_api_key", "openai": "openai_api_key"}
+_VISION_NAME = {"qwen": "通义千问", "claude": "Claude", "openai": "OpenAI"}
+
+
+def _vision_caller(name: str):
+    """延迟取调用函数——这几个 _call_*_vision 定义在本函数下面。"""
+    return {"qwen": _call_qwen_vision, "claude": _call_claude_vision,
+            "openai": _call_openai_vision}[name]
+
+
 async def ask_ai_vision(prompt: str, images: list[dict], system_prompt: str = "") -> dict:
     """识图调用。images: [{"media_type": "image/png", "data": "<base64字符串>"}]
-    DeepSeek 不支持识图，自动选 Claude 或 OpenAI。"""
+
+    选哪家：设置页「AI 路由规则 → 识图」显式指定的优先（routes['vision']），
+    没指定就按 _VISION_ORDER（千问 → Claude → OpenAI）挑第一个配了 Key 的。
+    指定的那家没配 Key 或调用失败时，继续往后退，不直接报死。
+    """
     config = _load_config()
-    if config.get("anthropic_api_key"):
+    routed = (config.get("routes") or {}).get("vision") or "auto"
+
+    chain = [m for m in _VISION_ORDER if config.get(_VISION_KEY[m])]
+    if routed != "auto" and routed in _VISION_KEY and config.get(_VISION_KEY[routed]):
+        chain = [routed] + [m for m in chain if m != routed]
+    if not chain:
+        return {
+            "response": "[错误] 图片分析需要 通义千问、Claude 或 OpenAI 的 API Key"
+                        "（DeepSeek 不支持识图）。请到「设置」页面配置任意一家的 Key 后再试。",
+            "model": "none", "tokens": 0, "cost": 0,
+        }
+
+    last = ""
+    for name in chain:
         try:
-            return await _call_claude_vision(prompt, images, system_prompt, config)
+            return await _vision_caller(name)(prompt, images, system_prompt, config)
         except Exception as e:
-            log.warning("Claude vision failed: %s", e)
-            if not config.get("openai_api_key"):
-                return {"response": f"[错误] Claude 识图调用失败: {e}", "model": "claude", "tokens": 0, "cost": 0}
-    if config.get("openai_api_key"):
-        try:
-            return await _call_openai_vision(prompt, images, system_prompt, config)
-        except Exception as e:
-            log.warning("OpenAI vision failed: %s", e)
-            if not config.get("qwen_api_key"):
-                return {"response": f"[错误] OpenAI 识图调用失败: {e}", "model": "openai", "tokens": 0, "cost": 0}
-    if config.get("qwen_api_key"):
-        try:
-            return await _call_qwen_vision(prompt, images, system_prompt, config)
-        except Exception as e:
-            return {"response": f"[错误] 通义千问识图调用失败: {e}", "model": "qwen-vl", "tokens": 0, "cost": 0}
-    return {
-        "response": "[错误] 图片分析需要 Claude、OpenAI 或 通义千问 的 API Key（DeepSeek 不支持识图）。请到「设置」页面配置任意一家的 Key 后再试。",
-        "model": "none", "tokens": 0, "cost": 0,
-    }
+            last = f"{_VISION_NAME[name]} 识图调用失败: {e}"
+            log.warning("%s vision failed: %s", name, e)
+    return {"response": f"[错误] {last}", "model": chain[-1], "tokens": 0, "cost": 0}
 
 
 async def _call_qwen_vision(prompt: str, images: list[dict], system_prompt: str, config: dict) -> dict:

@@ -186,6 +186,16 @@
                 </select>
             </div>
             {% endfor %}
+            {# 识图单列一行：DeepSeek 不支持识图，所以选项里没有它；
+               「自动」= 千问 → Claude → OpenAI，挑第一个配了 Key 的（千问最便宜）。 #}
+            <div class="st-rtrow">
+                <span class="rl">识图（看截图/图片）</span>
+                <select name="route_vision" class="input" style="flex:1">
+                    {% for val, label in [('auto', '自动（千问优先，最便宜）'), ('qwen', '通义千问 qwen-vl'), ('claude', 'Claude'), ('openai', 'GPT-4o')] %}
+                    <option value="{{ val }}" {{ 'selected' if config.routes.get('vision') == val }}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
 
             <!-- 费用参考（信息展示，非表单字段） -->
             <div class="st-subhead">模型费用参考</div>
