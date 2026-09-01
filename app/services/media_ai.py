@@ -1029,6 +1029,12 @@ async def write_script(db, content_id: str, mode: str = "full",
         (resp, gap_text, json.dumps(used_pb), content_id))
     await db.commit()
 
+    # 记一版进草稿历史（只留最新 3 版，老的自动删）。ai_draft 仍是「最新那版」
+    # 的快捷方式，功能B 学改稿和页面兜底填充都还读它。
+    from app.services.media_draft import add_draft
+    await add_draft(db, content_id, resp,
+                    model=result.get("model", ""), cost=result.get("cost", 0))
+
     all_injected = injected_ids + material_ids + lesson_ids
     # hit_count 只在 AI 成功出稿后递增：它回答的是「这条真的参与过一次
     # 成品生产吗」，不是「被拼进过几次提示词」。报错/费用保护/空返回都不计。

@@ -30,6 +30,7 @@ from app.services.media_batch import (
     run_organize_one, run_mine_one, start_batch, get_status as batch_get_status)
 from app.services.media_playbook import list_playbooks, get_playbook
 from app.services.ai_router import ask_ai_vision
+from app.services.media_draft import list_drafts
 from app.services.media_topic import adopt_topic
 from app.services.media_lesson import (
     list_lessons, create_lesson, update_lesson,
@@ -1280,6 +1281,7 @@ async def content_detail(request: Request, cid: str):
             "SELECT COUNT(*) c FROM media_assistant_action "
             "WHERE target_table='media_content' AND target_id=? AND status='applied'", (cid,))
         assistant_touched = (await cur.fetchone())["c"] > 0
+        drafts = await list_drafts(db, cid)
     finally:
         await db.close()
 
@@ -1307,6 +1309,7 @@ async def content_detail(request: Request, cid: str):
                  "is_reverse": content.get("idea_source") in ("video_reverse", "legacy_text"),
                  "next_stage": next_stage(content["stage"]),
                  "playbooks": playbooks,
+                 "drafts": drafts,
                  "assistant_touched": assistant_touched})
 
 

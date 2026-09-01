@@ -511,6 +511,16 @@ CREATE TABLE IF NOT EXISTS media_playbook (
     FOREIGN KEY (persona_id) REFERENCES media_persona(id)
 );
 
+CREATE TABLE IF NOT EXISTS media_draft (
+    id TEXT PRIMARY KEY,
+    content_id TEXT NOT NULL,
+    text TEXT DEFAULT '',
+    model TEXT DEFAULT '',
+    cost REAL DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (content_id) REFERENCES media_content(id)
+);
+
 CREATE TABLE IF NOT EXISTS media_lesson (
     id TEXT PRIMARY KEY,
     persona_id TEXT NOT NULL,

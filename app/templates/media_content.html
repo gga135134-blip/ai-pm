@@ -216,41 +216,58 @@
           草稿缓存和 fillFromDraft() 函数一起没了 —— 草稿在库里但页面零入口，
           用户看到的是一个写着「点 AI 写脚本生成」的空框，页面等于在骗人。
           助手调 draft_script 只写 ai_draft，所以它写的稿子以前你根本看不到。 -#}
-      {% if content.ai_draft and content.ai_draft != content.script %}
-      <div style="font-size:12.5px; color:var(--ai); background:var(--ai-soft);
-                  border:1px solid var(--ai); border-radius:var(--r-sm);
-                  padding:9px 12px; margin-bottom:10px; display:flex;
-                  align-items:center; gap:10px; flex-wrap:wrap">
-        <span>{{ ic.icon('robot') }} AI 写过一版草稿（<b>{{ content.ai_draft|length }}</b> 字），
-          跟下面框里这版（<b>{{ content.script|length }}</b> 字）不一样</span>
-        <button type="button" onclick="draftPeek()" id="draft-peek-btn" class="btn"
-                style="font-size:12px; padding:3px 10px">先看看 ↓</button>
-        <button type="button" onclick="draftFill()" class="btn primary" style="font-size:12px; padding:3px 10px">填进来 ↓</button>
-        <span style="color:var(--ink-3)">填进来只是填到框里，<b>不会保存</b>——刷新页面就回到现在这版</span>
+      {#- AI 草稿历史（最新 3 版）。
+          以前只有一版、还藏在「收起/先看看」后面，用户原话：「这样写收起和先看看
+          可能别人看不太懂，不如每一版后面直接写填进来」。现在每版正文直接展开、
+          各带一个「填进来」，不用先点开才知道里面是什么。
+          「填进来」只改输入框、不写库——所以横幅上的字数是服务端的 script，
+          填完不会变（会给那版打个「已填入」标记，免得以为没生效）。 -#}
+      {% if drafts %}
+      <div style="margin-bottom:12px">
+        <div style="font-size:12.5px; color:var(--ink-3); margin-bottom:8px">
+          {{ ic.icon('robot') }} AI 草稿 · 留最新 {{ drafts|length }} 版（再写会顶掉最老的一版）·
+          下面脚本框里已存的是 <b>{{ content.script|length }}</b> 字{% if not content.script %}（还没保存过）{% endif %}
+        </div>
+        {% for d in drafts %}
+        <div class="draft-card" style="border:1px solid {{ 'var(--ai)' if loop.first else 'var(--border)' }};
+             border-radius:var(--r-sm); margin-bottom:8px; overflow:hidden">
+          <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+               padding:7px 12px; background:{{ 'var(--ai-soft)' if loop.first else 'var(--panel-2)' }};
+               font-size:12.5px; color:{{ 'var(--ai)' if loop.first else 'var(--ink-3)' }}">
+            <b>第 {{ drafts|length - loop.index0 }} 版{% if loop.first %} · 最新{% endif %}</b>
+            <span>{{ d.text|length }} 字</span>
+            {% if d.model %}<span>{{ d.model }}</span>{% endif %}
+            <span>{{ d.created_at }}</span>
+            <span style="flex:1"></span>
+            <span class="filled-tag" style="display:none; color:var(--up)">✓ 已填入下面的框</span>
+            <button type="button" class="btn {{ 'primary' if loop.first else '' }}"
+                    style="font-size:12px; padding:3px 10px"
+                    onclick="draftFill(this, {{ loop.index0 }})">填进来 ↓</button>
+          </div>
+          <div class="draft-text" style="max-height:200px; overflow-y:auto; padding:10px 12px;
+               font-family:var(--mono); font-size:12.5px; line-height:1.7;
+               white-space:pre-wrap">{{ d.text }}</div>
+        </div>
+        {% endfor %}
+        <p style="font-size:11.5px; color:var(--ink-3); margin:0">
+          填进来只是填到下面的框里，<b>不会保存</b>——刷新页面就回到已存的那版。
+          改成你要念的话之后点「保存脚本」才算定稿。
+        </p>
       </div>
-      {#- 预览区：以前只有「填进来」一个动作，等于逼人在没看见新稿的情况下
-          覆盖掉手上这版。用户原话：「ai 又写了一篇，但脚本这里看到的还是旧的」。
-          现在可以先展开读完再决定填不填。 -#}
-      <div id="draft-peek" style="display:none; margin:-4px 0 10px; border:1px solid var(--ai);
-           border-radius:var(--r-sm); background:var(--panel-2); padding:12px;
-           max-height:320px; overflow-y:auto; font-family:var(--mono); font-size:12.5px;
-           line-height:1.7; white-space:pre-wrap">{{ content.ai_draft }}</div>
-      <textarea id="ai-draft-store" style="display:none">{{ content.ai_draft }}</textarea>
       <script>
-      /* 自带填充逻辑，不依赖「创作辅助」模块里的 fillFromDraft()——那个会随阶段消失 */
-      function draftPeek(){
-        var p = document.getElementById('draft-peek');
-        var btn = document.getElementById('draft-peek-btn');
-        var open = p.style.display === 'none';
-        p.style.display = open ? 'block' : 'none';
-        btn.textContent = open ? '收起 ↑' : '先看看 ↓';
-      }
-      function draftFill(){
-        var c = document.getElementById('ai-draft-store');
+      /* 每版一个按钮，点谁填谁。不依赖「创作辅助」模块里的 fillFromDraft()——那个会随阶段消失 */
+      function draftFill(btn, idx){
+        var card = btn.closest('.draft-card');
         var b = document.getElementById('script-box');
-        if (!c || !b) return;
-        if (b.value.trim() && !confirm('脚本框里已有内容，填进来会覆盖。\n（只是覆盖输入框，没保存——刷新就能回到现在这版）\n继续？')) return;
-        b.value = c.value;
+        if (!card || !b) return;
+        var text = card.querySelector('.draft-text').textContent;
+        var warn = '脚本框里已有内容，填进来会覆盖。\n'
+                 + '（只改输入框，没保存——刷新就能回到已存的那版）\n继续？';
+        if (b.value.trim() && b.value.trim() !== text.trim() && !confirm(warn)) return;
+        b.value = text;
+        document.querySelectorAll('.draft-card .filled-tag').forEach(function(t){ t.style.display = 'none'; });
+        card.querySelector('.filled-tag').style.display = '';
+        b.scrollIntoView({behavior:'smooth', block:'nearest'});
         b.focus();
       }
       </script>
