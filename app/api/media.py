@@ -2177,7 +2177,8 @@ async def assistant_page(request: Request):
 
 @router.post("/media/assistant/ask")
 async def assistant_ask(request: Request, message: str = Form(""),
-                        image: UploadFile = File(None)):
+                        image: UploadFile = File(None),
+                        page_content_id: str = Form("")):
     """跟助手对话。可带一张图片。
 
     图片走「先识别成文字，再作为消息内容送进对话」的路子，不做真多模态——
@@ -2222,12 +2223,27 @@ async def assistant_ask(request: Request, message: str = Form(""),
         cur = await db.execute("SELECT role,content FROM media_assistant_message WHERE persona_id=? "
                                "ORDER BY created_at DESC LIMIT 10", (pid,))
         hist = list(reversed([dict(r) for r in await cur.fetchall()]))
+        page_here = None
+        if page_content_id:
+            cur = await db.execute(
+                "SELECT id,title,stage FROM media_content WHERE id=? AND persona_id=?",
+                (page_content_id, pid))
+            r = await cur.fetchone()
+            page_here = dict(r) if r else None
         await db.execute("INSERT INTO media_assistant_message (id,persona_id,role,content) VALUES (?,?, 'user',?)",
                          (str(uuid.uuid4()), pid, msg))
         await db.commit()
     finally:
         await db.close()
     persona_line = f"【当前人设】{p['name']}｜{p['one_liner']}｜阶段：{p['current_phase']}"
+    # 页面上下文：助手嵌在内容页的抽屉里时，前端会把当前这条内容的 id 带上。
+    # 没有它助手根本不知道你正在看哪条，只能反问「是哪条内容」或者干脆
+    # 在对话里写完再问「要不要保存」——真机踩到过。
+    if page_here:
+        persona_line += (
+            "\n【用户此刻正在看】《" + page_here["title"] + "》"
+            + "（content_id=" + page_here["id"] + "，阶段 " + page_here["stage"] + "）"
+            + "——他说「这条」「这篇」「这个稿子」时，指的就是它。")
     hist_text = "\n".join(f"{h['role']}：{h['content']}" for h in hist)
     prompt = (f"{persona_line}\n\n对话历史：\n{hist_text}\n\n──────\n用户：{msg}" if hist_text
               else f"{persona_line}\n\n用户：{msg}")

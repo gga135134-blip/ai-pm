@@ -216,6 +216,7 @@
           草稿缓存和 fillFromDraft() 函数一起没了 —— 草稿在库里但页面零入口，
           用户看到的是一个写着「点 AI 写脚本生成」的空框，页面等于在骗人。
           助手调 draft_script 只写 ai_draft，所以它写的稿子以前你根本看不到。 -#}
+      <script>window.MEDIA_PAGE_CONTENT_ID = "{{ content.id }}";</script>
       <div id="draft-zone">{% include "_media_drafts.html" %}</div>
       <div id="draft-msg" style="display:none; font-size:12.5px; color:var(--ai);
            background:var(--ai-soft); border-radius:var(--r-sm); padding:7px 11px;

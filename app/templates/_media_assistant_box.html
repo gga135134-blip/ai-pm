@@ -173,6 +173,9 @@ async function astSend(){
   st.textContent = astImg ? '识图中，然后交给助手…' : '助手在想（可能会调工具）…';
   try{
     const fd=new FormData(); fd.append('message',msg);
+    /* 带上「我正在看哪条」——没有它助手只能反问「是哪条内容」，
+       或者干脆在对话里写完再问「要不要保存」。页面自己声明，抽屉不关心是什么页。 */
+    if(window.MEDIA_PAGE_CONTENT_ID){ fd.append('page_content_id', window.MEDIA_PAGE_CONTENT_ID); }
     if(astImg){ fd.append('image', astImg, astImg.name || 'paste.png'); }
     const r=await fetch('/media/assistant/ask',{method:'POST',body:fd});
     const txt=await r.text(); let d; try{ d=JSON.parse(txt); }catch(_){ st.textContent='没返回内容，稍后重试'; btn.disabled=false; return; }
