@@ -27,12 +27,26 @@
   <div style="color:var(--ink-3)">加载中…</div>
 </div>
 <div id="ast-pending" style="margin:10px 0"></div>
+<div id="ast-img-bar" style="display:none; align-items:center; gap:8px; margin-top:10px;
+     font-size:12.5px; color:var(--ai); background:var(--ai-soft); border:1px solid var(--ai);
+     border-radius:var(--r-sm); padding:6px 10px">
+  <img id="ast-img-thumb" alt="" style="width:36px; height:36px; object-fit:cover; border-radius:4px">
+  <span id="ast-img-name" style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap"></span>
+  <button onclick="astClearImg()" class="btn ghost" style="font-size:12px; padding:2px 8px">移除</button>
+</div>
 <div style="display:flex; gap:8px; margin-top:10px; align-items:flex-end">
-  <textarea id="ast-input" rows="1" placeholder="跟助手说…（回车发送）"
+  <button onclick="document.getElementById('ast-file').click()" class="btn" title="传张图让它看（截图可直接 Ctrl+V 粘进输入框）"
+          style="flex:0 0 auto; padding:9px 11px; font-size:15px; line-height:1">📎</button>
+  <input type="file" id="ast-file" accept="image/*" style="display:none" onchange="astPickImg(this.files[0])">
+  {# 占位文字务必短。手机上抽屉 94vw、再扣掉 📎 和发送键，输入框只剩 ~144px，
+     稍长一点就折行把空框撑成两行还被截断（这个坑踩过两次）。
+     「回车发送」的提示挪到抽屉副标题，这里只留最短的。 #}
+  <textarea id="ast-input" rows="1" placeholder="跟助手说…" title="回车发送，Shift+回车换行，截图可直接粘贴"
             style="flex:1; padding:9px 12px; resize:none; overflow-y:auto; max-height:160px;
                    line-height:1.6; font-family:inherit; font-size:inherit"
             oninput="astGrow(this)"
-            onkeydown="astKey(event)"></textarea>
+            onkeydown="astKey(event)"
+            onpaste="astPaste(event)"></textarea>
   <button onclick="astSend()" id="ast-btn" class="btn primary" style="flex:0 0 auto">发送</button>
 </div>
 <div id="ast-status" style="font-size:12px; color:var(--ai); margin-top:6px; min-height:16px"></div>
@@ -89,7 +103,9 @@ function renderMd(src){
 }
 function bubble(who,text){
   const d=document.createElement('div'); d.className='msg';
-  const label='<b class="who" style="color:'+(who==='助手'?'var(--ai)':'var(--ink-1)')+'">'+who+'：</b>';
+  /* 识图是机器读出来的上下文，不是对话参与者——用弱色，跟你和助手区分开 */
+  const c = who==='助手' ? 'var(--ai)' : (who==='识图' ? 'var(--ink-3)' : 'var(--ink-1)');
+  const label='<b class="who" style="color:'+c+'">'+who+'：</b>';
   d.innerHTML=label+'<div class="md">'+renderMd(text)+'</div>';
   chat.appendChild(d); chat.scrollTop=chat.scrollHeight;
 }
@@ -115,16 +131,59 @@ function astKey(e){
     astSend();
   }
 }
+/* ── 传图 ──
+   后端拿到图先用识图模型转成文字，再把文字当消息内容送进对话（不是真多模态）。
+   好处是助手的工具循环不用改，而且识别结果会显示出来——AI「看到了什么」你能核，
+   出错时分得清是识图错了还是理解错了。 */
+let astImg = null;
+function astPickImg(f){
+  if(!f) return;
+  if(!f.type || f.type.indexOf('image/')!==0){ astStatus('只能传图片'); return; }
+  if(f.size > 8*1024*1024){ astStatus('图片超过 8MB，压一下再传'); return; }
+  astImg = f;
+  document.getElementById('ast-img-name').textContent =
+    (f.name || '截图') + '（' + Math.round(f.size/1024) + ' KB）';
+  document.getElementById('ast-img-thumb').src = URL.createObjectURL(f);
+  document.getElementById('ast-img-bar').style.display = 'flex';
+}
+function astClearImg(){
+  astImg = null;
+  document.getElementById('ast-file').value = '';
+  document.getElementById('ast-img-bar').style.display = 'none';
+}
+/* 截图直接 Ctrl+V 粘进来——比点📎再翻文件夹快得多，这才是真实用法 */
+function astPaste(e){
+  const items = (e.clipboardData && e.clipboardData.items) || [];
+  for(let i=0;i<items.length;i++){
+    if(items[i].type && items[i].type.indexOf('image/')===0){
+      const f = items[i].getAsFile();
+      if(f){ e.preventDefault(); astPickImg(f); return; }
+    }
+  }
+}
+function astStatus(t){ const s=document.getElementById('ast-status'); if(s) s.textContent=t; }
+
 async function astSend(){
-  const inp=document.getElementById('ast-input'); const msg=inp.value.trim(); if(!msg) return;
+  const inp=document.getElementById('ast-input'); const msg=inp.value.trim();
+  if(!msg && !astImg) return;              // 有图时允许不打字
   const btn=document.getElementById('ast-btn'), st=document.getElementById('ast-status');
   if(chat.children.length===1 && chat.firstElementChild && chat.firstElementChild.style.color) chat.innerHTML='';
-  bubble('我',msg); inp.value=''; astGrow(inp); btn.disabled=true; st.textContent='助手在想（可能会调工具）…';
+  bubble('我', (astImg ? '📎 ['+(astImg.name||'截图')+']\n' : '') + (msg || '（看看这张图）'));
+  inp.value=''; astGrow(inp); btn.disabled=true;
+  st.textContent = astImg ? '识图中，然后交给助手…' : '助手在想（可能会调工具）…';
   try{
     const fd=new FormData(); fd.append('message',msg);
+    if(astImg){ fd.append('image', astImg, astImg.name || 'paste.png'); }
     const r=await fetch('/media/assistant/ask',{method:'POST',body:fd});
     const txt=await r.text(); let d; try{ d=JSON.parse(txt); }catch(_){ st.textContent='没返回内容，稍后重试'; btn.disabled=false; return; }
-    if(d.ok){ bubble('助手',d.reply); st.textContent=(d.steps&&d.steps.length?('调了：'+d.steps.join('、')+' · '):'')+'花费 $'+(d.cost||0).toFixed(4); loadPending(); }
+    if(d.ok){
+      astClearImg();
+      // 把识图结果摊出来——AI 看错了你一眼能发现，不然只能猜它为什么答偏
+      if(d.vision){ bubble('识图', d.vision); }
+      bubble('助手',d.reply);
+      st.textContent=(d.steps&&d.steps.length?('调了：'+d.steps.join('、')+' · '):'')+'花费 $'+(d.cost||0).toFixed(4);
+      loadPending();
+    }
     else st.textContent='失败：'+(d.error||'');
   }catch(e){ st.textContent='请求失败：'+e; }
   btn.disabled=false;

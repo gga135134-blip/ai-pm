@@ -140,13 +140,28 @@ function msToggleLibs(){ document.getElementById('ms-libs').classList.toggle('op
     助手页 / 复盘首页已经内联嵌了对话框，那两页传 assistant=false 关掉抽屉，避免 id 撞车。 -#}
 {% if assistant %}
 <style>
-  #ast-fab{ position:fixed; right:22px; bottom:22px; z-index:60; width:52px; height:52px;
+  /* 图标用 emoji 不用 ic.icon('robot')——那个图标的路径画的其实是卢布符号 ₽，
+     在按钮上看着像个「帀」，完全认不出是 AI 助手。 */
+  #ast-fab{ position:fixed; right:22px; bottom:22px; z-index:60; width:56px; height:56px;
     border-radius:50%; border:1px solid var(--ai); background:var(--ai-soft); color:var(--ai);
-    font-size:22px; cursor:pointer; box-shadow:0 4px 16px rgba(0,0,0,.35);
-    display:flex; align-items:center; justify-content:center; transition:transform .12s; }
-  #ast-fab:hover{ transform:scale(1.06); }
-  #ast-fab .dot{ position:absolute; top:2px; right:2px; width:10px; height:10px; border-radius:50%;
+    font-size:27px; line-height:1; cursor:pointer; box-shadow:0 4px 16px rgba(0,0,0,.35);
+    display:flex; align-items:center; justify-content:center;
+    transition:transform .12s; animation:astBob 3.2s ease-in-out infinite; }
+  #ast-fab:hover{ transform:scale(1.08); animation:none; }
+  @keyframes astBob{ 0%,100%{ transform:translateY(0); } 50%{ transform:translateY(-4px); } }
+  @media (prefers-reduced-motion:reduce){ #ast-fab{ animation:none; } }
+  #ast-fab .dot{ position:absolute; top:2px; right:2px; width:11px; height:11px; border-radius:50%;
     background:var(--warn); display:none; }
+  /* 「点我帮你！」气泡：第一次用的人不知道这圆圈是干嘛的，点开过一次就不再出现 */
+  #ast-tip{ position:fixed; right:86px; z-index:59; display:none; align-items:center; gap:6px;
+    background:var(--ai); color:var(--bg); font-size:13px; font-weight:600;
+    padding:7px 12px; border-radius:14px; box-shadow:0 4px 14px rgba(0,0,0,.35);
+    white-space:nowrap; cursor:pointer; animation:astBob 3.2s ease-in-out infinite; }
+  #ast-tip.on{ display:flex; }
+  #ast-tip::after{ content:''; position:absolute; right:-5px; top:50%; margin-top:-5px;
+    border:5px solid transparent; border-left-color:var(--ai); border-right:0; }
+  #ast-tip .x{ opacity:.65; font-weight:400; padding-left:2px; }
+  @media (max-width:520px){ #ast-tip{ display:none !important; } }
   #ast-mask{ position:fixed; inset:0; z-index:70; background:rgba(0,0,0,.45); display:none; }
   #ast-drawer{ position:fixed; top:0; right:0; z-index:71; height:100%; width:min(560px,94vw);
     background:var(--bg); border-left:1px solid var(--border); display:none;
@@ -163,14 +178,18 @@ function msToggleLibs(){ document.getElementById('ms-libs').classList.toggle('op
   #ast-drawer #chat{ flex:1; max-height:none; }
 </style>
 
+<div id="ast-tip" onclick="astToggle()">
+  <span>点我帮你！</span>
+  <span class="x" onclick="event.stopPropagation(); astHideTip(true)" title="不再提示">✕</span>
+</div>
 <button id="ast-fab" onclick="astToggle()" title="AI 助手（Esc 关闭）" aria-label="AI 助手">
-  {{ ic.icon('robot') }}<span class="dot" id="ast-dot"></span>
+  🤖<span class="dot" id="ast-dot"></span>
 </button>
 <div id="ast-mask" onclick="astToggle()"></div>
 <div id="ast-drawer" role="dialog" aria-label="AI 助手">
   <div class="hd">
     <b>AI 助手</b>
-    <span class="sub">查内容/选题/库 · 建选题草稿 · 核心动作走待确认卡</span>
+    <span class="sub">回车发送 · 可粘图 · 核心动作走待确认卡</span>
     <span style="flex:1"></span>
     <button class="iconbtn" onclick="astToggle()" aria-label="关闭">{{ ic.icon('x') }}</button>
   </div>
@@ -186,6 +205,7 @@ function astToggle(){
   var open = !d.classList.contains('on');
   d.classList.toggle('on', open); m.classList.toggle('on', open);
   if (open) {
+    astHideTip(true);   // 用过一次就不用再提示了
     if (!_astLoaded) { _astLoaded = true; window.astInit(); }
     var i = document.getElementById('ast-input'); if (i) i.focus();
   }
@@ -199,13 +219,40 @@ document.addEventListener('keydown', function(e){
    .fab-root 在文档里排在 shell 宏之后，所以要等 DOM 齐了再量。 */
 function astDodgeFab(){
   var fab = document.getElementById('ast-fab');
-  var pageFab = document.querySelector('.fab-root');
+  var tip = document.getElementById('ast-tip');
   if (!fab) return;
-  if (!pageFab) { fab.style.bottom = ''; return; }
-  var r = pageFab.getBoundingClientRect();
-  fab.style.bottom = Math.round(window.innerHeight - r.top + 12) + 'px';
+  var pageFab = document.querySelector('.fab-root');
+  if (!pageFab) { fab.style.bottom = ''; }
+  else {
+    var r = pageFab.getBoundingClientRect();
+    fab.style.bottom = Math.round(window.innerHeight - r.top + 12) + 'px';
+  }
+  // 气泡跟着按钮走，垂直居中对齐
+  if (tip) {
+    var f = fab.getBoundingClientRect();
+    tip.style.bottom = Math.round(window.innerHeight - f.bottom + (f.height - 30) / 2) + 'px';
+  }
 }
-document.addEventListener('DOMContentLoaded', astDodgeFab);
+
+/* 「点我帮你！」气泡：只给没用过的人看。点开过一次（或点✕）就永久不再出现。
+   localStorage 在无痕窗口/禁用站点数据时会抛异常，全部包 try——
+   读不到就当没看过（多显示一次没坏处），写不进就下次再显示。 */
+function astHideTip(remember){
+  var tip = document.getElementById('ast-tip');
+  if (tip) tip.classList.remove('on');
+  if (remember) { try { localStorage.setItem('ast_tip_seen', '1'); } catch (e) {} }
+}
+function astMaybeShowTip(){
+  var seen = false;
+  try { seen = localStorage.getItem('ast_tip_seen') === '1'; } catch (e) {}
+  if (seen) return;
+  var tip = document.getElementById('ast-tip');
+  if (tip) { tip.classList.add('on'); astDodgeFab(); }
+}
+document.addEventListener('DOMContentLoaded', function(){
+  astDodgeFab();
+  astMaybeShowTip();
+});
 window.addEventListener('resize', astDodgeFab);
 
 /* 有待确认卡时给按钮点个红点，不用打开也知道有事等你 */

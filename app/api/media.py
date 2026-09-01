@@ -1,3 +1,4 @@
+import base64
 import json
 import logging
 import uuid
@@ -28,6 +29,7 @@ from app.services.media_mine_queue import (
 from app.services.media_batch import (
     run_organize_one, run_mine_one, start_batch, get_status as batch_get_status)
 from app.services.media_playbook import list_playbooks, get_playbook
+from app.services.ai_router import ask_ai_vision
 from app.services.media_topic import adopt_topic
 from app.services.media_lesson import (
     list_lessons, create_lesson, update_lesson,
@@ -2135,8 +2137,39 @@ async def assistant_page(request: Request):
 
 
 @router.post("/media/assistant/ask")
-async def assistant_ask(request: Request, message: str = Form(...)):
-    msg = message.strip()
+async def assistant_ask(request: Request, message: str = Form(""),
+                        image: UploadFile = File(None)):
+    """跟助手对话。可带一张图片。
+
+    图片走「先识别成文字，再作为消息内容送进对话」的路子，不做真多模态——
+    助手的工具循环是纯文本的，识别结果当上下文喂进去就够用，而且用户能看见
+    AI「看到了什么」，出错时好判断是识图错了还是理解错了。
+    """
+    msg = (message or "").strip()
+    vision_note, vision_cost = "", 0.0
+    if image is not None and getattr(image, "filename", ""):
+        raw = await image.read()
+        if len(raw) > 8 * 1024 * 1024:
+            return JSONResponse({"ok": False, "error": "图片太大（超过 8MB），压一下再传"})
+        mt = image.content_type or "image/png"
+        if not mt.startswith("image/"):
+            return JSONResponse({"ok": False, "error": f"只支持图片，这个是 {mt}"})
+        b64 = base64.b64encode(raw).decode("ascii")
+        vr = await ask_ai_vision(
+            "把这张图里的内容如实描述出来：有文字就逐字抄下来（保留数字和单位），"
+            "是界面截图就说清每块是什么、数值多少，是照片就描述画面。"
+            "只描述看得见的，绝不推测或补充图里没有的东西。",
+            [{"media_type": mt, "data": b64}])
+        vtext = (vr.get("response") or "").strip()
+        vision_cost = vr.get("cost", 0) or 0
+        if vtext.startswith("[错误]") or vtext.startswith("[费用保护]"):
+            return JSONResponse({"ok": False, "error": f"识图失败：{vtext}"})
+        if not vtext:
+            return JSONResponse({"ok": False, "error": "识图返回了空内容，重试一下"})
+        vision_note = vtext
+        head = "【我传了一张图，识别到的内容】"
+        tail = msg or "（看看这张图，然后按你的判断处理）"
+        msg = head + "\n" + vtext + "\n\n" + tail
     if not msg:
         return JSONResponse({"ok": False, "error": "空消息"})
     db = await get_db()
@@ -2181,7 +2214,8 @@ async def assistant_ask(request: Request, message: str = Form(...)):
     finally:
         await db.close()
     return JSONResponse({"ok": True, "reply": reply, "steps": steps,
-                         "cost": result.get("cost", 0), "pending_count": len(pend)})
+                         "cost": (result.get("cost", 0) or 0) + vision_cost,
+                         "vision": vision_note, "pending_count": len(pend)})
 
 
 @router.post("/media/assistant/clear")
