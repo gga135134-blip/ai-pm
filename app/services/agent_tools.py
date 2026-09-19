@@ -603,6 +603,22 @@ def _get_tool_client():
     return None, None, None
 
 
+# 工具类 AI 的真实模型名（跟 _get_tool_client 的 key 顺序/模型串一一对应）。
+# 注意 deepseek 这里是 deepseek-chat，跟 ai_router 文本用的 deepseek-v4-flash 不同。
+_TOOL_REAL_NAME = {"deepseek": "deepseek-chat", "qwen": "qwen-plus", "openai": "gpt-4o"}
+
+
+def effective_tool_model() -> dict:
+    """工具类（助手/执行）当前实际会用哪个模型。
+    镜像 _get_tool_client 的写死顺序（deepseek→qwen→openai，Claude 进不来）——只解析不建客户端。
+    返回 {"key", "name"}；一家都没配 Key 时返回 {None, None}。"""
+    config = _load_config()
+    for key in ("deepseek", "qwen", "openai"):
+        if config.get(f"{key}_api_key"):
+            return {"key": key, "name": _TOOL_REAL_NAME[key]}
+    return {"key": None, "name": None}
+
+
 async def run_agent_loop(prompt: str, system: str, project_id: str | None = None, max_steps: int = 18,
                           on_step: callable = None, tool_schemas: list = None, dispatch: callable = None,
                           ctx=None) -> dict:

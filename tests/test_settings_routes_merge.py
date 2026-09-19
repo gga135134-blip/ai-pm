@@ -30,7 +30,6 @@ def _save(**kw):
         qwen_api_key="", default_ai_model="claude",
         fallback_1="claude", fallback_2="openai",
         fallback_3="deepseek", fallback_4="qwen",
-        serverchan_key="", pushplus_token="", feishu_webhook="",
         route_code="auto", route_writing="auto", route_analysis="auto",
         route_review="auto", route_vision="auto", route_media_script="auto")
     args.update(kw)

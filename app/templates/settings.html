@@ -6,12 +6,18 @@
 {% endblock %}
 {% block content %}
 <style>
-.st-wrap{ max-width:720px; margin:0 auto; }
+.st-wrap{ max-width:760px; margin:0 auto; }
 .st-msg{ margin-bottom:16px; font-size:13px; border-radius:var(--r-sm); padding:11px 14px; }
 .st-msg.info{ background:var(--accent-soft); color:var(--accent); border:1px solid rgba(47,211,197,.3); }
 .st-msg.ok{ background:rgba(63,203,134,.14); color:var(--up); border:1px solid rgba(63,203,134,.3); }
 .st-msg.err{ background:rgba(255,98,87,.14); color:var(--down); border:1px solid rgba(255,98,87,.3); }
 .st-note{ font-size:11.5px; color:var(--ink-3); margin-top:5px; }
+/* tab 条 */
+.st-tabs{ display:flex; gap:0; border-bottom:1px solid var(--border); margin-bottom:18px; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+.st-tabs .tab{ white-space:nowrap; }
+.st-tabpanel{ display:none; }
+.st-tabpanel.on{ display:block; }
+/* 复用块 */
 .st-userlist{ display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px; }
 .st-user{ display:inline-flex; align-items:center; gap:6px; background:var(--panel-2); border:1px solid var(--border); color:var(--ink-2); font-size:12.5px; padding:5px 11px; border-radius:999px; }
 .st-user .rm{ background:none; border:none; color:var(--ink-3); cursor:pointer; font-weight:700; line-height:1; padding:0; margin-left:2px; }
@@ -23,83 +29,30 @@
 .st-subhead:first-child{ margin-top:0; padding-top:0; border-top:0; }
 .st-fbrow{ display:flex; align-items:center; gap:10px; margin-bottom:10px; }
 .st-fbrow .idx{ font-size:12.5px; color:var(--ink-3); width:64px; flex:none; }
-.st-rtrow{ display:flex; align-items:center; gap:10px; margin-bottom:10px; }
-.st-rtrow .rl{ font-size:12.5px; color:var(--ink-2); width:88px; flex:none; }
 .st-table{ width:100%; font-size:12.5px; border-collapse:collapse; }
 .st-table th{ text-align:left; color:var(--ink-3); font-weight:600; padding:0 0 8px; border-bottom:1px solid var(--border); }
-.st-table td{ padding:8px 0; border-bottom:1px solid var(--border); color:var(--ink-2); }
+.st-table td{ padding:8px 0; border-bottom:1px solid var(--border); color:var(--ink-2); vertical-align:middle; }
 .st-table tr:last-child td{ border-bottom:0; }
+/* 路由表 */
+.st-routes{ width:100%; border-collapse:collapse; font-size:12.5px; }
+.st-routes th{ text-align:left; color:var(--ink-3); font-weight:600; padding:0 10px 8px 0; border-bottom:1px solid var(--border); }
+.st-routes td{ padding:8px 10px 8px 0; border-bottom:1px solid var(--border); vertical-align:middle; }
+.st-routes tr:last-child td{ border-bottom:0; }
+.st-routes .rtask{ color:var(--ink-2); white-space:nowrap; }
+.st-routes select{ width:100%; min-width:150px; }
+.st-eff{ display:inline-flex; align-items:center; gap:6px; font-family:var(--mono); font-size:12px; color:var(--ink-1); }
+.st-eff .dot{ width:7px; height:7px; border-radius:50%; background:var(--up); flex:none; }
+.st-eff.locked{ color:var(--ink-3); }
+.st-eff.locked .dot{ background:var(--ink-3); }
+.st-tag{ font-size:10.5px; padding:1px 6px; border-radius:999px; border:1px solid var(--border); color:var(--ink-3); margin-left:6px; }
 .st-save-hint{ font-size:11.5px; color:var(--ink-3); margin-left:10px; }
-@media(max-width:767px){ .st-sub2{ grid-template-columns:1fr; } }
+@media(max-width:767px){ .st-sub2{ grid-template-columns:1fr; } .st-routes select{ min-width:110px; } }
 </style>
 <div class="st-wrap">
 
     {% if msg %}
     <div class="st-msg info">{{ msg }}</div>
     {% endif %}
-
-    <!-- ============ 账号信息 / 用户列表（删除各自独立提交） ============ -->
-    <div class="module">
-        <div class="mh">
-            <span class="ic">{{ ic.icon('settings') }}</span>
-            <span class="ttl">账号管理</span>
-            <span class="sub">当前登录：{{ request.session.get('user') }} &middot; <a href="/logout" style="color:var(--down)">退出登录</a></span>
-        </div>
-        <div class="inner">
-            <div class="label" style="margin-bottom:8px">现有用户</div>
-            <div class="st-userlist">
-                {% for u in users %}
-                <form method="POST" action="/settings/users/delete" onsubmit="return confirm('确认删除用户 {{ u }}？')" style="margin:0">
-                    <input type="hidden" name="username" value="{{ u }}">
-                    <span class="st-user">
-                        {{ ic.icon('eye') }} {{ u }}
-                        {% if u != request.session.get('user') %}
-                        <button type="submit" class="rm" title="删除">&times;</button>
-                        {% endif %}
-                    </span>
-                </form>
-                {% endfor %}
-            </div>
-
-            <div class="st-sub2">
-                <!-- 添加用户：独立表单，独立提交按钮 -->
-                <form method="POST" action="/settings/users/add" class="st-panel">
-                    <div class="ph">添加新用户</div>
-                    <div class="field">
-                        <input name="username" placeholder="用户名" required class="input">
-                    </div>
-                    <div class="field">
-                        <input name="password" type="password" placeholder="密码" required class="input">
-                    </div>
-                    <div class="field" style="margin-bottom:12px">
-                        <input name="password2" type="password" placeholder="确认密码" required class="input">
-                    </div>
-                    <button type="submit" class="btn primary" style="width:100%;justify-content:center">{{ ic.icon('plus') }}添加用户</button>
-                </form>
-
-                <!-- 修改密码：独立表单，独立提交按钮，不受下方"保存设置"影响 -->
-                <form method="POST" action="/settings/users/change-password" class="st-panel">
-                    <div class="ph">修改密码</div>
-                    <div class="field">
-                        <select name="username" class="input">
-                            {% for u in users %}<option value="{{ u }}">{{ u }}</option>{% endfor %}
-                        </select>
-                    </div>
-                    <div class="field">
-                        <input name="old_password" type="password" placeholder="原密码" required class="input">
-                    </div>
-                    <div class="field">
-                        <input name="new_password" type="password" placeholder="新密码" required class="input">
-                    </div>
-                    <div class="field" style="margin-bottom:12px">
-                        <input name="new_password2" type="password" placeholder="确认新密码" required class="input">
-                    </div>
-                    <button type="submit" class="btn primary" style="width:100%;justify-content:center">{{ ic.icon('check') }}修改密码</button>
-                </form>
-            </div>
-        </div>
-    </div>
-
     {% set test_status = request.query_params.get('notify_test') %}
     {% if test_status == 'ok' %}
     <div class="st-msg ok">{{ ic.icon('check') }} 测试通知已发送（渠道: {{ request.query_params.get('detail') }}），去手机上看看收到没有</div>
@@ -107,239 +60,144 @@
     <div class="st-msg err">{{ ic.icon('x') }} 通知发送失败：{{ request.query_params.get('detail') }}</div>
     {% endif %}
 
-    <!-- ============ 公司运作手册（独立表单，独立提交） ============ -->
-    <form method="POST" action="/settings/manual" class="module">
-        <div class="mh">
-            <span class="ic">{{ ic.icon('doc') }}</span>
-            <span class="ttl">公司运作手册（AI 宪法）</span>
-        </div>
-        <div class="inner">
-            <p class="st-note" style="margin:0 0 10px">这份手册会自动注入到<strong style="color:var(--ink-1)">每一个 AI</strong>（总 AI、拆解、执行、审核）的认知里，让它们一进来就懂公司怎么运作。改这里 = 改所有 AI 的行为准则。支持 Markdown。</p>
-            <textarea name="company_manual" rows="16" class="input" style="width:100%;font-family:var(--mono);tab-size:2">{{ config.company_manual }}</textarea>
-            <button type="submit" class="btn primary" style="margin-top:12px">{{ ic.icon('check') }}保存手册</button>
-        </div>
-    </form>
-
-    <!-- ============ 主设置：API Keys / 备用策略 / 路由 / 通知（同一表单，同一 POST /settings） ============ -->
-    <form method="POST" action="/settings" class="module">
-        <div class="mh">
-            <span class="ic">{{ ic.icon('gear') }}</span>
-            <span class="ttl">主设置</span>
-            <span class="sub">AI 模型配置 · 备用策略 · 路由规则 · 通知渠道 — 下方一个按钮统一保存</span>
-        </div>
-        <div class="inner">
-            <!-- API Keys -->
-            <div class="st-subhead">AI 模型配置</div>
-            <div class="field">
-                <label class="label">Anthropic API Key (Claude)</label>
-                <input type="password" name="anthropic_api_key" value="{{ config.anthropic_api_key }}" placeholder="sk-ant-..." class="input">
-            </div>
-            <div class="field">
-                <label class="label">OpenAI API Key</label>
-                <input type="password" name="openai_api_key" value="{{ config.openai_api_key }}" placeholder="sk-..." class="input">
-            </div>
-            <div class="field">
-                <label class="label">DeepSeek API Key</label>
-                <input type="password" name="deepseek_api_key" value="{{ config.deepseek_api_key }}" placeholder="sk-..." class="input">
-                <p class="st-note">从 platform.deepseek.com 获取</p>
-            </div>
-            <div class="field">
-                <label class="label">通义千问 API Key（阿里云百炼）</label>
-                <input type="password" name="qwen_api_key" value="{{ config.qwen_api_key }}" placeholder="sk-..." class="input">
-                <p class="st-note">从 bailian.console.aliyun.com 获取，文字用 qwen-plus，识图自动用 qwen-vl</p>
-            </div>
-            <div class="field" style="margin-bottom:0">
-                <label class="label">默认模型</label>
-                <select name="default_ai_model" class="input">
-                    {% for val, label in [('claude', 'Claude Sonnet'), ('openai', 'GPT-4o'), ('deepseek', 'DeepSeek V3'), ('qwen', '通义千问 Plus')] %}
-                    <option value="{{ val }}" {{ 'selected' if config.default_ai_model == val }}>{{ label }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-
-            <!-- 备用模型策略 -->
-            <div class="st-subhead">备用模型策略</div>
-            <p class="st-note" style="margin:-4px 0 12px">主模型不可用时，按以下顺序自动切换备用模型</p>
-            {% set all_models = ['claude', 'openai', 'deepseek', 'qwen'] %}
-            {% set fallback = config.fallback_order or all_models %}
-            {% for i in range(4) %}
-            <div class="st-fbrow">
-                <span class="idx">第 {{ i + 1 }} 优先</span>
-                <select name="fallback_{{ i + 1 }}" class="input" style="flex:1">
-                    {% for val, label in [('claude', 'Claude Sonnet'), ('openai', 'GPT-4o'), ('deepseek', 'DeepSeek V3'), ('qwen', '通义千问 Plus')] %}
-                    <option value="{{ val }}" {{ 'selected' if (fallback[i] if i < fallback|length else all_models[i]) == val }}>{{ label }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            {% endfor %}
-
-            <!-- AI 路由规则 -->
-            <div class="st-subhead">AI 路由规则</div>
-            <p class="st-note" style="margin:-4px 0 12px">按任务类型自动选择模型（"自动"使用默认模型）</p>
-            {% for rule_name, rule_label in [('media_script', '写口播稿（自媒体）'), ('code', '代码/编程'), ('writing', '文案/写作'), ('analysis', '分析/研究'), ('review', '审核/质检')] %}
-            <div class="st-rtrow">
-                <span class="rl">{{ rule_label }}</span>
-                <select name="route_{{ rule_name }}" class="input" style="flex:1">
-                    {% for val, label in [('auto', '自动'), ('claude', 'Claude'), ('openai', 'GPT-4o'), ('deepseek', 'DeepSeek'), ('qwen', '通义千问')] %}
-                    <option value="{{ val }}" {{ 'selected' if config.routes.get(rule_name) == val }}>{{ label }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            {% endfor %}
-            {# 识图单列一行：DeepSeek 不支持识图，所以选项里没有它；
-               「自动」= 千问 → Claude → OpenAI，挑第一个配了 Key 的（千问最便宜）。 #}
-            <div class="st-rtrow">
-                <span class="rl">识图（看截图/图片）</span>
-                <select name="route_vision" class="input" style="flex:1">
-                    {% for val, label in [('auto', '自动（千问优先，最便宜）'), ('qwen', '通义千问 qwen-vl'), ('claude', 'Claude'), ('openai', 'GPT-4o')] %}
-                    <option value="{{ val }}" {{ 'selected' if config.routes.get('vision') == val }}>{{ label }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-
-            <!-- 费用参考（信息展示，非表单字段） -->
-            <div class="st-subhead">模型费用参考</div>
-            <table class="st-table">
-                <thead>
-                    <tr><th>模型</th><th>输入 ($/1M tokens)</th><th>输出 ($/1M tokens)</th></tr>
-                </thead>
-                <tbody>
-                    <tr><td>Claude Sonnet</td><td>$3.00</td><td>$15.00</td></tr>
-                    <tr><td>GPT-4o</td><td>$5.00</td><td>$15.00</td></tr>
-                    <tr><td>DeepSeek V3</td><td>$0.14</td><td>$0.28</td></tr>
-                    <tr><td>通义千问 Plus</td><td>$0.11</td><td>$0.28</td></tr>
-                    <tr><td>通义千问 VL（识图）</td><td>$0.21</td><td>$0.62</td></tr>
-                </tbody>
-            </table>
-
-            <!-- 通知配置 -->
-            <div class="st-subhead">通知配置</div>
-            <div class="field">
-                <label class="label">Server酱 SendKey</label>
-                <input type="text" name="serverchan_key" value="{{ config.serverchan_key }}" placeholder="SCT..." class="input">
-                <p class="st-note">用于微信推送通知，从 sct.ftqq.com 获取</p>
-            </div>
-            <div class="field">
-                <label class="label">PushPlus Token</label>
-                <input type="text" name="pushplus_token" value="{{ config.pushplus_token }}" placeholder="" class="input">
-            </div>
-            <div class="field" style="margin-bottom:14px">
-                <label class="label">飞书机器人 Webhook</label>
-                <input type="text" name="feishu_webhook" value="{{ config.feishu_webhook }}" placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/..." class="input">
-                <p class="st-note">飞书群 → 设置 → 群机器人 → 添加"自定义机器人"，复制 Webhook 地址。多渠道都配置时按 Server酱 → PushPlus → 飞书 顺序尝试</p>
-            </div>
-
-            <div style="display:flex;align-items:center;padding-top:6px">
-                <button type="submit" class="btn primary">{{ ic.icon('check') }}保存主设置</button>
-                <span class="st-save-hint">仅保存本面板内（API/备用/路由/通知）字段，不影响上方密码与用户管理</span>
-            </div>
-        </div>
-    </form>
-
-    <!-- ============ 发送测试通知：独立表单，独立提交，与主设置无关 ============ -->
-    <form method="POST" action="/settings/test-notify">
-        <button class="btn">{{ ic.icon('bell') }}发送测试通知</button>
-        <span class="st-save-hint">先保存上方「主设置」里的通知配置，再点这里测试</span>
-    </form>
-
-    <!-- ============ 飞书数据源：独立表单，独立提交，与主设置无关 ============ -->
-    <div class="module" style="margin-top:20px">
-        <div class="mh">
-            <span class="ic">{{ ic.icon('settings') }}</span>
-            <span class="ttl">飞书数据源</span>
-            <span class="sub">配置多维表格连接，用于同步媒体数据</span>
-        </div>
-        <div class="inner">
-            <form method="POST" action="/settings/feishu" id="feishu-form">
-                <div class="field">
-                    <label class="label">App Token（多维表格 app_token）</label>
-                    <input type="text" name="app_token" value="{{ config.feishu_media_map.app_token }}" placeholder="bascnxxxxxxxxxxxxxxxx" class="input">
-                </div>
-                <div class="field" style="margin-bottom:14px">
-                    <label class="label">Table ID（表格 table_id）</label>
-                    <input type="text" name="table_id" value="{{ config.feishu_media_map.table_id }}" placeholder="tblxxxxxxxxxxxxxxxx" class="input">
-                    <p class="st-note">app_id/app_secret 已在 .env 中配置（Task 1），此处只填 app_token/table_id，非密钥</p>
-                </div>
-
-                <div class="st-subhead">字段映射（飞书列名对照，填「飞书里这列叫什么」）</div>
-                <div class="st-sub2">
-                    <div class="field">
-                        <label class="label">视频链接</label>
-                        <input type="text" name="f_post_url" value="{{ config.feishu_media_map.fields.post_url }}" placeholder="如：视频链接" class="input">
-                    </div>
-                    <div class="field">
-                        <label class="label">标题</label>
-                        <input type="text" name="f_title" value="{{ config.feishu_media_map.fields.title }}" placeholder="如：标题" class="input">
-                    </div>
-                    <div class="field">
-                        <label class="label">播放量</label>
-                        <input type="text" name="f_views" value="{{ config.feishu_media_map.fields.views }}" placeholder="如：播放量" class="input">
-                    </div>
-                    <div class="field">
-                        <label class="label">点赞数</label>
-                        <input type="text" name="f_likes" value="{{ config.feishu_media_map.fields.likes }}" placeholder="如：点赞数" class="input">
-                    </div>
-                    <div class="field">
-                        <label class="label">评论数</label>
-                        <input type="text" name="f_comments" value="{{ config.feishu_media_map.fields.comments }}" placeholder="如：评论数" class="input">
-                    </div>
-                    <div class="field">
-                        <label class="label">分享数</label>
-                        <input type="text" name="f_shares" value="{{ config.feishu_media_map.fields.shares }}" placeholder="如：分享数" class="input">
-                    </div>
-                    <div class="field">
-                        <label class="label">新增粉丝</label>
-                        <input type="text" name="f_new_fans" value="{{ config.feishu_media_map.fields.new_fans }}" placeholder="如：新增粉丝" class="input">
-                    </div>
-                    <div class="field" style="margin-bottom:14px">
-                        <label class="label">快照时间</label>
-                        <input type="text" name="f_snapshot_at" value="{{ config.feishu_media_map.fields.snapshot_at }}" placeholder="如：更新时间" class="input">
-                    </div>
-                </div>
-
-                <div style="display:flex;align-items:center;gap:10px;padding-top:6px;flex-wrap:wrap">
-                    <button type="submit" class="btn primary">{{ ic.icon('check') }}保存飞书配置</button>
-                    <button type="button" class="btn" id="feishu-test-btn" onclick="testFeishuConn()">{{ ic.icon('bell') }}测试连接</button>
-                    <span class="st-save-hint">先保存上方配置，再点「测试连接」拉一条真实记录，看列名对照填映射</span>
-                </div>
-            </form>
-            <div id="feishu-test-result" style="margin-top:12px"></div>
-        </div>
+    <!-- ============ Tab 条 ============ -->
+    <div class="st-tabs" id="st-tabs">
+        <button type="button" class="tab on" data-tab="models">模型与路由</button>
+        <button type="button" class="tab" data-tab="account">账号</button>
+        <button type="button" class="tab" data-tab="notify">通知</button>
+        <button type="button" class="tab" data-tab="data">数据源与集成</button>
+        <button type="button" class="tab" data-tab="manual">AI 宪法</button>
     </div>
 
-    <!-- ============ 豆包 ASR 凭证（功能C 视频反向入库用）：独立表单 ============ -->
-    <form method="post" action="/settings/asr" style="margin-top:16px">
-      <h3 style="font-size:15px; margin-bottom:8px">豆包录音文件识别（视频反向入库用）</h3>
-      <label>API Key（新版豆包语音「API Key」页复制，推荐）
-        <input name="douyin_asr_api_key" value="{{ config.douyin_asr.api_key }}" style="width:100%">
-        <span class="st-save-hint">填了 API Key 就用新版单串鉴权，下面 App ID / Access Key 可留空</span>
-      </label>
-      <label>App ID（老版鉴权，填了 API Key 可不填）
-        <input name="douyin_asr_app_id" value="{{ config.douyin_asr.app_id }}" style="width:100%">
-      </label>
-      <label>Access Key（老版鉴权，填了 API Key 可不填）
-        <input name="douyin_asr_access_key" value="{{ config.douyin_asr.access_key }}" style="width:100%">
-      </label>
-      <label>Resource ID
-        <input name="douyin_asr_resource_id" value="{{ config.douyin_asr.resource_id }}" style="width:100%">
-        <span class="st-save-hint">录音文件识别 2.0 填 volc.seedasr.auc；1.0 填 volc.bigasr.auc</span>
-      </label>
-      <label>公网地址
-        <input name="douyin_asr_public_base" value="{{ config.douyin_asr.public_base }}" style="width:100%">
-        <span class="st-save-hint">公网地址（豆包回抓音频用，如 http://159.75.200.213:8000，留空则用当前访问地址）</span>
-      </label>
-      <button class="btn primary" style="margin-top:8px">保存豆包 ASR</button>
-    </form>
+    {# ============================================================ #}
+    {# ① 模型与路由 —— 全页的眼睛：一眼看清每个任务实际在跑哪个模型 #}
+    {# ============================================================ #}
+    <div class="st-tabpanel on" data-panel="models">
 
-    <!-- ============ 自媒体 · 换脑审稿策略：独立表单 ============ -->
-    <div class="st-card">
-        <div class="mh">
-            <span class="ttl">自媒体 · 审稿独立性</span>
-        </div>
-        <div class="inner">
-            <form method="POST" action="/media/settings/review-strategy">
+        <form method="POST" action="/settings" class="module">
+            <div class="mh">
+                <span class="ic">{{ ic.icon('gear') }}</span>
+                <span class="ttl">模型与路由</span>
+                <span class="sub">API Key · 默认/备用 · 每个任务用哪个模型 — 一个按钮统一保存</span>
+            </div>
+            <div class="inner">
+                <!-- API Keys -->
+                <div class="st-subhead">API Key</div>
                 <div class="field">
-                    <label class="label">写脚本时，谁来独立审稿</label>
+                    <label class="label">Anthropic API Key（Claude，真实模型 claude-opus-5）</label>
+                    <input type="password" name="anthropic_api_key" value="{{ config.anthropic_api_key }}" placeholder="sk-ant-..." class="input">
+                </div>
+                <div class="field">
+                    <label class="label">OpenAI API Key（gpt-4o）</label>
+                    <input type="password" name="openai_api_key" value="{{ config.openai_api_key }}" placeholder="sk-..." class="input">
+                </div>
+                <div class="field">
+                    <label class="label">DeepSeek API Key（deepseek-v4-flash）</label>
+                    <input type="password" name="deepseek_api_key" value="{{ config.deepseek_api_key }}" placeholder="sk-..." class="input">
+                    <p class="st-note">从 platform.deepseek.com 获取</p>
+                </div>
+                <div class="field" style="margin-bottom:0">
+                    <label class="label">通义千问 API Key（阿里云百炼，文字 qwen-plus，识图 qwen-vl-plus）</label>
+                    <input type="password" name="qwen_api_key" value="{{ config.qwen_api_key }}" placeholder="sk-..." class="input">
+                    <p class="st-note">从 bailian.console.aliyun.com 获取</p>
+                </div>
+
+                <!-- 默认 + 备用 -->
+                <div class="st-subhead">默认模型 · 备用顺序</div>
+                <div class="field">
+                    <label class="label">默认模型（路由选“自动”时用它）</label>
+                    <select name="default_ai_model" class="input">
+                        {% for val, label in [('claude', 'claude-opus-5'), ('openai', 'gpt-4o'), ('deepseek', 'deepseek-v4-flash'), ('qwen', 'qwen-plus')] %}
+                        <option value="{{ val }}" {{ 'selected' if config.default_ai_model == val }}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <p class="st-note" style="margin:-2px 0 10px">主模型不可用时，按以下顺序自动切换</p>
+                {% set all_models = ['claude', 'openai', 'deepseek', 'qwen'] %}
+                {% set fallback = config.fallback_order or all_models %}
+                {% for i in range(4) %}
+                <div class="st-fbrow">
+                    <span class="idx">第 {{ i + 1 }} 优先</span>
+                    <select name="fallback_{{ i + 1 }}" class="input" style="flex:1">
+                        {% for val, label in [('claude', 'claude-opus-5'), ('openai', 'gpt-4o'), ('deepseek', 'deepseek-v4-flash'), ('qwen', 'qwen-plus')] %}
+                        <option value="{{ val }}" {{ 'selected' if (fallback[i] if i < fallback|length else all_models[i]) == val }}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endfor %}
+
+                <!-- 路由表：任务 | 你选谁 | 当前实际生效 -->
+                <div class="st-subhead">按任务路由（右列＝现在实际在跑的真实模型）</div>
+                <table class="st-routes">
+                    <thead>
+                        <tr><th>任务</th><th>你选谁</th><th>当前实际生效</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for rule_name, rule_label in [('media_script', '写口播稿（自媒体）'), ('writing', '文案/写作'), ('code', '代码/编程'), ('analysis', '分析/研究'), ('review', '审核/质检')] %}
+                        <tr>
+                            <td class="rtask">{{ rule_label }}</td>
+                            <td>
+                                <select name="route_{{ rule_name }}" class="input">
+                                    {% for val, label in [('auto', '自动（按默认）'), ('claude', 'claude-opus-5'), ('openai', 'gpt-4o'), ('deepseek', 'deepseek-v4-flash'), ('qwen', 'qwen-plus')] %}
+                                    <option value="{{ val }}" {{ 'selected' if config.routes.get(rule_name) == val }}>{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </td>
+                            <td><span class="st-eff"><span class="dot"></span>{{ model_effective[rule_name].name }}</span></td>
+                        </tr>
+                        {% endfor %}
+                        {# 识图：DeepSeek 不支持，选项里没有它；自动＝千问→Claude→OpenAI 挑第一个配了 Key 的 #}
+                        <tr>
+                            <td class="rtask">识图（看截图/图片）</td>
+                            <td>
+                                <select name="route_vision" class="input">
+                                    {% for val, label in [('auto', '自动（千问优先，最便宜）'), ('qwen', 'qwen-vl-plus'), ('claude', 'claude-opus-5'), ('openai', 'gpt-4o')] %}
+                                    <option value="{{ val }}" {{ 'selected' if config.routes.get('vision') == val }}>{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </td>
+                            <td><span class="st-eff{{ ' locked' if not model_effective.vision.name }}"><span class="dot"></span>{{ model_effective.vision.name or '未配置 Key' }}</span></td>
+                        </tr>
+                        {# 助手对话/总AI执行：走写死的 _get_tool_client（deepseek→qwen→openai），Claude 进不来，设置页管不着 —— 诚实只读，不做假下拉（项目宪法第14条：界面不许说谎） #}
+                        <tr>
+                            <td class="rtask">助手对话 / 总AI执行</td>
+                            <td><span class="st-note" style="margin:0">写死，设置不控制它 <span class="st-tag">工具调用暂不支持 Claude</span></span></td>
+                            <td><span class="st-eff locked"><span class="dot"></span>{{ model_effective.assistant.name or '未配置 Key' }}</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <!-- 费用参考 -->
+                <div class="st-subhead">模型费用参考</div>
+                <table class="st-table">
+                    <thead>
+                        <tr><th>模型</th><th>输入 ($/1M tokens)</th><th>输出 ($/1M tokens)</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>claude-opus-5</td><td>$5.00</td><td>$25.00</td></tr>
+                        <tr><td>gpt-4o</td><td>$5.00</td><td>$15.00</td></tr>
+                        <tr><td>deepseek-v4-flash</td><td>$0.14</td><td>$0.28</td></tr>
+                        <tr><td>qwen-plus</td><td>$0.11</td><td>$0.28</td></tr>
+                        <tr><td>qwen-vl-plus（识图）</td><td>$0.21</td><td>$0.62</td></tr>
+                    </tbody>
+                </table>
+
+                <div style="display:flex;align-items:center;padding-top:14px">
+                    <button type="submit" class="btn primary">{{ ic.icon('check') }}保存模型与路由</button>
+                    <span class="st-save-hint">只保存本表单（API/默认/备用/路由），不动通知与其它 tab</span>
+                </div>
+            </div>
+        </form>
+
+        <!-- 自媒体·审稿独立性（归队到这里，独立表单，独立端点） -->
+        <form method="POST" action="/media/settings/review-strategy" class="module">
+            <div class="mh">
+                <span class="ic">{{ ic.icon('doc') }}</span>
+                <span class="ttl">自媒体 · 审稿独立性</span>
+                <span class="sub">写稿时谁来独立审稿</span>
+            </div>
+            <div class="inner">
+                <div class="field">
                     <select name="strategy" class="input">
                         <option value="layered" {% if (config.media_review_strategy or 'layered')=='layered' %}selected{% endif %}>分层（默认 · 省）—— 审稿独立调用，角色分离</option>
                         <option value="swap_model" {% if config.media_review_strategy=='swap_model' %}selected{% endif %}>换模型（最独立 · 贵）—— 强制换个模型来审</option>
@@ -348,11 +206,214 @@
                     <p class="st-note">创作器 ≠ 审稿器：写稿和审稿永远是两次独立调用。前期建议「分层/换模型」抓问题，体系沉淀后可切「同模型分身」省成本。</p>
                 </div>
                 <button type="submit" class="btn primary">{{ ic.icon('check') }}保存审稿策略</button>
-            </form>
+            </div>
+        </form>
+    </div>
+
+    {# ============================================================ #}
+    {# ② 账号 #}
+    {# ============================================================ #}
+    <div class="st-tabpanel" data-panel="account">
+        <div class="module">
+            <div class="mh">
+                <span class="ic">{{ ic.icon('settings') }}</span>
+                <span class="ttl">账号管理</span>
+                <span class="sub">当前登录：{{ request.session.get('user') }} &middot; <a href="/logout" style="color:var(--down)">退出登录</a></span>
+            </div>
+            <div class="inner">
+                <div class="label" style="margin-bottom:8px">现有用户</div>
+                <div class="st-userlist">
+                    {% for u in users %}
+                    <form method="POST" action="/settings/users/delete" onsubmit="return confirm('确认删除用户 {{ u }}？')" style="margin:0">
+                        <input type="hidden" name="username" value="{{ u }}">
+                        <span class="st-user">
+                            {{ ic.icon('eye') }} {{ u }}
+                            {% if u != request.session.get('user') %}
+                            <button type="submit" class="rm" title="删除">&times;</button>
+                            {% endif %}
+                        </span>
+                    </form>
+                    {% endfor %}
+                </div>
+
+                <div class="st-sub2">
+                    <form method="POST" action="/settings/users/add" class="st-panel">
+                        <div class="ph">添加新用户</div>
+                        <div class="field"><input name="username" placeholder="用户名" required class="input"></div>
+                        <div class="field"><input name="password" type="password" placeholder="密码" required class="input"></div>
+                        <div class="field" style="margin-bottom:12px"><input name="password2" type="password" placeholder="确认密码" required class="input"></div>
+                        <button type="submit" class="btn primary" style="width:100%;justify-content:center">{{ ic.icon('plus') }}添加用户</button>
+                    </form>
+
+                    <form method="POST" action="/settings/users/change-password" class="st-panel">
+                        <div class="ph">修改密码</div>
+                        <div class="field">
+                            <select name="username" class="input">
+                                {% for u in users %}<option value="{{ u }}">{{ u }}</option>{% endfor %}
+                            </select>
+                        </div>
+                        <div class="field"><input name="old_password" type="password" placeholder="原密码" required class="input"></div>
+                        <div class="field"><input name="new_password" type="password" placeholder="新密码" required class="input"></div>
+                        <div class="field" style="margin-bottom:12px"><input name="new_password2" type="password" placeholder="确认新密码" required class="input"></div>
+                        <button type="submit" class="btn primary" style="width:100%;justify-content:center">{{ ic.icon('check') }}修改密码</button>
+                    </form>
+                </div>
+            </div>
         </div>
     </div>
 
+    {# ============================================================ #}
+    {# ③ 通知（独立端点 POST /settings/notify） #}
+    {# ============================================================ #}
+    <div class="st-tabpanel" data-panel="notify">
+        <form method="POST" action="/settings/notify" class="module">
+            <div class="mh">
+                <span class="ic">{{ ic.icon('bell') }}</span>
+                <span class="ttl">通知渠道</span>
+                <span class="sub">多渠道都配时按 Server酱 → PushPlus → 飞书 顺序尝试</span>
+            </div>
+            <div class="inner">
+                <div class="field">
+                    <label class="label">Server酱 SendKey</label>
+                    <input type="text" name="serverchan_key" value="{{ config.serverchan_key }}" placeholder="SCT..." class="input">
+                    <p class="st-note">用于微信推送，从 sct.ftqq.com 获取</p>
+                </div>
+                <div class="field">
+                    <label class="label">PushPlus Token</label>
+                    <input type="text" name="pushplus_token" value="{{ config.pushplus_token }}" placeholder="" class="input">
+                </div>
+                <div class="field" style="margin-bottom:14px">
+                    <label class="label">飞书机器人 Webhook</label>
+                    <input type="text" name="feishu_webhook" value="{{ config.feishu_webhook }}" placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/..." class="input">
+                    <p class="st-note">飞书群 → 设置 → 群机器人 → 添加“自定义机器人”，复制 Webhook</p>
+                </div>
+                <button type="submit" class="btn primary">{{ ic.icon('check') }}保存通知渠道</button>
+            </div>
+        </form>
+
+        <form method="POST" action="/settings/test-notify" style="margin-top:14px">
+            <button class="btn">{{ ic.icon('bell') }}发送测试通知</button>
+            <span class="st-save-hint">先保存上方通知渠道，再点这里测试</span>
+        </form>
+    </div>
+
+    {# ============================================================ #}
+    {# ④ 数据源与集成（飞书多维表格 + 豆包 ASR） #}
+    {# ============================================================ #}
+    <div class="st-tabpanel" data-panel="data">
+        <div class="module">
+            <div class="mh">
+                <span class="ic">{{ ic.icon('settings') }}</span>
+                <span class="ttl">飞书数据源</span>
+                <span class="sub">配置多维表格连接，用于同步媒体数据</span>
+            </div>
+            <div class="inner">
+                <form method="POST" action="/settings/feishu" id="feishu-form">
+                    <div class="field">
+                        <label class="label">App Token（多维表格 app_token）</label>
+                        <input type="text" name="app_token" value="{{ config.feishu_media_map.app_token }}" placeholder="bascnxxxxxxxxxxxxxxxx" class="input">
+                    </div>
+                    <div class="field" style="margin-bottom:14px">
+                        <label class="label">Table ID（表格 table_id）</label>
+                        <input type="text" name="table_id" value="{{ config.feishu_media_map.table_id }}" placeholder="tblxxxxxxxxxxxxxxxx" class="input">
+                        <p class="st-note">app_id/app_secret 已在 .env 中配置，此处只填 app_token/table_id，非密钥</p>
+                    </div>
+
+                    <div class="st-subhead">字段映射（填「飞书里这列叫什么」）</div>
+                    <div class="st-sub2">
+                        <div class="field"><label class="label">视频链接</label><input type="text" name="f_post_url" value="{{ config.feishu_media_map.fields.post_url }}" placeholder="如：视频链接" class="input"></div>
+                        <div class="field"><label class="label">标题</label><input type="text" name="f_title" value="{{ config.feishu_media_map.fields.title }}" placeholder="如：标题" class="input"></div>
+                        <div class="field"><label class="label">播放量</label><input type="text" name="f_views" value="{{ config.feishu_media_map.fields.views }}" placeholder="如：播放量" class="input"></div>
+                        <div class="field"><label class="label">点赞数</label><input type="text" name="f_likes" value="{{ config.feishu_media_map.fields.likes }}" placeholder="如：点赞数" class="input"></div>
+                        <div class="field"><label class="label">评论数</label><input type="text" name="f_comments" value="{{ config.feishu_media_map.fields.comments }}" placeholder="如：评论数" class="input"></div>
+                        <div class="field"><label class="label">分享数</label><input type="text" name="f_shares" value="{{ config.feishu_media_map.fields.shares }}" placeholder="如：分享数" class="input"></div>
+                        <div class="field"><label class="label">新增粉丝</label><input type="text" name="f_new_fans" value="{{ config.feishu_media_map.fields.new_fans }}" placeholder="如：新增粉丝" class="input"></div>
+                        <div class="field" style="margin-bottom:14px"><label class="label">快照时间</label><input type="text" name="f_snapshot_at" value="{{ config.feishu_media_map.fields.snapshot_at }}" placeholder="如：更新时间" class="input"></div>
+                    </div>
+
+                    <div style="display:flex;align-items:center;gap:10px;padding-top:6px;flex-wrap:wrap">
+                        <button type="submit" class="btn primary">{{ ic.icon('check') }}保存飞书配置</button>
+                        <button type="button" class="btn" id="feishu-test-btn" onclick="testFeishuConn()">{{ ic.icon('bell') }}测试连接</button>
+                        <span class="st-save-hint">先保存，再点「测试连接」拉一条真实记录看列名</span>
+                    </div>
+                </form>
+                <div id="feishu-test-result" style="margin-top:12px"></div>
+            </div>
+        </div>
+
+        <form method="post" action="/settings/asr" class="module" style="margin-top:18px">
+            <div class="mh">
+                <span class="ic">{{ ic.icon('settings') }}</span>
+                <span class="ttl">豆包录音识别（ASR）</span>
+                <span class="sub">视频反向入库用</span>
+            </div>
+            <div class="inner">
+                <div class="field">
+                    <label class="label">API Key（新版豆包语音「API Key」页复制，推荐）</label>
+                    <input name="douyin_asr_api_key" value="{{ config.douyin_asr.api_key }}" class="input">
+                    <p class="st-note">填了 API Key 就用新版单串鉴权，下面 App ID / Access Key 可留空</p>
+                </div>
+                <div class="field"><label class="label">App ID（老版鉴权，填了 API Key 可不填）</label><input name="douyin_asr_app_id" value="{{ config.douyin_asr.app_id }}" class="input"></div>
+                <div class="field"><label class="label">Access Key（老版鉴权，填了 API Key 可不填）</label><input name="douyin_asr_access_key" value="{{ config.douyin_asr.access_key }}" class="input"></div>
+                <div class="field">
+                    <label class="label">Resource ID</label>
+                    <input name="douyin_asr_resource_id" value="{{ config.douyin_asr.resource_id }}" class="input">
+                    <p class="st-note">录音文件识别 2.0 填 volc.seedasr.auc；1.0 填 volc.bigasr.auc</p>
+                </div>
+                <div class="field" style="margin-bottom:14px">
+                    <label class="label">公网地址</label>
+                    <input name="douyin_asr_public_base" value="{{ config.douyin_asr.public_base }}" class="input">
+                    <p class="st-note">豆包回抓音频用，如 https://aipm2.online，留空则用当前访问地址</p>
+                </div>
+                <button class="btn primary">{{ ic.icon('check') }}保存豆包 ASR</button>
+            </div>
+        </form>
+    </div>
+
+    {# ============================================================ #}
+    {# ⑤ AI 宪法（公司运作手册） #}
+    {# ============================================================ #}
+    <div class="st-tabpanel" data-panel="manual">
+        <form method="POST" action="/settings/manual" class="module">
+            <div class="mh">
+                <span class="ic">{{ ic.icon('doc') }}</span>
+                <span class="ttl">公司运作手册（AI 宪法）</span>
+            </div>
+            <div class="inner">
+                <p class="st-note" style="margin:0 0 10px">这份手册会自动注入到<strong style="color:var(--ink-1)">每一个 AI</strong>（总 AI、拆解、执行、审核）的认知里。改这里 = 改所有 AI 的行为准则。支持 Markdown。</p>
+                <textarea name="company_manual" rows="16" class="input" style="width:100%;font-family:var(--mono);tab-size:2">{{ config.company_manual }}</textarea>
+                <button type="submit" class="btn primary" style="margin-top:12px">{{ ic.icon('check') }}保存手册</button>
+            </div>
+        </form>
+    </div>
+
     <script>
+    /* ── Tab 切换 + 记住停留的 tab ──
+       每个表单 POST 后重定向回 /settings 会丢掉当前 tab，所以用 sessionStorage 记，
+       页面加载时恢复。读写都 try/catch 包住：隐私模式/禁用 storage 时回落到第一个 tab，
+       不能因为读不到就白屏。 */
+    (function(){
+        var KEY = 'st_active_tab';
+        var tabs = document.querySelectorAll('#st-tabs .tab');
+        var panels = document.querySelectorAll('.st-tabpanel');
+        function show(name){
+            var hit = false;
+            tabs.forEach(function(t){ var on = t.dataset.tab === name; t.classList.toggle('on', on); if(on) hit = true; });
+            panels.forEach(function(p){ p.classList.toggle('on', p.dataset.panel === name); });
+            return hit;
+        }
+        tabs.forEach(function(t){
+            t.addEventListener('click', function(){
+                var name = t.dataset.tab;
+                show(name);
+                try { sessionStorage.setItem(KEY, name); } catch(e){}
+            });
+        });
+        var saved = null;
+        try { saved = sessionStorage.getItem(KEY); } catch(e){}
+        if (saved) { show(saved); }   /* 读不到就保持模板里默认的 models */
+    })();
+
     async function testFeishuConn() {
         const box = document.getElementById('feishu-test-result');
         box.innerHTML = '<div class="st-msg info">测试连接中...</div>';

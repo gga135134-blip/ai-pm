@@ -46,12 +46,26 @@ def save_settings(data: dict):
 @router.get("/settings", response_class=HTMLResponse)
 async def settings_page(request: Request):
     from app.services.constitution import get_constitution
+    from app.services import ai_router
+    from app.services.agent_tools import effective_tool_model
     config = load_settings()
     config["company_manual"] = get_constitution()
     users = list(get_users().keys())
     msg = request.query_params.get("msg", "")
+    # 「当前实际生效」——每个任务实际会跑哪个真实模型（复用现有路由解析，不另写一套）
+    model_effective = {
+        "media_script": ai_router.effective_text_model("media_script"),
+        "writing": ai_router.effective_text_model("writing"),
+        "code": ai_router.effective_text_model("code"),
+        "analysis": ai_router.effective_text_model("analysis"),
+        "review": ai_router.effective_text_model("review"),
+        "vision": ai_router.effective_vision_model(),
+        "assistant": effective_tool_model(),
+    }
     return request.app.state.templates.TemplateResponse(
-        request, "settings.html", {"request": request, "config": config, "users": users, "msg": msg}
+        request, "settings.html",
+        {"request": request, "config": config, "users": users, "msg": msg,
+         "model_effective": model_effective, "model_real": ai_router.MODEL_REAL_NAME}
     )
 
 
@@ -73,9 +87,6 @@ async def settings_save(
     fallback_2: str = Form("openai"),
     fallback_3: str = Form("deepseek"),
     fallback_4: str = Form("qwen"),
-    serverchan_key: str = Form(""),
-    pushplus_token: str = Form(""),
-    feishu_webhook: str = Form(""),
     route_code: str = Form("auto"),
     route_writing: str = Form("auto"),
     route_analysis: str = Form("auto"),
@@ -102,6 +113,8 @@ async def settings_save(
         "media_script": route_media_script,
     })
 
+    # 通知配置已拆到 POST /settings/notify——这里绝不能带上它们，
+    # 否则「模型与路由」tab 保存时会用空值把通知抹掉（重建抹字段的老坑）。
     data = {
         "anthropic_api_key": anthropic_api_key,
         "openai_api_key": openai_api_key,
@@ -109,12 +122,23 @@ async def settings_save(
         "qwen_api_key": qwen_api_key,
         "default_ai_model": default_ai_model,
         "fallback_order": fallback_order,
-        "serverchan_key": serverchan_key,
-        "pushplus_token": pushplus_token,
-        "feishu_webhook": feishu_webhook,
         "routes": routes,
     }
     save_settings(data)
+    return RedirectResponse("/settings", status_code=303)
+
+
+@router.post("/settings/notify")
+async def settings_save_notify(
+    serverchan_key: str = Form(""),
+    pushplus_token: str = Form(""),
+    feishu_webhook: str = Form(""),
+):
+    save_settings({
+        "serverchan_key": serverchan_key,
+        "pushplus_token": pushplus_token,
+        "feishu_webhook": feishu_webhook,
+    })
     return RedirectResponse("/settings", status_code=303)
 
 

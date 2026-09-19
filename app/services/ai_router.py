@@ -17,6 +17,27 @@ CLAUDE_MODEL = "claude-opus-5"
 
 QWEN_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 
+# 内部 key → 真实模型名（给设置页「当前实际生效」列显示用）。
+# 别再写 "Claude Sonnet"/"DeepSeek V3" 这种跟实际在跑的对不上的假名。
+MODEL_REAL_NAME = {
+    "claude": CLAUDE_MODEL,        # claude-opus-5
+    "openai": "gpt-4o",
+    "deepseek": "deepseek-v4-flash",
+    "qwen": "qwen-plus",
+}
+
+
+def real_model_name(key: str) -> str:
+    """内部 key → 真实模型名；未知 key 原样返回。"""
+    return MODEL_REAL_NAME.get(key, key)
+
+
+def effective_text_model(task_type: str) -> dict:
+    """文本任务当前实际会用哪个模型（复用 get_model_for_task 解析 routes/default/auto）。
+    返回 {"key", "name"}，name 是真实模型名。"""
+    key = get_model_for_task(task_type)
+    return {"key": key, "name": real_model_name(key)}
+
 
 def _claude_text(content) -> str:
     """从 Claude 响应里取正文。
@@ -141,6 +162,22 @@ async def ask_ai(prompt: str, model: str = "auto", task_type: str = "", system_p
 _VISION_ORDER = ["qwen", "claude", "openai"]
 _VISION_KEY = {"qwen": "qwen_api_key", "claude": "anthropic_api_key", "openai": "openai_api_key"}
 _VISION_NAME = {"qwen": "通义千问", "claude": "Claude", "openai": "OpenAI"}
+
+# 识图的真实模型名（千问用的是 vl 变体，跟文本的 qwen-plus 不同）
+_VISION_REAL_NAME = {"qwen": "qwen-vl-plus", "claude": CLAUDE_MODEL, "openai": "gpt-4o"}
+
+
+def effective_vision_model() -> dict:
+    """识图当前实际会用哪个模型（镜像 ask_ai_vision 的挑选逻辑，只解析不调用）。
+    返回 {"key", "name"}；一家都没配 Key 时返回 {None, None}。"""
+    config = _load_config()
+    routed = (config.get("routes") or {}).get("vision") or "auto"
+    chain = [m for m in _VISION_ORDER if config.get(_VISION_KEY[m])]
+    if routed != "auto" and routed in _VISION_KEY and config.get(_VISION_KEY[routed]):
+        chain = [routed] + [m for m in chain if m != routed]
+    if not chain:
+        return {"key": None, "name": None}
+    return {"key": chain[0], "name": _VISION_REAL_NAME[chain[0]]}
 
 
 def _vision_caller(name: str):
