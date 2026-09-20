@@ -50,15 +50,16 @@
         <div class="rv-m">
           {% if c.stage == 'reviewed' %}已复盘{% else %}待复盘{% endif %}
           {% if c.is_winner %} · <span style="color:var(--warn)">爆款</span>{% endif %}
-          {% if not c.published_at %} · <span style="color:var(--ink-3)">日期待补（按录入时间估）</span>{% endif %}
         </div>
       </a>
+      {% if c.published_at %}
       <input type="date" value="{{ (c.published_at or '')[:10] }}"
              onclick="event.stopPropagation()"
              onchange="savePubAt('{{ c.id }}', this)"
              title="发布时间"
              style="flex-shrink:0; padding:3px 6px; font-size:12px">
       <span id="pubmsg-{{ c.id }}" style="font-size:11px; color:var(--success); flex-shrink:0; width:14px; text-align:center"></span>
+      {% endif %}
     </div>
     {% else %}
     <div class="empty" style="padding:26px 12px">
