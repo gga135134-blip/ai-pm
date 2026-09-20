@@ -322,6 +322,13 @@
         .pbar .sw{ font-size:12.5px; color:var(--ink-3); text-decoration:none;
           display:inline-flex; align-items:center; gap:5px; }
         .pbar .sw:hover{ color:var(--ink-1); }
+        /* 自媒体模型设置入口：独立图标按钮，跟「切换人设」拉开、图标放大，别挤成一团 */
+        .pbar .gear{ display:inline-flex; align-items:center; justify-content:center;
+          width:38px; height:32px; border:1px solid var(--border); border-radius:9px;
+          color:var(--ink-2); text-decoration:none; margin-right:6px; }
+        .pbar .gear .icon{ font-size:19px; }
+        .pbar .gear:hover{ color:var(--accent); border-color:var(--accent); }
+        .pbar .gear.on{ color:var(--accent); border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
 
         .rail{ display:flex; gap:8px; overflow-x:auto; -webkit-overflow-scrolling:touch;
           padding-bottom:4px; margin-bottom:18px; }
