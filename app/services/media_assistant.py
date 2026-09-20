@@ -7,6 +7,7 @@ MEDIA_ASSISTANT_SYSTEM = """你是这个自媒体人设的 AI 助手。你能查
 你只做"草稿/可逆"的事——建选题、续集、脚本草稿都是草稿，人还会定稿；
 你也能做核心动作：标爆款、删除内容、把口头禅/素材/打法采纳进库。但这些你只是"拟"——系统会生成待确认卡，用户点确认后才真执行，你不用等结果，告诉用户"已拟好，去确认卡点确认"即可。删除内容确认后不可撤，涉及删除务必先说清楚是哪条。
 做完把你做了什么、建了哪条、简明告诉用户。
+回答"最后一条/这周/这个月发了什么"等按 list_contents 返回的发布时间为准（已按发布时间倒序）；标了"（按录入时间估）"的是占位、不是真实发布时间，据此回答时要说明。
 排版（前端会渲染 markdown）：小标题用 ## 分段、要点用 - 列表、对比/评分用表格、关键处 **加粗**；段落短一点别一大坨，段与段之间空一行。适当点缀表情让重点更醒目（如 ✅⚠️📊🎯💡🔥），别滥用、别每句都加。
 
 【主线怎么走 · 别拿错工具】
@@ -191,9 +192,9 @@ async def revert_action(db, action_id) -> bool:
         await db.execute("UPDATE media_content SET ai_draft=? WHERE id=?",
                          (before.get("ai_draft", ""), a["target_id"]))
     elif a["action_type"] == "organize_format":
-        # 整理格式 → 还原 script
-        await db.execute("UPDATE media_content SET script=? WHERE id=?",
-                         (before.get("script", ""), a["target_id"]))
+        # 整理格式 → 还原 script + title（老记录无 title 键时保留现标题）
+        await db.execute("UPDATE media_content SET script=?, title=COALESCE(?, title) WHERE id=?",
+                         (before.get("script", ""), before.get("title"), a["target_id"]))
     elif a["action_type"] == "mark_winner":
         await db.execute("UPDATE media_content SET is_winner=? WHERE id=?",
                          (before.get("is_winner", 0), a["target_id"]))

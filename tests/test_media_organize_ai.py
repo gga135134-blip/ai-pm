@@ -20,3 +20,28 @@ def test_organize_empty_script():
         r = await media_ai.organize_content("   ")
         assert r["ok"] is False
     asyncio.run(go())
+
+
+def test_organize_returns_title(monkeypatch):
+    async def fake_ai(prompt, model="auto", task_type="", system_prompt="", json_mode=False):
+        return {"response": '{"title":"给AI装档案柜治健忘","summary":"外挂记忆库","formatted":"清理后的正文"}',
+                "model": "x", "tokens": 5, "cost": 0.0}
+    monkeypatch.setattr(media_ai, "ask_ai", fake_ai)
+
+    async def go():
+        r = await media_ai.organize_content("很长的原始正文……")
+        assert r["ok"] and r["title"] == "给AI装档案柜治健忘"
+        assert r["summary"] == "外挂记忆库" and r["formatted"] == "清理后的正文"
+    asyncio.run(go())
+
+
+def test_organize_missing_title_defaults_empty(monkeypatch):
+    async def fake_ai(prompt, model="auto", task_type="", system_prompt="", json_mode=False):
+        return {"response": '{"summary":"只有摘要","formatted":"正文"}',
+                "model": "x", "tokens": 5, "cost": 0.0}
+    monkeypatch.setattr(media_ai, "ask_ai", fake_ai)
+
+    async def go():
+        r = await media_ai.organize_content("正文……")
+        assert r["ok"] and r["title"] == "" and r["summary"] == "只有摘要"
+    asyncio.run(go())

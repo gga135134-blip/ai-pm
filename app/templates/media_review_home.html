@@ -43,18 +43,23 @@
   </div>
   <div class="inner">
     {% for c in published %}
-    <a class="rv-row" href="/media/content/{{ c.id }}">
-      <div style="min-width:0">
+    <div class="rv-row">
+      <a href="/media/content/{{ c.id }}" style="flex:1; min-width:0; display:block; color:inherit; text-decoration:none">
         <div class="rv-t">{{ c.title }}</div>
         {% if c.summary %}<div style="font-size:11.5px; color:var(--ink-3); margin-top:2px">{{ c.summary }}</div>{% endif %}
         <div class="rv-m">
           {% if c.stage == 'reviewed' %}已复盘{% else %}待复盘{% endif %}
           {% if c.is_winner %} · <span style="color:var(--warn)">爆款</span>{% endif %}
+          {% if not c.published_at %} · <span style="color:var(--ink-3)">日期待补（按录入时间估）</span>{% endif %}
         </div>
-      </div>
-      <span class="rv-when">{{ (c.published_at or c.created_at or '')[:10] }}</span>
-      {{ ic.icon('chevron') }}
-    </a>
+      </a>
+      <input type="date" value="{{ (c.published_at or '')[:10] }}"
+             onclick="event.stopPropagation()"
+             onchange="savePubAt('{{ c.id }}', this)"
+             title="发布时间"
+             style="flex-shrink:0; padding:3px 6px; font-size:12px">
+      <span id="pubmsg-{{ c.id }}" style="font-size:11px; color:var(--success); flex-shrink:0; width:14px; text-align:center"></span>
+    </div>
     {% else %}
     <div class="empty" style="padding:26px 12px">
       <div style="color:var(--ink-3);margin-bottom:8px;display:flex;justify-content:center;font-size:26px">{{ ic.icon('check') }}</div>
@@ -126,4 +131,17 @@
 </div>
 
 {{ shell.step_nav(back={'href':'/media/board?view=publish','label':'发布'}) }}
+
+<script>
+async function savePubAt(cid, el){
+  const msg = document.getElementById('pubmsg-' + cid);
+  const b = new URLSearchParams(); b.set('published_at', el.value);
+  try{
+    const r = await fetch('/media/content/' + cid + '/published-at', {method:'POST', body:b});
+    const d = await r.json().catch(()=>({ok:r.ok}));
+    if(msg){ msg.textContent = d.ok ? '✓' : '✕'; msg.style.color = d.ok ? 'var(--success)' : 'var(--down)';
+             setTimeout(()=>{ if(msg) msg.textContent=''; }, 2000); }
+  }catch(e){ if(msg){ msg.textContent='✕'; msg.style.color='var(--down)'; } }
+}
+</script>
 {% endblock %}
