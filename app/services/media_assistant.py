@@ -191,9 +191,9 @@ async def revert_action(db, action_id) -> bool:
         await db.execute("UPDATE media_content SET ai_draft=? WHERE id=?",
                          (before.get("ai_draft", ""), a["target_id"]))
     elif a["action_type"] == "organize_format":
-        # 整理格式 → 还原 script
-        await db.execute("UPDATE media_content SET script=? WHERE id=?",
-                         (before.get("script", ""), a["target_id"]))
+        # 整理格式 → 还原 script + title（老记录无 title 键时保留现标题）
+        await db.execute("UPDATE media_content SET script=?, title=COALESCE(?, title) WHERE id=?",
+                         (before.get("script", ""), before.get("title"), a["target_id"]))
     elif a["action_type"] == "mark_winner":
         await db.execute("UPDATE media_content SET is_winner=? WHERE id=?",
                          (before.get("is_winner", 0), a["target_id"]))

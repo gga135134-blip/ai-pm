@@ -8,22 +8,25 @@ from app.services.media_assistant import log_action
 
 
 async def run_organize_one(db, cid) -> dict:
-    """整理一条：摘要另存 + 格式改写(留痕可撤)。传入 db，由调用方管连接。"""
-    cur = await db.execute("SELECT persona_id,script FROM media_content WHERE id=?", (cid,))
+    """整理一条：短标题 + 摘要 + 格式改写(留痕可撤)。传入 db，由调用方管连接。"""
+    cur = await db.execute("SELECT persona_id,title,script FROM media_content WHERE id=?", (cid,))
     row = await cur.fetchone()
     if not row:
         return {"ok": False, "error": "内容不存在"}
-    pid, script = row["persona_id"], row["script"] or ""
+    pid, old_title, script = row["persona_id"], row["title"] or "", row["script"] or ""
     if not script.strip():
         return {"ok": False, "error": "无正文"}
     res = await organize_content(script)
     if not res.get("ok"):
         return {"ok": False, "error": res.get("error", "整理失败")}
     formatted = res.get("formatted") or script
+    new_title = (res.get("title") or "").strip()
+    final_title = new_title or old_title       # 空 title 不清空原标题
     await log_action(db, pid, "organize_format", "media_content", cid,
-                     before={"script": script}, after={"script": formatted})
-    await db.execute("UPDATE media_content SET summary=?, script=? WHERE id=?",
-                     (res.get("summary", ""), formatted, cid))
+                     before={"title": old_title, "script": script},
+                     after={"title": final_title, "script": formatted})
+    await db.execute("UPDATE media_content SET title=?, summary=?, script=? WHERE id=?",
+                     (final_title, res.get("summary", ""), formatted, cid))
     await db.commit()
     return {"ok": True, "summary": res.get("summary", "")}
 
