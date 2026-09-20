@@ -8,24 +8,37 @@ from app.services.media_review_cycle import list_cycles as _list_cycles, get_cyc
 from app.services.media_phase_review import list_phase_reviews as _list_phase, get_phase_review as _get_phase
 
 
+def _fmt_content_line(r):
+    """一行内容摘要，带发布时间；无真实 published_at 时用 created_at 并标估算。"""
+    pub = (r.get("published_at") or "").strip()
+    if pub:
+        when = f" · 发布 {pub[:10]}"
+    else:
+        ca = (r.get("created_at") or "").strip()
+        when = f" · 发布 {ca[:10]}（按录入时间估）" if ca else ""
+    return f"[{r['id']}] {r['title']}（{r['stage']}）{when}"
+
+
 async def _tool_list_contents(args, pid):
     stage = (args or {}).get("stage")
     db = await get_db()
     try:
         if stage:
             cur = await db.execute(
-                "SELECT id,title,stage FROM media_content WHERE persona_id=? AND stage=? "
-                "ORDER BY updated_at DESC LIMIT 50", (pid, stage))
+                "SELECT id,title,stage,published_at,created_at FROM media_content "
+                "WHERE persona_id=? AND stage=? "
+                "ORDER BY COALESCE(published_at, created_at) DESC LIMIT 50", (pid, stage))
         else:
             cur = await db.execute(
-                "SELECT id,title,stage FROM media_content WHERE persona_id=? "
-                "ORDER BY updated_at DESC LIMIT 50", (pid,))
+                "SELECT id,title,stage,published_at,created_at FROM media_content "
+                "WHERE persona_id=? "
+                "ORDER BY COALESCE(published_at, created_at) DESC LIMIT 50", (pid,))
         rows = [dict(r) for r in await cur.fetchall()]
     finally:
         await db.close()
     if not rows:
         return "（该人设暂无内容）"
-    return "\n".join(f"[{r['id']}] {r['title']}（{r['stage']}）" for r in rows)
+    return "\n".join(_fmt_content_line(r) for r in rows)
 
 
 async def _tool_read_content(args, pid):
@@ -33,7 +46,7 @@ async def _tool_read_content(args, pid):
     db = await get_db()
     try:
         cur = await db.execute(
-            "SELECT title,puzzle,script,ai_draft,stage FROM media_content "
+            "SELECT title,puzzle,script,ai_draft,stage,published_at,created_at FROM media_content "
             "WHERE id=? AND persona_id=?", (cid, pid))
         row = await cur.fetchone()
     finally:
@@ -42,7 +55,14 @@ async def _tool_read_content(args, pid):
         return "（找不到这条内容，或不属于当前人设）"
     r = dict(row)
     body = r["script"] or r["ai_draft"] or "（暂无正文/脚本）"
-    return f"标题：{r['title']}\n谜题：{r['puzzle']}\n阶段：{r['stage']}\n正文：\n{body}"
+    pub = (r.get("published_at") or "").strip()
+    if pub:
+        when = pub[:10]
+    else:
+        ca = (r.get("created_at") or "").strip()
+        when = f"{ca[:10]}（按录入时间估）" if ca else "未知"
+    return (f"标题：{r['title']}\n谜题：{r['puzzle']}\n阶段：{r['stage']}\n"
+            f"发布时间：{when}\n正文：\n{body}")
 
 
 async def _tool_list_topics(args, pid):
