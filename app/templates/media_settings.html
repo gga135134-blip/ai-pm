@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% import "_icons.html" as ic %}
+{% import "_media_shell.html" as shell %}
+{% block title %}自媒体 · 模型设置{% endblock %}
+{% block topbar %}
+<span class="crumb"><a href="/media" style="color:inherit;text-decoration:none">自媒体</a> {{ ic.icon('chevron') }} <b>模型设置</b></span>
+{% endblock %}
+{% block content %}
+<style>
+  .mset{ max-width:720px; margin:0 auto; }
+  .mset .st-eff{ display:inline-flex; align-items:center; gap:6px; font-family:var(--mono); font-size:12px; color:var(--ink-1); }
+  .mset .st-eff .dot{ width:7px; height:7px; border-radius:50%; background:var(--up); flex:none; }
+  .mset .mrow{ display:grid; grid-template-columns:120px 1fr 160px; gap:12px; align-items:center; margin-bottom:14px; }
+  .mset .mrow .rl{ font-size:13px; color:var(--ink-2); }
+  .mset .mrow .rl small{ display:block; color:var(--ink-3); font-size:11px; margin-top:2px; font-weight:400; }
+  .mset .effhead{ font-size:11px; color:var(--ink-3); text-align:right; }
+  .mset .note{ font-size:12px; color:var(--ink-3); margin:2px 0 16px; }
+  .mset .apikey{ font-size:12px; color:var(--ink-3); background:var(--panel-2); border:1px solid var(--border); border-radius:var(--r-sm); padding:10px 12px; margin:4px 0 16px; }
+  @media(max-width:600px){ .mset .mrow{ grid-template-columns:1fr; gap:6px; } .mset .effhead{ display:none; } }
+</style>
+<div class="mset">
+  {{ shell.media_shell('settings', persona_id=persona_id, here='模型设置') }}
+
+  {% if msg %}<div class="st-msg ok" style="margin-bottom:14px;background:rgba(63,203,134,.14);color:var(--up);border:1px solid rgba(63,203,134,.3);border-radius:var(--r-sm);padding:11px 14px;font-size:13px">{{ ic.icon('check') }} {{ msg }}</div>{% endif %}
+
+  <form method="POST" action="/media/settings/models" class="module">
+    <div class="mh">
+      <span class="ic">{{ ic.icon('gear') }}</span>
+      <span class="ttl">自媒体 · 模型设置</span>
+      <span class="sub">自媒体这个项目自己的模型，跟 ai-pm 全局分开管</span>
+    </div>
+    <div class="inner">
+      <div class="mrow"><span></span><span></span><span class="effhead">当前实际生效</span></div>
+
+      {# 写稿模型 #}
+      <div class="mrow">
+        <span class="rl">写稿模型<small>media_script</small></span>
+        <select name="route_media_script" class="input">
+          {% for val, label in [('auto','自动（跟随自媒体默认）'),('claude','claude-opus-5'),('openai','gpt-4o'),('deepseek','deepseek-v4-flash'),('qwen','qwen-plus')] %}
+          <option value="{{ val }}" {{ 'selected' if route_media_script == val }}>{{ label }}</option>
+          {% endfor %}
+        </select>
+        <span class="st-eff"><span class="dot"></span>{{ eff_script.name }}</span>
+      </div>
+
+      {# 自媒体默认模型：管其它十几个 media_* 任务 #}
+      <div class="mrow">
+        <span class="rl">自媒体默认模型<small>选题/文案/复盘等</small></span>
+        <select name="route_media_default" class="input">
+          {% for val, label in [('auto','跟随 ai-pm 全局'),('claude','claude-opus-5'),('openai','gpt-4o'),('deepseek','deepseek-v4-flash'),('qwen','qwen-plus')] %}
+          <option value="{{ val }}" {{ 'selected' if route_media_default == val }}>{{ label }}</option>
+          {% endfor %}
+        </select>
+        <span class="st-eff"><span class="dot"></span>{{ eff_default.name }}</span>
+      </div>
+      <p class="note">「自媒体默认模型」管选题、采访、文案、复盘等所有其它自媒体 AI 任务；写稿单独在上面指定。选「跟随 ai-pm 全局」就用全局默认模型。</p>
+
+      {# 审稿策略 #}
+      <div class="mrow" style="grid-template-columns:120px 1fr">
+        <span class="rl">审稿策略<small>换脑独立性</small></span>
+        <select name="strategy" class="input">
+          <option value="layered" {% if media_review_strategy == 'layered' %}selected{% endif %}>分层（默认 · 省）—— 审稿独立调用，角色分离</option>
+          <option value="swap_model" {% if media_review_strategy == 'swap_model' %}selected{% endif %}>换模型（最独立 · 贵）—— 强制换个模型来审</option>
+          <option value="same_model" {% if media_review_strategy == 'same_model' %}selected{% endif %}>同模型分身（最省）—— 同模型仅靠独立提示词</option>
+        </select>
+      </div>
+      <p class="note">创作器 ≠ 审稿器：写稿和审稿永远两次独立调用。前期建议「分层/换模型」抓问题，体系沉淀后可切「同模型分身」省成本。</p>
+
+      <div class="apikey">💡 API Key 是<strong style="color:var(--ink-1)">全局共享</strong>的（所有模型共用），在 <a href="/settings" style="color:var(--accent)">全局设置 → 模型与路由</a> 里配；这里只选「用哪个模型」。</div>
+
+      <button type="submit" class="btn primary">{{ ic.icon('check') }}保存自媒体模型设置</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

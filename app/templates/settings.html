@@ -133,7 +133,7 @@
                         <tr><th>任务</th><th>你选谁</th><th>当前实际生效</th></tr>
                     </thead>
                     <tbody>
-                        {% for rule_name, rule_label in [('media_script', '写口播稿（自媒体）'), ('writing', '文案/写作'), ('code', '代码/编程'), ('analysis', '分析/研究'), ('review', '审核/质检')] %}
+                        {% for rule_name, rule_label in [('writing', '文案/写作'), ('code', '代码/编程'), ('analysis', '分析/研究'), ('review', '审核/质检')] %}
                         <tr>
                             <td class="rtask">{{ rule_label }}</td>
                             <td>
@@ -189,25 +189,11 @@
             </div>
         </form>
 
-        <!-- 自媒体·审稿独立性（归队到这里，独立表单，独立端点） -->
-        <form method="POST" action="/media/settings/review-strategy" class="module">
-            <div class="mh">
-                <span class="ic">{{ ic.icon('doc') }}</span>
-                <span class="ttl">自媒体 · 审稿独立性</span>
-                <span class="sub">写稿时谁来独立审稿</span>
-            </div>
-            <div class="inner">
-                <div class="field">
-                    <select name="strategy" class="input">
-                        <option value="layered" {% if (config.media_review_strategy or 'layered')=='layered' %}selected{% endif %}>分层（默认 · 省）—— 审稿独立调用，角色分离</option>
-                        <option value="swap_model" {% if config.media_review_strategy=='swap_model' %}selected{% endif %}>换模型（最独立 · 贵）—— 强制换个模型来审</option>
-                        <option value="same_model" {% if config.media_review_strategy=='same_model' %}selected{% endif %}>同模型分身（最省）—— 同模型仅靠独立提示词</option>
-                    </select>
-                    <p class="st-note">创作器 ≠ 审稿器：写稿和审稿永远是两次独立调用。前期建议「分层/换模型」抓问题，体系沉淀后可切「同模型分身」省成本。</p>
-                </div>
-                <button type="submit" class="btn primary">{{ ic.icon('check') }}保存审稿策略</button>
-            </div>
-        </form>
+        <!-- 自媒体的模型不在这里管——指路到自媒体页 -->
+        <div class="st-msg info" style="margin-top:4px">
+            {{ ic.icon('robot') }} 自媒体（写稿模型 / 自媒体默认模型 / 审稿策略）是独立项目，模型单独在
+            <a href="/media/settings" style="color:var(--accent);font-weight:600">自媒体 → ⚙️ 模型设置</a> 里管。这里只管 ai-pm 通用任务。
+        </div>
     </div>
 
     {# ============================================================ #}

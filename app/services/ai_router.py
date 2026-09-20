@@ -70,6 +70,14 @@ def get_model_for_task(task_type: str = "", explicit_model: str = "auto") -> str
         if routed and routed != "auto":
             return routed
 
+    # 自媒体默认模型：media_* 任务没单独指定时，先看「自媒体默认」总开关，再回落全局。
+    # 自媒体是独立项目，它的一族 media_* 任务归自媒体设置页统一管；media_default
+    # 缺省/为 auto ＝ 跟随 ai-pm 全局（向后兼容，行为不变）。
+    if task_type and task_type.startswith("media_"):
+        media_default = routes.get("media_default")
+        if media_default and media_default != "auto":
+            return media_default
+
     # 自动选择：优先选已配置 Key 的模型，默认 deepseek（最便宜）
     default = config.get("default_ai_model", "")
     if default:

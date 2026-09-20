@@ -187,10 +187,11 @@ def test_content_detail_renders_authoring_area():
     assert "帮鞋厂上客服AI" in html          # 素材包渲染
 
 
-def test_settings_page_shows_review_strategy():
-    r = _client().get("/settings")
+def test_media_settings_page_shows_review_strategy():
+    """审稿策略已从全局设置挪到自媒体模型设置页。"""
+    r = _client().get("/media/settings")
     assert r.status_code == 200
-    assert "审稿独立性" in r.text
+    assert "审稿" in r.text
 
 
 def _seed_persona_real(pid="RTP2", phase="AI落地期"):

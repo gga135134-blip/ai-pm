@@ -54,7 +54,6 @@ async def settings_page(request: Request):
     msg = request.query_params.get("msg", "")
     # 「当前实际生效」——每个任务实际会跑哪个真实模型（复用现有路由解析，不另写一套）
     model_effective = {
-        "media_script": ai_router.effective_text_model("media_script"),
         "writing": ai_router.effective_text_model("writing"),
         "code": ai_router.effective_text_model("code"),
         "analysis": ai_router.effective_text_model("analysis"),
@@ -92,7 +91,6 @@ async def settings_save(
     route_analysis: str = Form("auto"),
     route_review: str = Form("auto"),
     route_vision: str = Form("auto"),
-    route_media_script: str = Form("auto"),
 ):
     fallback_order = []
     for m in [fallback_1, fallback_2, fallback_3, fallback_4]:
@@ -100,9 +98,10 @@ async def settings_save(
             fallback_order.append(m)
 
     # 路由要「合并」不能「重建」。以前这里直接写死一个只含表单那几个键的
-    # 字典，任何没上表单的路由（media_script、media_topic…）一保存就被抹掉。
-    # 真机踩到：用户配好 media_script→claude，后来去设置页填了个 API Key，
-    # 一保存写稿就悄悄退回 deepseek，稿子质量掉了还查不出原因。
+    # 字典，任何没上表单的路由一保存就被抹掉。真机踩到：用户配好 media_script→claude，
+    # 后来去设置页填了个 API Key，一保存写稿就悄悄退回 deepseek，稿子质量掉了还查不出原因。
+    # 自媒体的路由（media_script/media_default 等）已挪到 /media/settings 管，
+    # 这里不列它们——靠合并保住，全局保存不会碰它们。
     routes = dict(load_settings().get("routes") or {})
     routes.update({
         "code": route_code,
@@ -110,7 +109,6 @@ async def settings_save(
         "analysis": route_analysis,
         "review": route_review,
         "vision": route_vision,
-        "media_script": route_media_script,
     })
 
     # 通知配置已拆到 POST /settings/notify——这里绝不能带上它们，

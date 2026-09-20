@@ -1797,6 +1797,48 @@ async def set_review_strategy(strategy: str = Form("layered")):
     return RedirectResponse("/settings?msg=换脑审稿策略已保存", status_code=302)
 
 
+@router.post("/media/settings/models")
+async def save_media_models(
+    route_media_script: str = Form("auto"),
+    route_media_default: str = Form("auto"),
+    strategy: str = Form("layered"),
+):
+    """自媒体模型设置：写稿模型 + 自媒体默认模型 + 审稿策略，一次存。
+    routes 走合并（读出来再 update），绝不重建——否则会把 media_topic 等没上表单的
+    路由键一保存就抹掉（宪法记的老坑）。"""
+    from app.api.settings import load_settings, save_settings
+    if strategy not in ("layered", "swap_model", "same_model"):
+        strategy = "layered"
+    routes = dict(load_settings().get("routes") or {})
+    routes["media_script"] = route_media_script
+    routes["media_default"] = route_media_default
+    save_settings({"routes": routes, "media_review_strategy": strategy})
+    return RedirectResponse("/media/settings?msg=自媒体模型设置已保存", status_code=303)
+
+
+@router.get("/media/settings", response_class=HTMLResponse)
+async def media_settings_page(request: Request):
+    """自媒体模型设置页：自媒体独立管自己的模型（写稿/自媒体默认/审稿策略）。
+    入口在人设条的 ⚙️。API Key 是全局共享的，仍在全局设置里配。"""
+    from app.services import ai_router
+    db = await get_db()
+    try:
+        pid = await _current_persona_id(request, db)
+    finally:
+        await db.close()
+    cfg = _load_config()
+    routes = cfg.get("routes") or {}
+    return _tpl(request, "media_settings.html", {
+        "persona_id": pid,
+        "route_media_script": routes.get("media_script", "auto"),
+        "route_media_default": routes.get("media_default", "auto"),
+        "media_review_strategy": cfg.get("media_review_strategy", "layered"),
+        "eff_script": ai_router.effective_text_model("media_script"),
+        "eff_default": ai_router.effective_text_model("media_default"),
+        "msg": request.query_params.get("msg", ""),
+    })
+
+
 # ─────────────── 三平台发布 ───────────────
 
 async def _ensure_publish(db, content_id: str, account_id: str) -> str:

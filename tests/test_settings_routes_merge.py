@@ -31,7 +31,7 @@ def _save(**kw):
         fallback_1="claude", fallback_2="openai",
         fallback_3="deepseek", fallback_4="qwen",
         route_code="auto", route_writing="auto", route_analysis="auto",
-        route_review="auto", route_vision="auto", route_media_script="auto")
+        route_review="auto", route_vision="auto")
     args.update(kw)
     return asyncio.run(st.settings_save(**args))
 
@@ -56,11 +56,19 @@ def test_form_fields_overwrite(cfg):
     assert routes["code"] == "claude"
 
 
-def test_media_script_is_on_the_form_now(cfg):
-    """写稿路由以前不在表单里，只能改文件、改完还会被下次保存抹掉。"""
-    _save(route_media_script="claude")
+def test_global_save_does_not_touch_media_routes(cfg):
+    """自媒体路由（media_script/media_default）已挪到 /media/settings 管；
+    全局设置保存不能碰它们——靠合并保住。"""
+    cfg.write_text(json.dumps({
+        "routes": {"media_script": "claude", "media_default": "qwen"}
+    }, ensure_ascii=False), encoding="utf-8")
+
+    _save(route_code="claude")
+
     routes = json.loads(cfg.read_text(encoding="utf-8"))["routes"]
-    assert routes["media_script"] == "claude"
+    assert routes["media_script"] == "claude", "全局保存把自媒体写稿路由抹掉了"
+    assert routes["media_default"] == "qwen"
+    assert routes["code"] == "claude"
 
 
 def test_save_keeps_unrelated_top_level_keys(cfg):

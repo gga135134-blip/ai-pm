@@ -27,6 +27,7 @@
   <span class="acc" id="ms-acc"></span>
   <span class="sp"></span>
   <span class="lib {% if current == 'lib' %}on{% endif %}" onclick="msToggleLibs()">{{ ic.icon('kanban') }}体系库<span class="gap" id="ms-gap" style="display:none"></span></span>
+  <a class="sw {% if current == 'settings' %}on{% endif %}" href="/media/settings" title="自媒体模型设置">{{ ic.icon('gear') }}</a>
   <a class="sw" href="/media">切换人设 {{ ic.icon('chevron') }}</a>
 </div>
 
@@ -61,10 +62,10 @@
       这张卡以前是个不可点的 <span>，上面却写着「随时可回」——而面包屑上唯一能点的
       「自媒体」会把人踢回人设总览（工作区都出去了）。用户原话：「我想出去或回到
       上一个页面，没有地方回去…无形中点多了很多下」。现在它是真的返回键。 -#}
-  {% if current == 'lib' %}
-  <a class="step here" href="#" onclick="msBack(event)" title="回到你进体系库之前那一页">
+  {% if current in ('lib', 'settings') %}
+  <a class="step here" href="#" onclick="msBack(event)" title="回到你进来之前那一页">
     <span class="n">{{ ic.icon('chevron', 'flip') }}返回</span>
-    <span class="t">体系库{% if here %} · {{ here }}{% endif %}</span>
+    <span class="t">{% if current == 'lib' %}体系库{% if here %} · {{ here }}{% endif %}{% else %}{{ here or '设置' }}{% endif %}</span>
     <span class="c" id="ms-back-hint">回上一页</span>
   </a>
   {% endif %}
@@ -149,7 +150,7 @@ function msToggleLibs(){ document.getElementById('ms-libs').classList.toggle('op
    （另注：注释里也别写 Jinja 标签的字面量，模板引擎不认 JS 注释，照样解析。） */
 var MS_LAST_KEY = 'ms_last_main';
 (function(){
-  if ('{{ current }}' === 'lib') return;
+  if ('{{ current }}' === 'lib' || '{{ current }}' === 'settings') return;
   try { sessionStorage.setItem(MS_LAST_KEY, location.pathname + location.search); } catch (e) {}
 })();
 function msBack(e){

@@ -28,7 +28,7 @@ def _save_main(**kw):
         fallback_1="claude", fallback_2="openai",
         fallback_3="deepseek", fallback_4="qwen",
         route_code="auto", route_writing="auto", route_analysis="auto",
-        route_review="auto", route_vision="auto", route_media_script="auto")
+        route_review="auto", route_vision="auto")
     args.update(kw)
     return asyncio.run(st.settings_save(**args))
 
